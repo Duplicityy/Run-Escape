@@ -3,7 +3,7 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
-## Unreleased
+## 0.23.0 - 2026-11-02
 
 ### Added
 
@@ -11,11 +11,6 @@ the version in the corner).
   be revived once a run, with 75% of their hitpoints, and comes back untouchable for 5 minutes.
 - Extra co-op revives: a Prayer cape, rarely in a casket or for sale from the Mysterious Old Man,
   lets a teammate revive you once more (with 50%, then 25% of your hitpoints).
-
-## 0.23.0 - 2026-11-02
-
-### Added
-
 - Hard mode in co-op: the host can turn it on once everyone in the room has it.
 - Co-op results, by trippy22: a page for each player's own kills, damage, weapons and caskets, with
   arrows (or the arrow keys) to flip between them, and the party's totals underneath.
