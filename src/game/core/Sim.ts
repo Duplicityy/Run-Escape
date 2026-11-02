@@ -620,7 +620,10 @@ export class Sim {
     // A boss's bullets, what fired each (BulletPool.source), and the volleys to
     // come
     readonly bullets = new BulletPool();
-    readonly bulletSources: { attack: BossAttackDef; enemy: Enemy }[] = [];
+    // What a bullet's source index means. A slot is freed once its boss is
+    // dead with nothing of its left in the air (see freeBulletSources), so
+    // a long endless run doesn't keep every boss it's had
+    readonly bulletSources: ({ attack: BossAttackDef; enemy: Enemy } | undefined)[] = [];
     private emitters: BulletEmitter[] = [];
     // Where each hero is for the bullets, kept from tick to tick
     private readonly bulletTargets: BulletTarget[] = [];
@@ -4035,9 +4038,16 @@ export class Sim {
         if (!pattern) {
             return;
         }
-        let source = this.bulletSources.findIndex((s) => s.attack === attack && s.enemy === enemy);
+        let source = this.bulletSources.findIndex(
+            (s) => s !== undefined && s.attack === attack && s.enemy === enemy,
+        );
         if (source === -1) {
-            source = this.bulletSources.push({ attack, enemy }) - 1;
+            this.freeBulletSources();
+            source = this.bulletSources.indexOf(undefined);
+            if (source === -1) {
+                source = this.bulletSources.length;
+            }
+            this.bulletSources[source] = { attack, enemy };
         }
         const aimed = pattern.shape === "spread";
         this.emitters.push({
@@ -4051,6 +4061,29 @@ export class Sim {
         });
         enemy.bossState!.channelEnd =
             this.tick + secondsToTicks(pattern.volleys * pattern.interval);
+    }
+
+    // Frees the slots of dead bosses, once no bullet or volley of theirs is
+    // left to point at them, for the next pattern to take
+    private freeBulletSources(): void {
+        const sources = this.bulletSources;
+        const bullets = this.bullets;
+        const inUse = new Set<number>();
+        for (let i = 0; i < bullets.count; i++) {
+            inUse.add(bullets.source[bullets.order[i]]);
+        }
+        for (const emitter of this.emitters) {
+            inUse.add(emitter.source);
+        }
+        for (let i = 0; i < sources.length; i++) {
+            const source = sources[i];
+            if (source && source.enemy.dead && !inUse.has(i)) {
+                sources[i] = undefined;
+            }
+        }
+        while (sources.length > 0 && sources[sources.length - 1] === undefined) {
+            sources.pop();
+        }
     }
 
     private fireVolley(emitter: BulletEmitter, boss: Enemy): void {
@@ -4166,7 +4199,8 @@ export class Sim {
                 return;
             }
             this.use(this.heroes[i]);
-            const { attack, enemy } = this.bulletSources[bullets.source[hit]];
+            // A bullet in the air keeps its source's slot (freeBulletSources)
+            const { attack, enemy } = this.bulletSources[bullets.source[hit]]!;
             this.bulletGraceEnd = this.tick + BULLET_GRACE_TICKS;
             this.bossHit(enemy.def.id, enemy, attack, bullets.damage[hit]);
         });

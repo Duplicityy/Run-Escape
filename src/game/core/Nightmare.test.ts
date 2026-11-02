@@ -1040,3 +1040,38 @@ describe("the bullet pool", () => {
         expect(pool.vy[slot]).toBeCloseTo(1);
     });
 });
+
+describe("bullet sources", () => {
+    test("a dead boss's slot is freed once its bullets are gone, for the next to take", () => {
+        const sim = createSim();
+        sim.player.maxHp = sim.player.hp = 1e6;
+        const def = attack("Ranged");
+        const pattern = def.pattern!;
+        const fight = (): Enemy => {
+            sim.startIntro(nightmare(), "boss", 3000);
+            run(sim, nightmare().boss!.intro!.seconds + 0.1);
+            const boss = sim.enemies.find((e) => e.def.id === "the_nightmare" && !e.dead)!;
+            boss.attackCooldown = 1e9;
+            use(sim, boss, "Ranged");
+            run(sim, def.windup + pattern.interval / 2);
+            return boss;
+        };
+        const first = fight();
+        expect(sim.bullets.count).toBeGreaterThan(0);
+        expect(sim.bulletSources).toEqual([{ attack: def, enemy: first }]);
+
+        // Gone with bullets still in the air: they still need their source
+        sim["vanish"](first);
+        sim["freeBulletSources"]();
+        expect(sim.bulletSources).toEqual([{ attack: def, enemy: first }]);
+
+        run(sim, pattern.range / pattern.speed + pattern.volleys * pattern.interval + 1);
+        expect(sim.bullets.count).toBe(0);
+        const second = fight();
+        expect(second).not.toBe(first);
+        expect(sim.bulletSources).toEqual([{ attack: def, enemy: second }]);
+        // A bullet in the air points at the slot's new owner
+        const slot = sim.bullets.order[0];
+        expect(sim.bulletSources[sim.bullets.source[slot]]!.enemy).toBe(second);
+    });
+});

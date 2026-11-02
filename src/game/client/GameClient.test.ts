@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { emptyStats } from "../content/types";
 import { Sim } from "../core/Sim";
+import { hasBadNumber } from "../core/lockstep";
 import { LoadedSave, SaveData, SaveStore, createSave } from "../core/save";
 import { makeGrid } from "../core/world/testGrid";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
-import { GameClient } from "./GameClient";
+import { GameClient, loadoutStats } from "./GameClient";
 import { GameStore } from "./GameStore";
 
 function createSim(): Sim {
@@ -351,5 +352,29 @@ describe("saving", () => {
         expect(saved).toEqual([createSave()]);
         client.closeUnreadableNotice();
         expect(store.getSnapshot().unreadableSave).toBeUndefined();
+    });
+});
+
+describe("loadoutStats", () => {
+    test("takes the stats' own names only, each no more than the shop sells", () => {
+        const stats = loadoutStats({
+            metaStats: {
+                might: 1e9,
+                armor: -5,
+                regen: NaN,
+                constructor: 1,
+                toString: 2,
+                valueOf: 3,
+                nothing: 4,
+            },
+            unlockedItems: [],
+            armoury: {},
+        });
+        expect(Object.keys(stats)).toEqual(Object.keys(emptyStats()));
+        expect(hasBadNumber(stats)).toBe(false);
+        expect(stats.might).toBeGreaterThan(0);
+        expect(stats.might).toBeLessThan(1e9);
+        expect(stats.armor).toBe(0);
+        expect(stats.regen).toBe(0);
     });
 });
