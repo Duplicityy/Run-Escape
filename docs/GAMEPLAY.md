@@ -306,7 +306,7 @@ version and how to run it.
       posts and dark spikes, a gate north and south closed by its barrier, inside the Sisterhood Sanctuary's
       chamber under Slepe, with the Pool of Nightmares and Phosani's coffin beyond the north gate.
       There are no waves, no picks and no items: you play the Inquisitor with the
-      Armadyl crossbow at its third level and nothing more, start in the middle of the field, and
+      Armadyl crossbow at its third level and nothing more, start in the middle of the arena, and
       she rises at once, to The Bane of Ashihama. Each of her totems' blasts heals you. It can't be endless; it has a hard mode
       once it's beaten.
 - **Bosses** turn up during a run, each fighting the way it does in OSRS, and always drop an
