@@ -1387,6 +1387,7 @@ Measured in Node on this VM, on a forest-bound meadow with default settings othe
   `2` with features at least a dozen tiles across, and `smoothField` it. Bumps under about 3 tiles can't draw.
 - **Squares must be free.** Nothing in the cache uses x 70-99, y 66-199, and the map manager stops at x 100,
   y 200. Each recipe needs its own, and nothing checks that: see `devMaps.ts` and each map's `mapX`, `mapY`. The
+  shipped maps have Hallowed Night at x 72-76, y 72-76 and the Inquisitor's Field at x 78-80, y 72-74. The
   map generator's screen, and scripts given settings, have x 70-99 from y 134 on.
 - **A loc on a scene's outermost tile is skipped.** It doesn't matter inside a grid, but don't stand
   anything on the outer edge of one.
@@ -1402,14 +1403,17 @@ Measured in Node on this VM, on a forest-bound meadow with default settings othe
 
 ### Shipping a map
 
-Hallowed Night (`maps/hallowedNight.ts`) is the worked example.
+Hallowed Night (`maps/hallowedNight.ts`) is the worked example, and the Inquisitor's Field
+(`maps/inquisitorsField.ts`, Phosani's Nightmare's one square of floor in a cavern) the small one: it
+builds without the cache, as its test shows, since it stamps no prefabs and says which of its locs block.
 
 - List the recipe in `maps/shippedMaps.ts`. `getRecipe` and `check-maps` read that list. `check-maps` only picks
   up ids in it or starting `scaperune_` (but not the palette, prefabs and cliffs sheets).
 - Add a real entry to `MAPS` with `scaperune: true`. That flag gives it what `dev` gives a dev map: smooth ground,
   the open world, the camera ease and collision rebuilt each time.
-- `seasonal: true` keeps it out of the campaign chain and opens it from the start. Without that, adding to `MAPS`
-  trips the unlock chain, difficulty order and unique enemies tests.
+- `seasonal: true` keeps it out of the campaign chain and opens it from the start, and `fight` (one boss fight,
+  open once another map's beaten) does the same. Without one of them, adding to `MAPS` trips the unlock chain,
+  difficulty order and unique enemies tests.
 - A recipe only writes a loc's id, type and rotation. To scale a model, give a loc nothing else uses a new model
   and size in `src/rs/config/loctype/LocOverrides.ts`. Check the world index first.
 - `bossArena` on the `MapDef` gives a phased boss a square of its own. The player's brought to its middle and

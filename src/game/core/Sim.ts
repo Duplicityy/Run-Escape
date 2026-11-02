@@ -1010,6 +1010,20 @@ export class Sim {
             this.updateFlowField();
         }
         this.use(this.heroes[this.focus]);
+        // A map that's one boss fight: the picks come before anything else,
+        // as the run waits on them from its first tick
+        const fight = this.map.fight;
+        if (fight && fight.levelUps > 0) {
+            this.gainLevels(fight.levelUps);
+            this.checkLevelUp();
+        }
+    }
+
+    // The experience to the end of this many more levels, for a fight with
+    // nothing to level on (MapDef.fight, BossPhasesDef.blastLevelUps). The
+    // levels come with the next checkLevelUp.
+    private gainLevels(levels: number): void {
+        this.xp = Math.max(this.xp, this.xpForLevel(this.level + levels));
     }
 
     // A hero at the spawn, or for a party's others, around it
@@ -2226,6 +2240,10 @@ export class Sim {
             }
         }
 
+        // A map that's one boss fight has no waves
+        if (this.map.waves.length === 0) {
+            return;
+        }
         const wave = this.currentWave();
         // Endless runs' later rounds bring bigger crowds, and so do hard mode
         // and co-op's players
@@ -3947,6 +3965,11 @@ export class Sim {
         this.forEachHeroInReach(() =>
             this.heal(Math.round(this.player.maxHp * (phases.blastHeal ?? 0))),
         );
+        // Nor anything to level on, where it's the whole run: the picks come
+        // while her shield's back (checkLevelUp, at the end of the tick)
+        if (phases.blastLevelUps) {
+            this.gainLevels(phases.blastLevelUps);
+        }
         const next = phases.phases[phase.index + 1];
         if (!next) {
             boss.shieldEnd = 0;

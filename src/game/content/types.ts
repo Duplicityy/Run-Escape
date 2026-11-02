@@ -572,6 +572,9 @@ export type BossPhasesDef = {
     blastMessage: string;
     // Of the player's hitpoints, given back by each blast
     blastHeal?: number;
+    // Levels the run gains with each blast, for a fight with nothing else to
+    // level on (Phosani's Nightmare): the picks come while her shield's back
+    blastLevelUps?: number;
 };
 
 // How a boss fights, after the real fight in OSRS
@@ -977,6 +980,12 @@ export type MapDef = {
     scaperune?: boolean;
     // A seasonal event: open from the start, outside the campaign's chain
     seasonal?: boolean;
+    // One boss fight and nothing else (Phosani's Nightmare): no waves, and its
+    // final boss rises as the run begins. Outside the campaign's chain like a
+    // seasonal map, and open once requires (a map id) has been beaten; it
+    // can't be endless. The run begins at level 1 + levelUps, with that many
+    // picks to make before she wakes, as there's nothing to level on but her.
+    fight?: { requires: string; levelUps: number };
     // How the map's drawn, 1 as the game is and lower darker
     brightness?: number;
 };

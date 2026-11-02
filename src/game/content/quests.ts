@@ -312,6 +312,13 @@ export const QUESTS: QuestDef[] = [
         coins: 2500,
     },
     {
+        id: "a_souls_bane",
+        name: "A Soul's Bane",
+        mapId: "phosani",
+        objective: { kind: "kill", enemyIds: ["phosanis_nightmare"], count: 1 },
+        coins: 4000,
+    },
+    {
         id: "ratcatchers",
         name: "Ratcatchers",
         objective: {

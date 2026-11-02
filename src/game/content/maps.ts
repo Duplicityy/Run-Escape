@@ -1,5 +1,6 @@
 import { SCAPERUNE_DEV_MAPS } from "../scaperune/maps/devMaps";
 import { HALLOWED_BOSS_ARENA, HALLOWED_NIGHT } from "../scaperune/maps/hallowedNight";
+import { INQUISITORS_BOSS_ARENA, INQUISITORS_FIELD } from "../scaperune/maps/inquisitorsField";
 import { MapRecipe, getRecipeArena, getRecipeWorldTile } from "../scaperune/recipe";
 import { getEnemy } from "./enemies";
 import { FUN_MAPS } from "./fun/maps";
@@ -325,13 +326,49 @@ export const MAPS: MapDef[] = [
         seasonal: true,
         brightness: 0.8,
     },
+    {
+        id: "phosani",
+        name: "Phosani's Nightmare",
+        description:
+            "The Nightmare's hard mode, on its own: the Inquisitor's Field beneath Slepe, where " +
+            "the Sisterhood's hunters made their last stand. No waves and no caskets. Choose your " +
+            "arms, then she rises, quicker than before and with more at once, and every hit of " +
+            "hers is shown before it lands. Her totems' blasts are the only rest: each heals you " +
+            "and brings three levels.",
+        // The Inquisitor's great helm
+        iconObjId: 24419,
+        arena: getRecipeArena(INQUISITORS_FIELD),
+        // The south of the field, where the way in comes out
+        spawn: getRecipeWorldTile(
+            INQUISITORS_FIELD,
+            INQUISITORS_FIELD.spawn.x,
+            INQUISITORS_FIELD.spawn.y,
+        ),
+        // Her hitpoints come from the event: a run here has eight picks and a
+        // few blasts' worth of levels, not fifteen minutes of them. Her hits
+        // are tuned to those few levels' hitpoints too: a big one takes about
+        // half, as hers do on Hallowed Night with a whole run's behind you
+        difficulty: { hp: 1, damage: 0.9 },
+        hard: { hp: 1.3, damage: 1.3 },
+        waves: [],
+        events: [{ at: 0, kind: "finalBoss", enemyId: "phosanis_nightmare", hp: 4200 }],
+        finalBossWarning: "",
+        victoryText: "Phosani's Nightmare is laid to rest!",
+        bossArena: INQUISITORS_BOSS_ARENA,
+        scaperune: true,
+        fight: { requires: "halloween", levelUps: 8 },
+        brightness: 0.75,
+    },
 ];
 
 // The maps that open one after another
-export const CAMPAIGN_MAPS: MapDef[] = MAPS.filter((map) => !map.seasonal);
+export const CAMPAIGN_MAPS: MapDef[] = MAPS.filter((map) => !map.seasonal && !map.fight);
 
 // Open from the start, between the campaign and the fun maps
 export const SEASONAL_MAPS: MapDef[] = MAPS.filter((map) => map.seasonal);
+
+// Boss fights on their own, each open once its map has been beaten
+export const FIGHT_MAPS: MapDef[] = MAPS.filter((map) => map.fight);
 
 // The fun maps (fun/maps.ts): open from the start and endless, outside the
 // campaign's chain
@@ -394,6 +431,10 @@ export function isFunMap(mapId: string): boolean {
 
 export function isSeasonalMap(mapId: string): boolean {
     return MAP_BY_ID.get(mapId)?.seasonal === true;
+}
+
+export function isFightMap(mapId: string): boolean {
+    return MAP_BY_ID.get(mapId)?.fight !== undefined;
 }
 
 export function getMap(id: string): MapDef {

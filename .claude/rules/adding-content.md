@@ -137,9 +137,15 @@ Add it to `MAPS` in `maps.ts` (fun maps go in `fun/maps.ts`), with its waves in 
 - Set `plane` for dungeons above the ground floor.
 - The game draws one plane, and hides roofs. If a map's roofs are plain scenery rather than the
   roof loc types, or something floats, see `src/mapviewer/webgl/loc/UpperLevels.ts`.
-- Campaign maps unlock in the order of `MAPS`. A `seasonal` map goes last in `MAPS`, is open from
-  the start and has no place in the chain. Rewards come from `unlock` tasks on weapons,
+- Campaign maps unlock in the order of `MAPS`. A `seasonal` map goes after them in `MAPS`, is open
+  from the start and has no place in the chain. Rewards come from `unlock` tasks on weapons,
   passives, items and adventurers.
+- A map with `fight` is one boss fight (Phosani's Nightmare): `waves: []`, one `finalBoss` event
+  at 0 whose boss has an `intro` with `alone`, and it opens once `fight.requires` is beaten. The run
+  begins with `fight.levelUps` picks, and `BossPhasesDef.blastLevelUps` gives more with each totem
+  blast. It's listed under Boss fights on the map screen, and can't be endless. Sim it with
+  `FLAT=1 MAP=phosani DODGE=1`, which needs no cache, and go by how long the bot lasts and what
+  hits it: it can't dodge as a person does.
 - Check it in the browser: the minimap, the spawn, and that enemies can reach you. The sim's bot
   uses the real collision, so a sim also shows whether a map plays at all.
 - Fun maps don't count towards quests.

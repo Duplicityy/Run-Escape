@@ -181,6 +181,10 @@ version and how to run it.
   teams, who fight each other too, and a Flag carrier who runs from you; Pest Control is the Void
   Knight's island and its pests, and its bosses are the four portals, which open together behind
   shields that drop one by one.
+- **Boss fights**: a map that's one fight (Phosani's Nightmare), listed under the campaign, open
+  once the map it's the hard mode of has been beaten. Its boss rises as the run begins, after your
+  picks, and killing it wins the run as any final boss does: it counts as a win on the map, with
+  its quest and its hard mode. It's never endless.
 - **Hard mode**: the switch beside Endless, open once you've beaten the map (from the start on fun
   maps). Enemies have more hitpoints and hit harder, more of them come at once, every elite is two,
   and bosses enrage at 65% of their hitpoints and attack 15% faster. How much tougher depends on the map: the early ones gain the most, as a player who's
@@ -295,6 +299,11 @@ version and how to run it.
     - **Hallowed Night** (seasonal, open from the start): crypt rats and ghasts, revenants, the
       afflicted, zombies, skeletons and ghouls, shades and ghosts, the Ankou, mummies and feral
       vampyres.
+    - **Phosani's Nightmare** (a boss fight, open once Hallowed Night's beaten): nothing but her.
+      The run's one fight on the Inquisitor's Field, a cavern under Slepe where the Sisterhood's
+      hunters fell. There are no waves and no caskets: you make 8 picks before she rises, as though
+      you'd arrived at level 9, and each of her totems' blasts heals you and brings 3 more levels'
+      worth. It can't be endless; it has a hard mode once it's beaten.
 - **Bosses** turn up during a run, each fighting the way it does in OSRS, and always drop an
   elite casket (now and then a master one). Big hits are wound up first, with a red circle
   showing where they'll land, and projectiles fly where you stood, so keep moving.
@@ -359,6 +368,14 @@ version and how to run it.
       onto it or 25 seconds pass, then bites, flings candy that brings its Third Age minions, and
       stomps, hurting more the longer you stay under it. It drops a real master casket.
       At 15:00, **The Nightmare**.
+    - **Phosani's Nightmare**: The Nightmare's hard mode, from the start. Everything of hers, quicker
+      and with more of it at once: her charge from the first phase, a wider fan of shots, a six-armed
+      spiral, farther-reaching Grasping Claws, tougher husks and parasites, more sleepwalkers, and
+      two of her own: a **Sweep**, one arm of petals aimed at you and then swept round widdershins
+      for three seconds (step against the turn), and in her last phase a claw on the tile you stand
+      on with barely a second to get clear. Every hit is shown before it lands, and nothing heals
+      but her totems. She has 4,200 hitpoints here; her hits are a little softer than on Hallowed
+      Night, as a big one still takes about half of a level 9 adventurer's.
 - **Gear** goes in the OSRS equipment slots (head, cape, neck, body, shield, legs, hands, feet,
   ring) and shows on your character: about ten pieces a slot, from Rune and Mystic to the
   Barrows brothers' armour, Armadyl, Ancestral, the Infernal cape, Pegasian boots and an Avernic

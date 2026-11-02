@@ -26,7 +26,15 @@ import {
 } from "../client/GameStore";
 import { formatTime } from "../client/GameView";
 import { CHARACTERS, getCharacter } from "../content/characters";
-import { CAMPAIGN_MAPS, DEV_MAPS, FUN_MAPS, MAPS, SEASONAL_MAPS, getMap } from "../content/maps";
+import {
+    CAMPAIGN_MAPS,
+    DEV_MAPS,
+    FIGHT_MAPS,
+    FUN_MAPS,
+    MAPS,
+    SEASONAL_MAPS,
+    getMap,
+} from "../content/maps";
 import { RARITIES } from "../content/rarity";
 import { SHOP_UPGRADES } from "../content/shop";
 import { COLLECTION_LOG_OBJ, TITLE_TAB_SPRITES } from "../content/titleIcons";
@@ -742,8 +750,16 @@ function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
 }
 
 // Endless runs for the map picked, once it's been beaten (fun maps are
-// always endless)
+// always endless, and a boss fight never is)
 function EndlessSwitch({ ui, client }: ScreenProps): JSX.Element {
+    if (getMap(ui.mapId).fight) {
+        return (
+            <div className="ui-endless" title="A boss fight is over when she is.">
+                <span className="ui-endless-name">Endless</span>
+                <span className="ui-endless-hint">One fight</span>
+            </div>
+        );
+    }
     if (getMap(ui.mapId).fun) {
         return (
             <div
@@ -978,6 +994,13 @@ function MapPanel({ ui, client }: ScreenProps): JSX.Element {
                 </div>
                 <div className="ui-style-group">
                     <div className="ui-style-name">
+                        Boss fights
+                        <span className="ui-style-treasure">once their map's beaten</span>
+                    </div>
+                    <div className="ui-map-list">{FIGHT_MAPS.map(tile)}</div>
+                </div>
+                <div className="ui-style-group">
+                    <div className="ui-style-name">
                         Fun maps
                         <span className="ui-style-treasure">endless, open from the start</span>
                     </div>
@@ -1016,7 +1039,7 @@ function MapDetails({ save, map }: { save: SaveData; map: MapDef }): JSX.Element
                                 ? `Fun map, endless. You play as ${getCharacter(map.fun.character).name}.`
                                 : "Fun map, endless"
                             : !unlocked
-                              ? `Beat ${MAPS[MAPS.indexOf(map) - 1].name} to unlock`
+                              ? `Beat ${getMap(map.fight?.requires ?? MAPS[MAPS.indexOf(map) - 1].id).name} to unlock`
                               : wins > 0
                                 ? `Beaten ${wins === 1 ? "once" : `${wins} times`}`
                                 : "Not beaten yet"}

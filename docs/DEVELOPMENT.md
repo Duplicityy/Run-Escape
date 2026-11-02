@@ -451,6 +451,10 @@ A boss's fight is in its `BossDef` and `BossAttackDef`, with no boss named in `S
   `quarters`, `surge` and `mark`, and `phases` on an attack for when it's used.
 - `Sim.bossArena` is the square all this goes by: `MapDef.bossArena`, or the whole map. Nothing's
   sized by hand, so she fights on any square.
+- `MapDef.fight` makes a map one fight (Phosani's Nightmare, `content/phosani.ts`): no waves, its
+  final boss event at 0, the run starting in the level up state with that many picks (`gainLevels`
+  in the constructor), and `BossPhasesDef.blastLevelUps` more with each totem blast. Phosani's is
+  built from her data alone: her sweep is a one-bullet `spread` that `turn`s each volley.
 
 The curse is applied to the input in `stepPlayer`, so keys and the touch stick go the same way.
 

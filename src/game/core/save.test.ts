@@ -151,10 +151,30 @@ describe("save", () => {
     test("a seasonal map is open from the start and opens nothing", () => {
         const save = createSave();
         expect(isMapUnlocked(save, "halloween")).toBe(true);
-        expect(MAPS[MAPS.length - 1].seasonal).toBe(true);
+        expect(getMap("halloween").seasonal).toBe(true);
         recordRun(save, run("halloween", { victory: true, seconds: 900, level: 40 }));
         expect(save.mapVictories.halloween).toBe(1);
         expect(isMapUnlocked(save, CAMPAIGN_MAPS[1].id)).toBe(false);
+    });
+
+    test("a boss fight opens once its map is beaten, and is never endless", () => {
+        const save = createSave();
+        expect(getMap("phosani").fight?.requires).toBe("halloween");
+        expect(isMapUnlocked(save, "phosani")).toBe(false);
+        expect(CAMPAIGN_MAPS.some((map) => map.id === "phosani")).toBe(false);
+        recordRun(save, run("halloween", { victory: true, seconds: 900, level: 40 }));
+        expect(isMapUnlocked(save, "phosani")).toBe(true);
+        expect(isEndlessUnlocked(save, "phosani")).toBe(false);
+        expect(isHardUnlocked(save, "phosani")).toBe(false);
+        recordRun(save, run("phosani", { victory: true, seconds: 300, level: 20 }));
+        expect(save.mapVictories.phosani).toBe(1);
+        expect(isEndlessUnlocked(save, "phosani")).toBe(false);
+        expect(isHardUnlocked(save, "phosani")).toBe(true);
+        // Won in co-op before Hallowed Night was: it stays open
+        const guest = createSave();
+        recordRun(guest, run("phosani", { victory: true, seconds: 300, level: 20 }));
+        expect(isMapUnlocked(guest, "phosani")).toBe(true);
+        expect(isMapUnlocked(guest, CAMPAIGN_MAPS[1].id)).toBe(false);
     });
 
     test("wins from before maps count as Lumbridge wins", () => {

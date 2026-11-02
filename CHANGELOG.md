@@ -5,6 +5,15 @@ the version in the corner).
 
 ## Unreleased
 
+### Added
+
+- Phosani's Nightmare: a boss fight on its own, open once Hallowed Night's beaten. The run is one
+  fight on the Inquisitor's Field, a cavern under Slepe: no waves and no caskets. You make 8 picks
+  before she rises, and each of her totems' blasts heals you and brings 3 levels' worth more. She
+  has everything The Nightmare has, quicker and with more at once, her charge from the start, a
+  sweep of petals to step against, and in her last phase a claw on the tile you stand on. It has a
+  hard mode once it's beaten, a quest, and it can't be endless.
+
 ## 0.23.0 - 2026-11-02
 
 ### Added
