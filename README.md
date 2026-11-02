@@ -145,7 +145,7 @@ Issues and pull requests are welcome.
   [LICENSE](LICENSE))
 - [RuneLite](https://github.com/runelite/runelite)
 - [OpenRS2 Archive](https://archive.openrs2.org/) and [RuneScape Archive](https://rs-archive.github.io/) - caches
-- [OSRS Wiki](https://oldschool.runescape.wiki/) - item spawns and sound ids
+- [OSRS Wiki](https://oldschool.runescape.wiki/) - item spawns, sound ids and music recordings
 - [2004scape](https://github.com/2004scape/Server) and [2009scape](https://gitlab.com/2009scape/2009scape) - NPC spawns
 - [RuneStar](https://github.com/RuneStar/fonts) - fonts
 - [Blurite](https://github.com/blurite/pathfinder) - pathfinding

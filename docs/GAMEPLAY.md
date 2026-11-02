@@ -385,7 +385,20 @@ version and how to run it.
       (step against the turn); a **Closing ring** with one way through that turns with each volley;
       **Weaving petals**, rings half a step apart to thread; a **Barrage**, a stream of shots that
       follows you (keep stepping across it); **Hunting orbs** that turn after you in her last
-      phase; and a claw on the tile you stand on with barely a second to get clear. Her warnings
+      phase; and a claw on the tile you stand on with barely a second to get clear. Then the
+      bullet hells': a **Turning wall**, a slow dense spiral with one doorway that walks round her
+      (walk with it); **Pinwheels**, rings whose petals bend as they fly; a **Double sweep**, her
+      sweep with two arms; a **Counter-spiral** wound against its mirror image; a **Sealing ring**
+      whose one gap is on you, and the next ring's further round; **Closing petals**, rings that
+      each fly quicker than the last and pile up about nine tiles out (stay in close, or get well
+      clear); **Rings, then shots**, slow rings and then her barrage through them; in her last
+      phase **Scissors**, two arms that open from where you stand and sweep opposite ways (stay
+      ahead of one, or get in close); **Parted petals**, an even fan you're safest standing still
+      in, and then her claw on your tile; and **The dream closes in**, a ring round you that flies
+      inwards with its way out towards her. She throws out **eggs** round you, the Parasitic egg,
+      which hatch a parasite each unless you break them in nine seconds, and **rooted husks** that
+      stand where they turn up and shoot until shot down (they don't hold). Her parasites heal
+      her, or put the charge back into a totem you're working on. Her warnings
       on the ground are drawn faint, at a tenth, so they're read rather than stared at. Every hit is shown before it lands, and nothing heals
       but her totems. Her hits are a little softer than on Hallowed Night, as a big one still
       takes about half of the Inquisitor's hitpoints. Everyone plays the **Inquisitor** there,

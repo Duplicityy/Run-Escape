@@ -163,6 +163,13 @@ export type EnemyDef = {
     // Control's splatters). damage is like EnemyDef.damage (the map's
     // difficulty and the run's time scale it the same way).
     explodes?: { damage: number; radius: number; spotAnim?: number; sound?: number };
+    // Drawn as this item's model, never animated, instead of as the NPC
+    // (Phosani's eggs are the Parasitic egg): npcId goes unused
+    objId?: number;
+    // Still alive this many seconds after it turns up, it's gone, and count of
+    // into come out where it stood, dropping nothing (Phosani's eggs hatch
+    // parasites unless they're broken first)
+    hatches?: { seconds: number; into: string; count: number; spotAnim?: number; sound?: number };
     // Now and then digs in or blinks and comes up right by the player
     // (Jal-ImKot burrows, Pest Control's shifters teleport)
     blinks?: EnemyBlinksDef;
@@ -354,9 +361,24 @@ export type BulletPatternDef = {
     // Rings and spirals: radians left empty in each volley, from the ring's own
     // angle, so there's a way through that moves round with turn
     gap?: number;
+    // Rings and spirals: the gap's put on the side of the player it's aimed at
+    // ("player") or the far side of the boss from them ("away", so the way
+    // out is round behind her), instead of at random
+    gapAt?: "player" | "away";
     // Spreads: aimed afresh at the nearest player with every volley, as a
     // stream that follows them (keep stepping across it)
     track?: boolean;
+    // Each volley's fired twice, the second mirrored about the aim, so the
+    // two turn opposite ways: a sweep's arms open like scissors, a spiral
+    // winds against itself
+    mirror?: boolean;
+    // Tiles a second added to each volley's speed after the first, so later
+    // volleys catch the earlier ones up and the lattice closes as it arrives
+    speedUp?: number;
+    // Rings and spirals: fired from a circle this many tiles round the nearest
+    // player, flying inwards, rather than out from the boss (the ring closes
+    // in on them, and the gap's the way out)
+    around?: number;
     // Model scale, when its hit size would leave it too thin to dodge, and how
     // much it's lit up against dark ground (0 to 1)
     scale?: number;
@@ -476,6 +498,8 @@ export type BossAttackDef = {
     // for each one. (The Nightmare's Sleepwalkers.)
     // scatter: they turn up at random, as far off as a wave's enemies do, and
     // come for the player (Phosani's husks, which hold once they arrive).
+    // distance: tiles from the boss (or the player, with beside) they turn up,
+    // in a ring, instead of right by them (Phosani's eggs, with room to move).
     summon?: {
         enemyId: string;
         count: number;
@@ -483,6 +507,7 @@ export type BossAttackDef = {
         alsoId?: string;
         beside?: boolean;
         scatter?: boolean;
+        distance?: number;
         holds?: number;
         walkTo?: { distance: number; perAbsorbed: number };
     };
@@ -512,6 +537,11 @@ export type BossAttackDef = {
     // claws again and again. A surge's lane and a ground attack's spots are
     // picked afresh each time.
     chain?: { times: number; windup: number };
+    // Another of the boss's attacks, by name, begins delay seconds after this
+    // one's fired, before anything else and whatever's still in the air: slow
+    // rings and then an aimed barrage, a fan that parts round the player and
+    // then a claw where they stand
+    follow?: { attack: string; delay: number };
     // The boss leaps to the middle of the arena as it begins (castSpotAnim
     // where it left), and a quarters attack's lines cross there
     toMiddle?: boolean;

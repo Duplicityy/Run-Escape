@@ -454,12 +454,23 @@ A boss's fight is in its `BossDef` and `BossAttackDef`, with no boss named in `S
   arena's middle as it begins (a `quarters` attack's lines cross there); `QuartersDef.during` has
   it stand among its flowers using only those attacks at its own interval; a `pattern`'s `gap`
   leaves a way through a ring that turns with it, and `track` re-aims a spread's every volley.
+- More of them, from the bullet hells she's modelled on: `gapAt` puts a ring's gap on the player or
+  away from them (Hush's ring with the gap at Isaac); `mirror` fires each volley again mirrored
+  about the aim, so the two turn opposite ways (a sweep's arms open like scissors, a spiral winds
+  against itself, as Doremy's do); `speedUp` quickens each volley so rings catch each other up
+  (Sparen's stacks); `around` fires a ring in from a circle round the player (Doremy's Ochre
+  Confusion); and `follow` on an attack names the one that comes delay seconds after it's fired,
+  through whatever's in the air (Rumia's slow rings and then an aimed volley). `summon.distance`
+  puts summons in a ring that far out. An enemy with `hatches` is gone after its seconds with its
+  `into` out where it stood unless it's killed first, and `objId` draws it as an item's model with
+  nothing to animate (Phosani's eggs are the Parasitic egg, baked as an `obj` under the enemy's
+  key).
 - `Sim.bossArena` is the square all this goes by: `MapDef.bossArena`, or the whole map. Nothing's
   sized by hand, so she fights on any square.
 - A map's `music` names an OSRS track, and its recording (from the OSRS Wiki) goes in
   `src/media/music` as the name in lower case with underscores: `the_bane_of_ashihama.ogg` for
-  Phosani's Nightmare, which isn't in the repository yet, so the map is silent until it is.
-  `GameClient` finds the files with a glob, so a missing one breaks nothing.
+  Phosani's Nightmare. `GameClient` finds the files with a glob, so a track can be named before
+  its recording is in: the map is silent until it is, and nothing breaks.
 - `MapDef.fight` makes a map one fight (Phosani's Nightmare, `content/phosani.ts`): no waves, its
   final boss event at 0, and the adventurer's starting weapon at `weaponLevel` from the first tick,
   with nothing in the fight dropping experience. Phosani's is built from her data alone: her sweep

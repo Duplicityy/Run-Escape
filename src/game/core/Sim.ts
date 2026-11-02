@@ -2608,6 +2608,7 @@ export class Sim {
             ...(encounter && { encounter: encounter.id }),
             noDrops: false,
             bonesOnly: false,
+            hatchTick: def.hatches ? this.tick + secondsToTicks(def.hatches.seconds) : 0,
             abilities: getAbilities(def, this.tick, this.rng),
         };
         this.enemies.push(enemy);
@@ -2724,6 +2725,10 @@ export class Sim {
             }
             if (enemy.walksTo) {
                 this.stepWalker(enemy, enemy.walksTo);
+                continue;
+            }
+            if (enemy.hatchTick !== 0 && this.tick >= enemy.hatchTick) {
+                this.hatch(enemy);
                 continue;
             }
             if (enemy.attackCooldown > 0) {
@@ -3812,6 +3817,7 @@ export class Sim {
             enemy.bossState.windup = undefined;
             enemy.bossState.surge = undefined;
             enemy.bossState.chain = undefined;
+            enemy.bossState.follow = undefined;
         }
     }
 
@@ -4315,14 +4321,24 @@ export class Sim {
             }
             this.bulletSources[source] = { attack, enemy };
         }
-        const aimed = pattern.shape === "spread";
+        const aim = fm.atan2(windup.dirY, windup.dirX);
+        // A spread's aimed; a ring's gap is centred on the side asked for, or
+        // the ring lands at whatever angle it falls
+        let angle = aim;
+        if (pattern.shape !== "spread") {
+            angle =
+                pattern.gapAt === undefined
+                    ? this.rng.range(0, Math.PI * 2)
+                    : (pattern.gapAt === "away" ? aim + Math.PI : aim) - (pattern.gap ?? 0) / 2;
+        }
         this.emitters.push({
             enemyUid: enemy.uid,
             attack,
             source,
             nextTick: this.tick,
             volleysLeft: pattern.volleys,
-            angle: aimed ? fm.atan2(windup.dirY, windup.dirX) : this.rng.range(0, Math.PI * 2),
+            angle,
+            aim,
             damage: this.getBossDamage(enemy, attack),
         });
         enemy.bossState!.channelEnd =
@@ -4354,16 +4370,37 @@ export class Sim {
 
     private fireVolley(emitter: BulletEmitter, boss: Enemy): void {
         const pattern = emitter.attack.pattern!;
-        const speed = pattern.speed / TICKS_PER_SECOND;
+        // Each volley after the first can be quicker than the last (speedUp)
+        const volley = pattern.volleys - emitter.volleysLeft;
+        const speed = (pattern.speed + (pattern.speedUp ?? 0) * volley) / TICKS_PER_SECOND;
         const life = Math.ceil(pattern.range / speed);
         const turn = (pattern.curve ?? 0) / TICKS_PER_SECOND;
         const count = pattern.count;
         const spread = pattern.shape === "spread";
+        // Whoever's nearest now: a tracking spread's aim, a closing ring's middle
+        const target = this.nearestHero(boss.x, boss.y).player;
         if (spread && pattern.track) {
-            // At whoever's nearest now
-            const target = this.nearestHero(boss.x, boss.y).player;
             emitter.angle = fm.atan2(target.y - boss.y, target.x - boss.x);
         }
+        const around = spread ? undefined : pattern.around;
+        const fire = (angle: number) => {
+            // Out from the boss, or in from a circle round the player
+            const x = around === undefined ? boss.x : target.x + fm.cos(angle) * around;
+            const y = around === undefined ? boss.y : target.y + fm.sin(angle) * around;
+            const heading = around === undefined ? angle : angle + Math.PI;
+            this.bullets.add(
+                x,
+                y,
+                fm.cos(heading) * speed,
+                fm.sin(heading) * speed,
+                turn,
+                pattern.radius,
+                emitter.damage,
+                life,
+                emitter.source,
+                this.tick,
+            );
+        };
         const step = spread ? (pattern.arc ?? 1) / Math.max(1, count - 1) : (Math.PI * 2) / count;
         const first = spread ? emitter.angle - (pattern.arc ?? 1) / 2 : emitter.angle;
         for (let i = 0; i < count; i++) {
@@ -4372,18 +4409,11 @@ export class Sim {
                 continue;
             }
             const angle = first + i * step;
-            this.bullets.add(
-                boss.x,
-                boss.y,
-                fm.cos(angle) * speed,
-                fm.sin(angle) * speed,
-                turn,
-                pattern.radius,
-                emitter.damage,
-                life,
-                emitter.source,
-                this.tick,
-            );
+            fire(angle);
+            if (pattern.mirror) {
+                // The same the other side of the aim, so it turns the other way
+                fire(2 * emitter.aim - angle);
+            }
         }
         emitter.angle += pattern.turn ?? 0;
     }
@@ -4741,6 +4771,18 @@ export class Sim {
             );
             return;
         }
+        // What follows an attack comes at its time, through whatever's still
+        // in the air (BossAttackDef.follow), though not while the player's held
+        const follow = state.follow;
+        if (follow) {
+            if (this.tick >= follow.atTick && !this.hold) {
+                state.follow = undefined;
+                const next = follow.attack;
+                state.chain = next.chain ? { attack: next, left: next.chain.times } : undefined;
+                this.startBossAttack(enemy, next);
+            }
+            return;
+        }
         // It holds off while the player can't move, and what's fired can land
         if (enemy.attackCooldown > 0 || this.hold || this.tick < state.channelEnd) {
             return;
@@ -4919,6 +4961,7 @@ export class Sim {
             y: enemy.y,
         });
         this.landBlastExtras(enemy, windup);
+        this.queueFollow(enemy, attack);
         if (attack.kind === "swing" || attack.kind === "blast") {
             // A swing hits around the boss, a blast where the player was (and
             // around there); the player is hit once however many land on them
@@ -4985,6 +5028,21 @@ export class Sim {
         this.launchProjectiles(enemy, attack, this.getBossDamage(enemy, attack), false);
     }
 
+    // What's to follow an attack, from when it's fired (BossAttackDef.follow)
+    private queueFollow(enemy: Enemy, attack: BossAttackDef): void {
+        const follow = attack.follow;
+        if (!follow) {
+            return;
+        }
+        const next = enemy.def.boss!.attacks.find((a) => a.name === follow.attack);
+        if (next) {
+            enemy.bossState!.follow = {
+                attack: next,
+                atTick: this.tick + secondsToTicks(follow.delay),
+            };
+        }
+    }
+
     // At where the player is now: keep moving and it misses
     private launchProjectiles(
         enemy: Enemy,
@@ -5032,8 +5090,9 @@ export class Sim {
         const def = getEnemy(summon.enemyId);
         const count = summon.count;
         const around = summon.beside ? this.player : enemy;
-        const radius = summon.walkTo?.distance ?? (summon.beside ? SUMMON_BESIDE : 1.5);
-        const attempts = summon.beside || summon.walkTo ? 6 : 1;
+        const radius =
+            summon.walkTo?.distance ?? summon.distance ?? (summon.beside ? SUMMON_BESIDE : 1.5);
+        const attempts = summon.beside || summon.walkTo || summon.distance !== undefined ? 6 : 1;
         const spawned: Enemy[] = [];
         const also = summon.alsoId !== undefined ? getEnemy(summon.alsoId) : undefined;
         const total = count + (also ? 1 : 0);
@@ -5716,6 +5775,32 @@ export class Sim {
         if (splits.spotAnim !== undefined) {
             this.addEffect(splits.spotAnim, enemy.x, enemy.y, 0, 40);
         }
+    }
+
+    // Still standing as its time comes: it's gone, and what was in it comes
+    // out where it stood (EnemyDef.hatches)
+    private hatch(enemy: Enemy): void {
+        const hatches = enemy.def.hatches!;
+        const into = getEnemy(hatches.into);
+        for (let i = 0; i < hatches.count; i++) {
+            const out =
+                this.spawnNear(enemy, into, 0.7, i, hatches.count, 3) ??
+                this.spawnEnemy(into, "normal", { x: enemy.x, y: enemy.y });
+            if (out) {
+                out.noDrops = true;
+            }
+        }
+        if (hatches.spotAnim !== undefined) {
+            this.addEffect(hatches.spotAnim, enemy.x, enemy.y, 0, 40);
+        }
+        this.emit({
+            type: "bossAttack",
+            enemyId: enemy.def.id,
+            sound: hatches.sound ?? -1,
+            x: enemy.x,
+            y: enemy.y,
+        });
+        this.vanish(enemy);
     }
 
     // Blows up where it died (EnemyDef.explodes), hurting the player if
