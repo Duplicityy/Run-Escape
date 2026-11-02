@@ -3,6 +3,18 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
+## Unreleased
+
+### Fixed
+
+- Co-op: two players with the same orbit weapon, like Elemental runes, no longer wipe out each
+  other's circle.
+- Co-op: a downed player can't reroll or skip level ups any more, so they can't spend the party's
+  coins.
+- Co-op: one player's Evil Bob finishing no longer ends another's Evil Bob timer early.
+- Co-op: each player's Toktz-mej-tal burns ground of its own: another player's pulse no longer
+  takes over your fire or puts it out.
+
 ## 0.22.1 - 2026-11-02
 
 ### Added
