@@ -857,7 +857,9 @@ type SimEventBody =
     | { type: "visitorShout"; text: string }
     // An endless run's final boss is down and the next round has begun
     | { type: "roundStarted"; round: number }
-    // Co-op: a hero went down with no revives left (out for the rest of the
-    // run, which goes on while anyone's standing), or left the game
+    // Co-op: a hero went down with no ring of life left (out of the fight
+    // until a teammate revives them, while the run goes on), left the game,
+    // or was brought back by the teammate at index by
     | { type: "heroDown" }
-    | { type: "heroLeft" };
+    | { type: "heroLeft" }
+    | { type: "heroRevived"; by: number };

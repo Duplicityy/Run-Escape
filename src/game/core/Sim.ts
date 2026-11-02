@@ -1,6 +1,17 @@
 import { ArmouryUpgrades, getUpgradedGear } from "../content/armoury";
 import { getCharacter } from "../content/characters";
-import { PLAYER_GONE, PartyScale, bossCopies, getPartyScale } from "../content/coop";
+import {
+    PLAYER_GONE,
+    PartyScale,
+    REVIVES_PER_PLAYER,
+    REVIVE_HP,
+    REVIVE_IMMUNITY_SECONDS,
+    REVIVE_RANGE,
+    REVIVE_SECONDS,
+    REVIVE_SPOTANIM,
+    bossCopies,
+    getPartyScale,
+} from "../content/coop";
 import {
     LATER_ROUND_START,
     LATE_CASKET_CHANCE,
@@ -191,6 +202,13 @@ const FOOD_HEAL = 10;
 // After being hit the player can't be hit again for a moment, so a crowd hurts
 // more than one enemy but can't melt them instantly
 const HIT_INVULNERABLE_TICKS = 12;
+// Co-op: a teammate stands over a downed player this long to bring them back,
+// and nothing can hurt the revived for this long after (see content/coop.ts)
+const REVIVE_TICKS = REVIVE_SECONDS * TICKS_PER_SECOND;
+const REVIVE_IMMUNITY_TICKS = REVIVE_IMMUNITY_SECONDS * TICKS_PER_SECOND;
+// Held above a hit's invulnerability, which lets boss hits through as it runs
+// down, and above what makes the player blink, so the immunity shows
+const IMMUNE_INVULNERABLE_TICKS = 31;
 // Seconds until a random event that couldn't happen gets another go
 const RANDOM_EVENT_RETRY = 5;
 const RANDOM_EVENT_SEED = 0x5eed;
@@ -409,6 +427,7 @@ const PERSONAL_EVENTS = new Set<SimEvent["type"]>([
     "playerShout",
     "heroDown",
     "heroLeft",
+    "heroRevived",
     "playerCursed",
 ]);
 
@@ -567,11 +586,21 @@ export type Hero = {
     // What they're pressing, for the next tick
     moveX: number;
     moveY: number;
-    // Co-op: down with no revives left (out of the run, watching the rest),
-    // or gone from the game, and the tick that happened (-1 while they're in)
+    // Co-op: down with no ring of life left (out of the fight until a teammate
+    // revives them, or for good once they've been revived REVIVES_PER_PLAYER
+    // times), or gone from the game, and the tick that happened (-1 while
+    // they're in)
     down: boolean;
     left: boolean;
     outTick: number;
+    // Co-op: how many times a teammate's brought them back this run
+    revived: number;
+    // Co-op: the teammate standing over them to bring them back, and how
+    // many ticks they've stood there (REVIVE_TICKS brings them back)
+    revive?: { hero: number; ticks: number };
+    // Co-op: just brought back, so nothing hurts them and enemies leave them
+    // be until this tick
+    immuneEndTick: number;
 };
 
 // A player in a co-op run, as SimOptions.party has them
@@ -1061,6 +1090,8 @@ export class Sim {
             down: false,
             left: false,
             outTick: -1,
+            revived: 0,
+            immuneEndTick: 0,
         };
     }
 
@@ -1089,16 +1120,43 @@ export class Sim {
         return !hero.down && !hero.left;
     }
 
+    // Co-op: just brought back by a teammate, so nothing can hurt them and
+    // enemies leave them be (see reviveHero)
+    isImmune(hero: Hero): boolean {
+        return this.tick < hero.immuneEndTick;
+    }
+
+    // Co-op: down, and a teammate can still bring them back
+    canBeRevived(hero: Hero): boolean {
+        return hero.down && !hero.left && hero.revived < REVIVES_PER_PLAYER;
+    }
+
+    // Co-op: the revives a downed hero has left, for the UI
+    revivesLeftFor(hero: Hero): number {
+        return Math.max(0, REVIVES_PER_PLAYER - hero.revived);
+    }
+
+    // Whether enemies go after a hero: up, and not just revived. When
+    // everyone up is immune they go after them anyway (and can't hurt them)
+    private isTarget(hero: Hero, anyTargets: boolean): boolean {
+        return this.isUp(hero) && (!anyTargets || !this.isImmune(hero));
+    }
+
+    private anyTargets(): boolean {
+        return this.heroes.some((hero) => this.isUp(hero) && !this.isImmune(hero));
+    }
+
     // The hero nearest a spot that's still in the fight, for enemies to go
     // after and pickups to fly to (the current one if nobody is)
     private nearestHero(x: number, y: number): Hero {
         if (this.heroes.length === 1) {
             return this.heroes[0];
         }
+        const anyTargets = this.anyTargets();
         let nearest: Hero | undefined;
         let best = Infinity;
         for (const hero of this.heroes) {
-            if (!this.isUp(hero)) {
+            if (!this.isTarget(hero, anyTargets)) {
                 continue;
             }
             const dx = hero.player.x - x;
@@ -1118,7 +1176,8 @@ export class Sim {
         if (this.heroes.length === 1) {
             return;
         }
-        const up = this.heroes.filter((hero) => this.isUp(hero));
+        const anyTargets = this.anyTargets();
+        const up = this.heroes.filter((hero) => this.isTarget(hero, anyTargets));
         if (up.length > 0) {
             this.use(up[this.rng.int(up.length)]);
         }
@@ -1926,6 +1985,9 @@ export class Sim {
             // Poison finished them
             return;
         }
+        if (this.heroes.length > 1) {
+            this.stepRevives();
+        }
         // Each hero's on a tick of its own, so a party's don't all come at once
         for (const hero of this.heroes) {
             if ((this.tick + hero.index * 2) % FLOW_FIELD_INTERVAL === 0 && this.isUp(hero)) {
@@ -2023,6 +2085,10 @@ export class Sim {
         // it runs down (see reviving), and below the > 30 that makes them blink
         if (this.tick < this.sledEndTick || this.intro) {
             player.invulnerable = Math.max(player.invulnerable, HIT_INVULNERABLE_TICKS + 1);
+        }
+        // Just revived by a teammate: nothing gets through, and they blink
+        if (this.isImmune(this.hero)) {
+            player.invulnerable = Math.max(player.invulnerable, IMMUNE_INVULNERABLE_TICKS);
         }
         if (player.flash > 0) {
             player.flash--;
@@ -3055,7 +3121,7 @@ export class Sim {
         const player = this.player;
         // Once the run's over nothing more lands, so a win can't turn into a
         // death (or spend a revive) later in the tick it's won
-        if (this.runOver || this.hero.down) {
+        if (this.runOver || this.hero.down || this.isImmune(this.hero)) {
             return 0;
         }
         const armor = ignoreArmor ? 0 : this.stats.armor;
@@ -5203,14 +5269,86 @@ export class Sim {
             this.endRun("dead");
             return;
         }
-        // Co-op: they're out for the rest of the run, and the rest fight on
+        // Co-op: they're out of the fight until a teammate revives them (or
+        // for the rest of the run), and the rest fight on
         player.prevX = player.x;
         player.prevY = player.y;
         player.moving = false;
         player.poisonEnd = -1;
         player.poisonDamage = 0;
+        this.hero.revive = undefined;
         this.emit({ type: "heroDown" });
         this.rescaleParty();
+    }
+
+    // Co-op: a downed hero comes back once a teammate's stood over them long
+    // enough. Stepping away starts over, and the first to stand there does it
+    // until they step away.
+    private stepRevives(): void {
+        for (const downed of this.heroes) {
+            if (!this.canBeRevived(downed)) {
+                downed.revive = undefined;
+                continue;
+            }
+            const current = downed.revive && this.heroes[downed.revive.hero];
+            const reviver =
+                current && this.isReviving(current, downed)
+                    ? current
+                    : this.heroes.find((hero) => this.isReviving(hero, downed));
+            if (!reviver) {
+                downed.revive = undefined;
+                continue;
+            }
+            if (downed.revive?.hero !== reviver.index) {
+                downed.revive = { hero: reviver.index, ticks: 0 };
+                this.addEffect(
+                    REVIVE_SPOTANIM,
+                    reviver.player.x,
+                    reviver.player.y,
+                    0,
+                    REVIVE_TICKS,
+                );
+            }
+            downed.revive.ticks++;
+            if (downed.revive.ticks >= REVIVE_TICKS) {
+                this.reviveHero(downed, reviver);
+            }
+        }
+    }
+
+    // Whether a hero's up and standing over a downed one
+    private isReviving(hero: Hero, downed: Hero): boolean {
+        return (
+            hero !== downed &&
+            this.isUp(hero) &&
+            fm.hypot(hero.player.x - downed.player.x, hero.player.y - downed.player.y) <=
+                REVIVE_RANGE
+        );
+    }
+
+    // Co-op: a teammate's brought a downed hero back, with less of their
+    // hitpoints each time, and nothing can hurt them for a while. Level ups
+    // the party had while they were down are theirs to choose now.
+    private reviveHero(downed: Hero, by: Hero): void {
+        const player = downed.player;
+        const fraction = REVIVE_HP[Math.min(downed.revived, REVIVE_HP.length - 1)];
+        downed.revived++;
+        downed.revive = undefined;
+        downed.down = false;
+        downed.outTick = -1;
+        downed.immuneEndTick = this.tick + REVIVE_IMMUNITY_TICKS;
+        player.hp = Math.max(1, Math.round(player.maxHp * fraction));
+        player.deathTick = -1;
+        player.invulnerable = IMMUNE_INVULNERABLE_TICKS;
+        player.flash = 0;
+        player.frozen = 0;
+        downed.curse = undefined;
+        downed.parasite = undefined;
+        downed.hold = undefined;
+        downed.drowsyEndTick = 0;
+        this.as(downed.index, () => this.emit({ type: "heroRevived", by: by.index }));
+        this.rescaleParty();
+        this.as(this.focus, () => this.checkLevelUp());
     }
 
     // Co-op: the crowd and its bosses for the players still up, and half of

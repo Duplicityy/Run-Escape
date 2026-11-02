@@ -49,7 +49,7 @@ import { ChangelogPanel } from "./ChangelogPanel";
 import { ChestModal } from "./ChestModal";
 import { Coins } from "./Coins";
 import { CollectionLogScreen } from "./CollectionLogScreen";
-import { CoopScreen, PartyFrames, WaitingNote } from "./CoopScreen";
+import { CoopScreen, PartyFrames, ReviveNote, WaitingNote } from "./CoopScreen";
 import { EventModal } from "./EventModal";
 import "./GameUi.css";
 import { ItemIcon } from "./ItemIcon";
@@ -1134,6 +1134,9 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
             {ui.party.length > 0 && <PartyFrames party={ui.party} />}
             {ui.waitingOn.length > 0 && (ui.overlay === "none" || ui.overlay === "paused") && (
                 <WaitingNote names={ui.waitingOn} />
+            )}
+            {ui.revive && (ui.overlay === "none" || ui.overlay === "paused") && (
+                <ReviveNote revive={ui.revive} />
             )}
             {isCoarsePointer && hud && (
                 <TouchControls hud={hud} overlay={ui.overlay} client={client} />

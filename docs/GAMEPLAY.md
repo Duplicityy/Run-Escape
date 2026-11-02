@@ -446,9 +446,16 @@ version and how to run it.
       a player, so the last one of four standing faces a crowd made for two and a half.
     - Enemies go for whoever's **nearest**, and pickups fly to whoever's nearest.
     - A player who falls with no ring of life left (it saves you as it does on your own) is
-      **down** and out for the rest of the run, watching a teammate who's still up. The run goes
+      **down**, lying where they fell and watching a teammate who's still up. The run goes
       on while anyone's standing, without waiting on the downed for level ups, and ends when
       everyone's down.
+    - A teammate can **revive** a downed player by standing over them for 5 seconds (the Prayer
+      cape's emote, with a bar filling up over the fallen; stepping away starts over). Each
+      player can be revived three times a run, coming back with 75%, then 50%, then 25% of
+      their hitpoints, and after the third they're down for good. A revived player can't be
+      hurt for 5 minutes, and enemies leave them alone for a crowd-mate instead (unless
+      nobody else is up). Level ups the party had while they were down are theirs to choose
+      once they're back.
     - The pause menu doesn't stop a co-op run. Leaving it takes you out of the party; the host
       leaving ends it for everyone.
     - Teammates show with their names in green, an arrow at the edge of the screen when they're out

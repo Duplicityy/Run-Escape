@@ -4,6 +4,7 @@ import {
     ActorRenderer,
     NO_TINT,
 } from "../../mapviewer/webgl/actor/ActorRenderer";
+import { REVIVE_SECONDS, REVIVE_SEQ } from "../content/coop";
 import { getEnemy } from "../content/enemies";
 import { CASKETS } from "../content/items";
 import { POWER_UP_BLINK, POWER_UP_COLOR, POWER_UP_LIFETIME, getPowerUp } from "../content/powerups";
@@ -136,6 +137,8 @@ const FLASH_MS = 700;
 const ROCK_SCALE = 5;
 const ROCK_FALL_HEIGHT = 14;
 const ROCK_FADE_TICKS = TICKS_PER_SECOND;
+// Co-op: how long a teammate stands over a downed player to revive them
+const REVIVE_TICKS = REVIVE_SECONDS * TICKS_PER_SECOND;
 // How long a fairy ring takes to open
 const RING_OPEN_TICKS = 20;
 // A charging NPC's legs go this much faster than its walk, and it's lit up so
@@ -726,6 +729,7 @@ export class GameView {
         let anim: ActorAnim;
         let frame: number;
         const attack = player.attackSeq !== -1 ? model.getAnim(player.attackSeq) : undefined;
+        const reviving = sim.heroes.find((downed) => downed.revive?.hero === hero)?.revive?.ticks;
         if (look && lookModel) {
             anim = model.getAnim(pose.moving ? look.moveSeq : look.idleSeq);
             frame = anim.getFrame(pose.moveTicks);
@@ -733,6 +737,11 @@ export class GameView {
             // The death animation holds its last frame (lying down)
             anim = model.getAnim(PLAYER_SEQS.death);
             frame = anim.getFrame(Math.min(tick - player.deathTick, MAX_DEATH_ANIM_TICKS), false);
+        } else if (reviving !== undefined && !pose.moving) {
+            // Co-op: the Prayer cape's emote over a downed teammate, for as
+            // long as they stand there
+            anim = model.getAnim(REVIVE_SEQ);
+            frame = anim.getFrame(reviving);
         } else if (
             attack &&
             attack.seqId === player.attackSeq &&
@@ -1514,7 +1523,7 @@ export class GameView {
     ): void {
         const player = hero.player;
         const teammate = sim.heroes.length > 1 && hero.index !== sim.focus;
-        if (hero.left || (player.deathTick !== -1 && !teammate)) {
+        if (hero.left || (player.deathTick !== -1 && !teammate && !hero.revive)) {
             return;
         }
         const ctx = overlay.ctx;
@@ -1529,6 +1538,9 @@ export class GameView {
         }
         if (!hero.down) {
             drawHealthBar(ctx, p.x, p.y, scale, player.hp / player.maxHp);
+        } else if (hero.revive) {
+            // A revive under way fills up over them
+            drawReviveBar(ctx, p.x, p.y, scale, hero.revive.ticks / REVIVE_TICKS);
         }
         if (!teammate) {
             return;
@@ -1537,7 +1549,9 @@ export class GameView {
         ctx.font = `${16 * pixel}px "OSRS Small", sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "alphabetic";
-        const text = hero.down ? `${hero.name} (down)` : hero.name;
+        const text = hero.down
+            ? `${hero.name} (${sim.canBeRevived(hero) ? "down, revive me!" : "down"})`
+            : hero.name;
         const y = p.y - 7 * pixel;
         ctx.fillStyle = "#000000";
         ctx.fillText(text, p.x + pixel, y + pixel);
@@ -1599,6 +1613,26 @@ export function drawHealthBar(
     ctx.fillRect(left, top, green, height);
     ctx.fillStyle = "#ff0000";
     ctx.fillRect(left + green, top, width - green, height);
+}
+
+// Co-op: how far a revive has got, in the health bar's place, filling up in
+// the teammates' green over the dark
+function drawReviveBar(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    scale: number,
+    fraction: number,
+): void {
+    const width = Math.round(30 * scale);
+    const height = Math.round(5 * scale);
+    const left = Math.round(x - width / 2);
+    const top = Math.round(y - height * 0.6);
+    const done = Math.floor(width * Math.max(0, Math.min(1, fraction)));
+    ctx.fillStyle = TEAMMATE_COLOR;
+    ctx.fillRect(left, top, done, height);
+    ctx.fillStyle = "#333333";
+    ctx.fillRect(left + done, top, width - done, height);
 }
 
 // A hitsplat: the client's sprite with the number on it in white. If the

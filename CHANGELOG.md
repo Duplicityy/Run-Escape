@@ -3,6 +3,14 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
+## Unreleased
+
+### Added
+
+- Co-op revives: stand over a downed teammate for 5 seconds to bring them back. Each player can
+  be revived three times a run, with 75%, 50% and then 25% of their hitpoints, and comes back
+  untouchable for 5 minutes.
+
 ## 0.23.0 - 2026-11-02
 
 ### Added

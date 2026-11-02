@@ -219,6 +219,7 @@ export class GameSounds {
                     audio.play(SOUNDS.coins, { volume: 0.8 });
                     break;
                 case "revive":
+                case "heroRevived":
                     audio.play(SOUNDS.revive, { volume: 1 });
                     break;
                 case "evolved":

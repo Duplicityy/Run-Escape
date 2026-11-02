@@ -1,4 +1,4 @@
-import { getPartyScale } from "../content/coop";
+import { REVIVE_IMMUNITY_SECONDS, REVIVE_SECONDS, getPartyScale } from "../content/coop";
 import { getEnemy } from "../content/enemies";
 import { HARD_XP, getHardScale } from "../content/hard";
 import { getMap } from "../content/maps";
@@ -6,7 +6,7 @@ import { getPowerUp } from "../content/powerups";
 import { getRandomEvent } from "../content/randomEvents";
 import { emptyStats } from "../content/types";
 import { getWeapon } from "../content/weapons";
-import { HeroOptions, Sim, SimOptions, TICKS_PER_SECOND } from "./Sim";
+import { Hero, HeroOptions, Sim, SimOptions, TICKS_PER_SECOND } from "./Sim";
 import { fm, usePortableMath } from "./fmath";
 import { applyFrameEvent, syncHash } from "./lockstep";
 import { makeGrid } from "./world/testGrid";
@@ -69,6 +69,25 @@ function play(sim: Sim, ticks: number): void {
         sim.step();
         sim.takeEvents();
     }
+}
+
+// Poisons a hero with no ring of life, so they go down within a second
+function down(sim: Sim, hero: Hero): void {
+    hero.revivesLeft = 0;
+    hero.player.hp = 1;
+    hero.player.poisonDamage = 5;
+    hero.player.poisonEnd = sim.tick + TICKS_PER_SECOND + 1;
+    for (let i = 0; i < TICKS_PER_SECOND + 2 && !hero.down; i++) {
+        sim.step();
+    }
+    expect(hero.down).toBe(true);
+}
+
+// Puts a hero beside a downed one, standing still
+function standOver(hero: Hero, downed: Hero): void {
+    hero.player.x = hero.player.prevX = downed.player.x + 0.5;
+    hero.player.y = hero.player.prevY = downed.player.y;
+    hero.moveX = hero.moveY = 0;
 }
 
 // What two copies of a run have to agree on
@@ -152,27 +171,163 @@ describe("co-op", () => {
         expect(sim.state).toBe("playing");
     });
 
-    it("carries on while anyone's up, and the fallen stay down", () => {
+    it("carries on while anyone's up, and the fallen stay down on their own", () => {
         const sim = createParty(["warrior", "wizard"]);
         const [a, b] = sim.heroes;
-        b.revivesLeft = 0;
-        b.player.hp = 1;
-        b.player.poisonDamage = 5;
-        b.player.poisonEnd = sim.tick + TICKS_PER_SECOND + 1;
-        for (let i = 0; i < TICKS_PER_SECOND + 2; i++) {
-            sim.step();
-        }
-        expect(b.down).toBe(true);
+        down(sim, b);
         expect(sim.runOver).toBe(false);
         expect(sim.takeEvents().some((e) => e.type === "heroDown" && e.hero === 1)).toBe(true);
-        // Standing over them doesn't bring them back
-        a.player.x = b.player.x + 0.5;
+        // Nobody near them, so they stay down
+        a.player.x = b.player.x + 10;
         a.player.y = b.player.y;
         for (let i = 0; i < 10 * TICKS_PER_SECOND; i++) {
             sim.step();
         }
         expect(b.down).toBe(true);
         expect(b.player.hp).toBe(0);
+        expect(b.revive).toBeUndefined();
+    });
+
+    it("brings a downed player back when a teammate stands over them for five seconds", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        down(sim, b);
+        sim.takeEvents();
+        standOver(a, b);
+        for (let i = 0; i < REVIVE_SECONDS * TICKS_PER_SECOND - 1; i++) {
+            sim.step();
+        }
+        expect(b.down).toBe(true);
+        expect(b.revive).toEqual({ hero: 0, ticks: REVIVE_SECONDS * TICKS_PER_SECOND - 1 });
+        sim.step();
+        expect(b.down).toBe(false);
+        expect(sim.isUp(b)).toBe(true);
+        expect(b.revive).toBeUndefined();
+        expect(b.revived).toBe(1);
+        expect(b.player.hp).toBe(Math.round(b.player.maxHp * 0.75));
+        expect(b.player.deathTick).toBe(-1);
+        expect(sim.isImmune(b)).toBe(true);
+        expect(b.immuneEndTick).toBe(sim.tick + REVIVE_IMMUNITY_SECONDS * TICKS_PER_SECOND);
+        expect(sim.takeEvents()).toContainEqual({ type: "heroRevived", by: 0, hero: 1 });
+    });
+
+    it("starts a revive over when the teammate steps away", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        down(sim, b);
+        standOver(a, b);
+        for (let i = 0; i < 3 * TICKS_PER_SECOND; i++) {
+            sim.step();
+        }
+        expect(b.revive?.ticks).toBe(3 * TICKS_PER_SECOND);
+        a.player.x = b.player.x + 3;
+        sim.step();
+        expect(b.revive).toBeUndefined();
+        standOver(a, b);
+        for (let i = 0; i < 3 * TICKS_PER_SECOND; i++) {
+            sim.step();
+        }
+        expect(b.down).toBe(true);
+        expect(b.revive?.ticks).toBe(3 * TICKS_PER_SECOND);
+    });
+
+    it("revives with 75%, 50% then 25% of their hitpoints, and three times at most", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        for (const fraction of [0.75, 0.5, 0.25]) {
+            down(sim, b);
+            expect(sim.canBeRevived(b)).toBe(true);
+            standOver(a, b);
+            for (let i = 0; i < REVIVE_SECONDS * TICKS_PER_SECOND; i++) {
+                sim.step();
+            }
+            expect(b.down).toBe(false);
+            expect(b.player.hp).toBe(Math.round(b.player.maxHp * fraction));
+            // Let the immunity pass, or they can't go down again
+            b.immuneEndTick = sim.tick;
+        }
+        expect(sim.revivesLeftFor(b)).toBe(0);
+        down(sim, b);
+        expect(sim.canBeRevived(b)).toBe(false);
+        standOver(a, b);
+        for (let i = 0; i < 2 * REVIVE_SECONDS * TICKS_PER_SECOND; i++) {
+            sim.step();
+        }
+        expect(b.down).toBe(true);
+        expect(b.revive).toBeUndefined();
+    });
+
+    it("keeps enemies off a revived player, and nothing hurts them, until it wears off", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        down(sim, b);
+        standOver(a, b);
+        for (let i = 0; i < REVIVE_SECONDS * TICKS_PER_SECOND; i++) {
+            sim.step();
+        }
+        expect(sim.isImmune(b)).toBe(true);
+        const hp = b.player.hp;
+        expect(sim.as(1, () => sim["damagePlayer"](50, "goblin", false))).toBe(0);
+        expect(b.player.hp).toBe(hp);
+        // A goblin beside them goes for the teammate across the field instead
+        a.player.x = a.player.prevX = b.player.x + 20;
+        const enemy = sim.spawnEnemy(getEnemy("goblin"), "normal", {
+            x: b.player.x + 2,
+            y: b.player.y,
+        })!;
+        const start = Math.hypot(enemy.x - a.player.x, enemy.y - a.player.y);
+        for (let i = 0; i < 25; i++) {
+            sim.step();
+        }
+        expect(Math.hypot(enemy.x - a.player.x, enemy.y - a.player.y)).toBeLessThan(start);
+        expect(b.player.hp).toBe(hp);
+        // Once it's worn off, they're fair game again
+        b.immuneEndTick = sim.tick;
+        sim.step();
+        expect(sim.isImmune(b)).toBe(false);
+        // The last of the blinking runs down
+        for (let i = 0; i < 2 * TICKS_PER_SECOND; i++) {
+            sim.step();
+        }
+        expect(sim.as(1, () => sim["damagePlayer"](5, "goblin", false))).toBeGreaterThan(0);
+    });
+
+    it("scales the crowd back up when a player's revived", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        const goblin = getEnemy("goblin");
+        const before = sim.spawnEnemy(goblin, "normal")!;
+        down(sim, b);
+        const whileDown = sim.spawnEnemy(goblin, "normal")!;
+        expect(whileDown.maxHp).toBeLessThan(before.maxHp);
+        standOver(a, b);
+        for (let i = 0; i < REVIVE_SECONDS * TICKS_PER_SECOND; i++) {
+            sim.step();
+        }
+        expect(b.down).toBe(false);
+        expect(sim.spawnEnemy(goblin, "normal")!.maxHp).toBe(before.maxHp);
+    });
+
+    it("offers a revived player the level ups the party had while they were down", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        down(sim, b);
+        sim.xp = 1e4;
+        sim.step();
+        expect(sim.state).toBe("levelUp");
+        while (a.pendingLevelUps > 0) {
+            sim.as(0, () => sim.choose(0));
+        }
+        expect(sim.state).toBe("playing");
+        expect(b.pendingLevelUps).toBeGreaterThan(0);
+        standOver(a, b);
+        for (let i = 0; i < REVIVE_SECONDS * TICKS_PER_SECOND; i++) {
+            sim.step();
+        }
+        expect(b.down).toBe(false);
+        expect(sim.state).toBe("levelUp");
+        expect(sim.waitingOn).toEqual([b]);
+        expect(b.choices.length).toBeGreaterThan(0);
     });
 
     it("gives a ring of life's revive before going down", () => {
