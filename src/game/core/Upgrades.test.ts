@@ -493,6 +493,38 @@ describe("endless runs", () => {
         });
         expect(choice.title).toBe(`${whip.levels[last - 1].name ?? whip.name} +2`);
         expect(choice.text).toBe("This weapon does 34% more damage.");
+        // The pick multiplies what the weapon has, and the card shows the
+        // before and after so "15% more" at +477% doesn't read as +492%
+        expect(choice.stats).toBeUndefined();
+        const stacked = describeChoice({
+            kind: "weaponLevel",
+            weaponId: whip.id,
+            level: last + 3,
+            quality: "common",
+            bonus: 4.77,
+        });
+        expect(stacked.stats).toEqual([
+            { label: "Damage bonus", value: "+564%", from: "+477%", better: true },
+        ]);
+        // An offer past the last level carries the weapon's bonus; one before it doesn't
+        const rng = new Rng(1);
+        const levelOffer = (level: number, endless: boolean): UpgradeChoice => {
+            for (;;) {
+                const held = { ...weapon(whip.id, level), bonus: 0.5 };
+                const offer = rollChoices(rng, [held], [], 0, "melee", undefined, endless).find(
+                    (c) => c.kind === "weaponLevel",
+                );
+                if (offer) return offer;
+            }
+        };
+        expect(levelOffer(last, true)).toEqual({
+            kind: "weaponLevel",
+            weaponId: whip.id,
+            level: last + 1,
+            quality: expect.any(String),
+            bonus: 0.5,
+        });
+        expect(levelOffer(1, false)).not.toHaveProperty("bonus");
         const piety = describeChoice({
             kind: "passiveLevel",
             passiveId: "piety",

@@ -94,13 +94,17 @@ describe("weapon stats", () => {
             into: "abyssal_whip",
         });
         expect(evolved.stats?.map(formatWeaponStat)).toContain("Sides 2");
-        // Past the last level it's only more damage, which the text says
+        // Past the last level it's only more damage, multiplying what the
+        // weapon has: the card shows the bonus before and after
         const over = describeChoice({
             kind: "weaponLevel",
             weaponId: "scimitar",
             level: 9,
             quality: "common",
+            bonus: 0.2,
         });
-        expect(over.stats).toBeUndefined();
+        expect(over.stats).toEqual([
+            { label: "Damage bonus", value: "+38%", from: "+20%", better: true },
+        ]);
     });
 });

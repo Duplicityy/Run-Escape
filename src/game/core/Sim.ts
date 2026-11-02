@@ -122,8 +122,8 @@ import {
     MAX_PASSIVES,
     MAX_WEAPONS,
     UpgradeChoice,
-    getOverlevelDamage,
     hiltChoices,
+    overlevelBonus,
     rollChoices,
 } from "./Upgrades";
 import {
@@ -1613,8 +1613,7 @@ export class Sim {
                     weapon.level = this.endless ? choice.level : Math.min(choice.level, last);
                     if (choice.level > last) {
                         // Multiplies everything the weapon had
-                        const more = getOverlevelDamage(choice.quality);
-                        weapon.bonus = (1 + weapon.bonus) * (1 + more) - 1;
+                        weapon.bonus = overlevelBonus(weapon.bonus, choice.quality);
                     } else {
                         weapon.bonus += RARITIES[choice.quality].weaponBonus;
                     }
