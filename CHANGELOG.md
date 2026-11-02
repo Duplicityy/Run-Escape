@@ -3,6 +3,13 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
+## Unreleased
+
+### Fixed
+
+- In co-op, players with the same runes all get them: one player's cast no longer wiped the others'.
+- Durial321's task says what it takes: surviving 6:06 in Falador, not 6 minutes.
+
 ## 0.22.1 - 2026-11-02
 
 ### Added
