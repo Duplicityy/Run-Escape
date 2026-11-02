@@ -78,6 +78,29 @@ function getRelayUrl(): string {
     return url.toString();
 }
 
+// A room's own connection, for a relay that keeps each room on its own (see
+// "goto" in protocol.ts)
+function getRoomUrl(code: string, ticket: string): string {
+    const url = new URL(getRelayUrl());
+    url.pathname = `${url.pathname.replace(/\/$/, "")}/room/${encodeURIComponent(code)}`;
+    url.search = `?ticket=${encodeURIComponent(ticket)}`;
+    return url.toString();
+}
+
+// What goes to the room's own connection, when there is one: everything said
+// in a room. The rest (pings, the list, making or joining one) is the lobby's.
+const ROOM_MESSAGES: ReadonlySet<ClientMessage["t"]> = new Set([
+    "leave",
+    "me",
+    "settings",
+    "kick",
+    "disband",
+    "start",
+    "end",
+    "up",
+    "down",
+]);
+
 // The relay's address over plain HTTP, which answers whether it's there
 function getStatusUrl(): string {
     const url = new URL(getRelayUrl());
@@ -111,6 +134,13 @@ export function describeMissing(need: MissingMap): string {
 // the room's run does goes to whoever's set the on* handlers (GameClient).
 export class CoopLobby {
     private socket?: WebSocket;
+    // With a relay that keeps rooms on their own connections: the room's,
+    // and one being made or joined (which takes over once the room says
+    // it's in)
+    private roomSocket?: WebSocket;
+    private enteringSocket?: WebSocket;
+    // The create or join that's waiting on the relay's "goto"
+    private entering?: ClientMessage;
     private listTimer?: number;
     private pingTimer?: number;
     private view: CoopView;
@@ -185,6 +215,7 @@ export class CoopLobby {
                 const wasOnline = this.view.status === "online";
                 this.socket = undefined;
                 this.stopTimers();
+                this.closeRoomSockets();
                 this.update({
                     status: "offline",
                     room: undefined,
@@ -207,6 +238,7 @@ export class CoopLobby {
         const socket = this.socket;
         this.socket = undefined;
         this.stopTimers();
+        this.closeRoomSockets();
         socket?.close();
         this.update({
             status: "offline",
@@ -225,8 +257,81 @@ export class CoopLobby {
     }
 
     private send(message: ClientMessage): void {
-        if (this.socket?.readyState === WebSocket.OPEN) {
-            this.socket.send(JSON.stringify(message));
+        const socket =
+            this.roomSocket && ROOM_MESSAGES.has(message.t) ? this.roomSocket : this.socket;
+        if (socket?.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify(message));
+        }
+        if (message.t === "ping" && this.roomSocket?.readyState === WebSocket.OPEN) {
+            this.roomSocket.send(JSON.stringify(message));
+        }
+    }
+
+    // Makes or joins a room on its own connection, as the relay said to
+    private enterRoom(code: string, ticket: string): void {
+        const message = this.entering;
+        this.entering = undefined;
+        if (!message) {
+            return;
+        }
+        this.enteringSocket?.close();
+        let socket: WebSocket;
+        try {
+            socket = new WebSocket(getRoomUrl(code, ticket));
+        } catch {
+            this.update({ error: "Couldn't reach that room." });
+            return;
+        }
+        this.enteringSocket = socket;
+        socket.onopen = () => socket.send(JSON.stringify(message));
+        socket.onmessage = (event) => {
+            let received: ServerMessage;
+            try {
+                received = JSON.parse(String(event.data));
+            } catch {
+                return;
+            }
+            if (socket === this.enteringSocket) {
+                if (received.t === "room") {
+                    // In: the room before this (if any) is left by closing it
+                    const previous = this.roomSocket;
+                    this.roomSocket = socket;
+                    this.enteringSocket = undefined;
+                    previous?.close();
+                } else if (received.t === "error") {
+                    this.enteringSocket = undefined;
+                    socket.close();
+                }
+            } else if (socket !== this.roomSocket) {
+                return;
+            }
+            this.receive(received);
+        };
+        socket.onclose = () => {
+            if (socket === this.enteringSocket) {
+                this.enteringSocket = undefined;
+                this.update({ error: "Couldn't reach that room." });
+                return;
+            }
+            if (socket !== this.roomSocket) {
+                return;
+            }
+            this.roomSocket = undefined;
+            // Closed by the room after a "gone" (which said why), or lost
+            if (this.view.room) {
+                this.update({ room: undefined, error: "Lost the connection to the room." });
+                this.refresh();
+                this.onClosed?.();
+            }
+        };
+    }
+
+    private closeRoomSockets(): void {
+        const sockets = [this.roomSocket, this.enteringSocket];
+        this.roomSocket = this.enteringSocket = undefined;
+        this.entering = undefined;
+        for (const socket of sockets) {
+            socket?.close();
         }
     }
 
@@ -266,6 +371,9 @@ export class CoopLobby {
                 break;
             case "room":
                 this.update({ room: message.room, you: message.you, error: undefined });
+                break;
+            case "goto":
+                this.enterRoom(message.code, message.ticket);
                 break;
             case "gone":
                 this.update({ room: undefined, error: GONE_TEXT[message.reason] || undefined });
@@ -334,7 +442,9 @@ export class CoopLobby {
 
     create(open: boolean, mapId: string, endless: boolean): void {
         this.update({ error: undefined });
-        this.send({ t: "create", open, mapId, endless, me: this.joinAs() });
+        const message: ClientMessage = { t: "create", open, mapId, endless, me: this.joinAs() };
+        this.entering = message;
+        this.send(message);
     }
 
     join(code: string): void {
@@ -343,7 +453,9 @@ export class CoopLobby {
             return;
         }
         this.update({ error: undefined });
-        this.send({ t: "join", code: clean, me: this.joinAs() });
+        const message: ClientMessage = { t: "join", code: clean, me: this.joinAs() };
+        this.entering = message;
+        this.send(message);
     }
 
     private joinAs(): Partial<Member> {

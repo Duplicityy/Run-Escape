@@ -154,6 +154,10 @@ export type ServerMessage =
           full: boolean;
       }
     | { t: "room"; room: RoomView; you: string }
+    // The relay keeps each room on its own connection (the Cloudflare relay,
+    // server/cloudflare): make or join it there, at coop/room/<code>, with
+    // this ticket. The Node relay never sends it.
+    | { t: "goto"; code: string; ticket: string }
     | { t: "gone"; reason: GoneReason }
     | { t: "error"; message: string; need?: MissingMap }
     | { t: "start"; game: GameStart }
