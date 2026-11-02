@@ -137,13 +137,21 @@ describe("multiplayer toggle", () => {
         }
     });
 
-    it("enables local metrics by default and allows disabling them", () => {
+    it("serves local metrics unless they're turned off, or on where they're off by default", () => {
         expect(isMetricsOn({})).toBe(true);
-        for (const value of ["false", "off", "0", "no", "", "anything"]) {
+        expect(isMetricsOn({}, false)).toBe(false);
+        for (const value of ["false", "off", "0", "no", " OFF "]) {
             expect(isMetricsOn({ MULTIPLAYER_METRICS: value })).toBe(false);
+            expect(isMetricsOn({ MULTIPLAYER_METRICS: value }, false)).toBe(false);
         }
-        for (const value of ["true", "on", "1", " TRUE "]) {
+        for (const value of ["true", "on", "1", "yes", " TRUE "]) {
             expect(isMetricsOn({ MULTIPLAYER_METRICS: value })).toBe(true);
+            expect(isMetricsOn({ MULTIPLAYER_METRICS: value }, false)).toBe(true);
+        }
+        // An empty or unknown value is the same as none, like MULTIPLAYER
+        for (const value of ["", "anything"]) {
+            expect(isMetricsOn({ MULTIPLAYER_METRICS: value })).toBe(true);
+            expect(isMetricsOn({ MULTIPLAYER_METRICS: value }, false)).toBe(false);
         }
     });
 
@@ -209,9 +217,13 @@ describe("co-op relay", () => {
             }
         });
         metricsServer = relay.attach(server, path, { closeOthers: true });
+        // Listening, or given up on its port (it closes itself then)
         const metricsReady =
             metricsServer && !metricsServer.listening
-                ? once(metricsServer, "listening")
+                ? new Promise<void>((resolve) => {
+                      metricsServer!.once("listening", resolve);
+                      metricsServer!.once("close", resolve);
+                  })
                 : undefined;
         await new Promise<void>((resolve) => server.listen(0, resolve));
         await metricsReady;
@@ -493,6 +505,30 @@ describe("co-op relay", () => {
             }
         });
 
+        it("goes on without metrics when their port's taken", async () => {
+            const taken = createServer();
+            await new Promise<void>((resolve) => taken.listen(0, "127.0.0.1", resolve));
+            const error = vi.spyOn(console, "error").mockImplementation(() => {});
+            try {
+                await restart({
+                    metrics: true,
+                    metricsPort: (taken.address() as AddressInfo).port,
+                });
+                expect(error).toHaveBeenCalledWith(
+                    expect.stringContaining("Multiplayer metrics unavailable"),
+                );
+                expect(metricsServer!.listening).toBe(false);
+                // Co-op's fine, and the public listener still says nothing
+                await party(1);
+                const status = await fetch(url.replace("ws:", "http:"));
+                expect(await status.json()).toEqual({ coop: true });
+                expect((await fetch(publicMetricsUrl())).status).toBe(404);
+            } finally {
+                error.mockRestore();
+                await new Promise((resolve) => taken.close(resolve));
+            }
+        });
+
         it("binds only to loopback and never serves metrics through the public listener", async () => {
             await restart({ metrics: true, proxy: "local" });
             expect((metricsServer!.address() as AddressInfo).address).toBe("127.0.0.1");
@@ -558,7 +594,8 @@ describe("co-op relay", () => {
             expect(body.endsWith("\n")).toBe(true);
             expect(body).not.toContain("\r");
             const lines = body.trimEnd().split("\n");
-            expect(lines).toHaveLength(51);
+            // HELP, TYPE and the sample for each
+            expect(lines).toHaveLength(Object.keys(values).length * 3);
             for (const name of Object.keys(values)) {
                 const type = [
                     "coop_connections_total",

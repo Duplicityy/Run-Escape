@@ -10,6 +10,8 @@ the version in the corner).
 - Hard mode in co-op: the host can turn it on once everyone in the room has it.
 - Co-op results, by trippy22: a page for each player's own kills, damage, weapons and caskets, with
   arrows (or the arrow keys) to flip between them, and the party's totals underneath.
+- Co-op servers, by trippy22: player and room counts for monitoring (Prometheus), on the server
+  itself only, with `MULTIPLAYER_METRICS=off` to turn them off.
 
 ### Changed
 
@@ -62,7 +64,6 @@ the version in the corner).
   and 25% more coins.
 - Put the game on your phone's home screen from your browser's menu: it gets its own icon and opens
   full screen.
-- Co-op servers provide lightweight Prometheus player and room counts locally by default, with an off switch.
 
 ### Fixed
 

@@ -15,7 +15,6 @@ import { isUtf8 } from "node:buffer";
 import { createHash, randomInt } from "node:crypto";
 import { createServer } from "node:http";
 import { isIP } from "node:net";
-import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 import { clientAddress, proxyMode, viaProxy, watchCloudflareRanges } from "./client-ip.mjs";
@@ -34,9 +33,16 @@ export function isMultiplayerOn(env = process.env, argv = process.argv) {
     );
 }
 
-// Aggregate counts on a separate loopback listener, on by default. Nothing is kept on disk.
-export function isMetricsOn(env = process.env) {
-    return ["true", "on", "1"].includes((env.MULTIPLAYER_METRICS ?? "true").trim().toLowerCase());
+// Whether the relay serves its counts on a separate loopback listener
+// (see startMetrics): MULTIPLAYER_METRICS=off or on, like MULTIPLAYER. Without
+// it, byDefault: on for a server that hosts the game, off for the dev server,
+// so two checkouts don't fight over the port. Nothing is kept on disk.
+export function isMetricsOn(env = process.env, byDefault = true) {
+    const value = (env.MULTIPLAYER_METRICS ?? "").trim().toLowerCase();
+    if (["off", "0", "false", "no"].includes(value)) {
+        return false;
+    }
+    return ["on", "1", "true", "yes"].includes(value) || byDefault;
 }
 
 export function metricsPortSetting(env = process.env) {
@@ -615,18 +621,17 @@ export function createRelay(limits = {}) {
     let warnedProxy = false;
     const rooms = new Map();
     const clients = new Set();
-    // Only connection, room creation and run start events update these.
-    // Live counts come from the rooms when asked, never from game traffic.
-    const counters = metrics
-        ? {
-              startedAt: performance.now(),
-              connections: 0,
-              roomsCreated: 0,
-              runsStarted: 0,
-              peakPlayers: 0,
-              peakRooms: 0,
-          }
-        : undefined;
+    // For the metrics: only connections, rooms being made and runs starting
+    // update these (counted whether or not they're served). Live counts come
+    // from the rooms when asked, never from game traffic.
+    const counters = {
+        startedAt: Date.now(),
+        connections: 0,
+        roomsCreated: 0,
+        runsStarted: 0,
+        peakPlayers: 0,
+        peakRooms: 0,
+    };
     let metricsServer;
     let stopMetrics = () => {};
     // Every connected player's name, so no two have the same
@@ -668,7 +673,7 @@ export function createRelay(limits = {}) {
             metric(
                 "coop_uptime_seconds",
                 "Seconds since this relay started.",
-                Math.floor((performance.now() - counters.startedAt) / 1000),
+                Math.floor((Date.now() - counters.startedAt) / 1000),
             ),
             metric("coop_players_connected", "Currently connected player sockets.", clients.size),
             metric(
@@ -725,12 +730,12 @@ export function createRelay(limits = {}) {
     }
 
     function startMetrics(path) {
-        if (!counters || metricsServer) {
+        if (!metrics || metricsServer) {
             return metricsServer;
         }
         // A local reverse proxy can make public requests look like loopback
         // connections. Keep metrics off the public listener altogether.
-        metricsServer = createServer((req, res) => {
+        const local = createServer((req, res) => {
             res.setHeader("Cache-Control", "no-store");
             if (requestPath(req) !== `${path}/metrics`) {
                 res.writeHead(404);
@@ -744,22 +749,31 @@ export function createRelay(limits = {}) {
             }
         });
         const abort = new AbortController();
-        stopMetrics = () => {
+        const stop = () => {
             abort.abort();
-            metricsServer.closeAllConnections();
+            local.closeAllConnections();
         };
-        metricsServer.on("error", (error) => {
+        local.on("error", (error) => {
+            // The port's taken, most likely. Co-op goes on without metrics,
+            // and nothing's kept that looks like a listener.
             console.error(
                 `Multiplayer metrics unavailable on 127.0.0.1:${metricsPort}: ${error.message}`,
             );
+            stop();
+            if (metricsServer === local) {
+                metricsServer = undefined;
+                stopMetrics = () => {};
+            }
         });
-        metricsServer.listen({ host: "127.0.0.1", port: metricsPort, signal: abort.signal }, () => {
+        local.listen({ host: "127.0.0.1", port: metricsPort, signal: abort.signal }, () => {
             console.log(
-                `Multiplayer metrics at http://127.0.0.1:${metricsServer.address().port}${path}/metrics (local only)`,
+                `Multiplayer metrics at http://127.0.0.1:${local.address().port}${path}/metrics (local only)`,
             );
         });
-        metricsServer.unref();
-        return metricsServer;
+        local.unref();
+        metricsServer = local;
+        stopMetrics = stop;
+        return local;
     }
 
     function newCode() {
@@ -1122,10 +1136,8 @@ export function createRelay(limits = {}) {
                     hostBytesAt: Date.now(),
                 };
                 rooms.set(created.code, created);
-                if (counters) {
-                    counters.roomsCreated++;
-                    counters.peakRooms = Math.max(counters.peakRooms, rooms.size);
-                }
+                counters.roomsCreated++;
+                counters.peakRooms = Math.max(counters.peakRooms, rooms.size);
                 client.room = created;
                 roomChanged(created);
                 return;
@@ -1286,9 +1298,7 @@ export function createRelay(limits = {}) {
                         0x1,
                         Buffer.from(JSON.stringify({ t: "start", game: message.game }), "utf8"),
                     );
-                    if (counters) {
-                        counters.runsStarted++;
-                    }
+                    counters.runsStarted++;
                     for (const member of room.members) {
                         member.ready = false;
                         member.connection.write(start);
@@ -1399,10 +1409,8 @@ export function createRelay(limits = {}) {
             bytesPerSecond,
         );
         clients.add(client);
-        if (counters) {
-            counters.connections++;
-            counters.peakPlayers = Math.max(counters.peakPlayers, clients.size);
-        }
+        counters.connections++;
+        counters.peakPlayers = Math.max(counters.peakPlayers, clients.size);
         playerNames.add(client.name);
         // anyMap: the game shows rooms on maps the player hasn't got as locked
         // unless it's on

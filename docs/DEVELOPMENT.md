@@ -174,9 +174,9 @@ else. `npm start` and `npm run preview` run a relay of their own at `/coop`
 
 #### Optional multiplayer metrics
 
-Multiplayer metrics are on by default, on a separate listener bound only to `127.0.0.1`, port 8788.
-The endpoint serves Prometheus text format 0.0.4 with `HELP` and `TYPE` metadata. Read it from the
-server itself:
+A server that hosts the game (`npm run serve`, or the standalone relay) serves multiplayer metrics
+by default, on a separate listener bound only to `127.0.0.1`, port 8788. The endpoint serves
+Prometheus text format 0.0.4 with `HELP` and `TYPE` metadata. Read it from the server itself:
 
 ```sh
 npm run serve
@@ -191,14 +191,16 @@ npm run serve
 (Invoke-WebRequest http://127.0.0.1:8788/coop/metrics).Content
 ```
 
-Set `MULTIPLAYER_METRICS=false` and restart to disable collection and the metrics listener
-(`$env:MULTIPLAYER_METRICS = "false"` in PowerShell). Unset it or set it to `true` to enable metrics
-again; `on` and `1` also enable it. The same setting works with `npm start`,
-`npm run preview` and the standalone relay. If the standalone relay uses `MULTIPLAYER_PATH`,
-the metrics path is that path plus `/metrics`. Multiplayer must be running for metrics to be available.
-Set `MULTIPLAYER_METRICS_PORT` to another port (1–65535) if needed, for example when running several
-relays on one machine. If that port is occupied, the server logs an error and co-op keeps running;
-metrics are never moved to the public listener. The metrics listener closes with the relay.
+Set `MULTIPLAYER_METRICS=off` (or `false`, `0`, `no`) and restart to turn the metrics listener off
+(`$env:MULTIPLAYER_METRICS = "off"` in PowerShell); `on`, `true`, `1` or `yes` turn it on. Any other
+value, an empty one included, is the same as none, like `MULTIPLAYER`. The dev server and
+`npm run preview` only run the listener when it's set to `on`: nobody scrapes a dev server, and two
+checkouts would fight over the port. If the standalone relay uses `MULTIPLAYER_PATH`, the metrics
+path is that path plus `/metrics`. Multiplayer must be running for metrics to be available. Set
+`MULTIPLAYER_METRICS_PORT` to another port (1–65535) if needed, for example when running several
+relays on one machine. If that port is occupied, the server logs an error and co-op keeps running
+without metrics; they are never moved to the public listener. The metrics listener closes with the
+relay.
 
 The metrics are:
 
@@ -226,11 +228,11 @@ add this job to its `scrape_configs`:
 
 ```yaml
 scrape_configs:
-  - job_name: run_escape
-    scrape_interval: 15s
-    metrics_path: /coop/metrics
-    static_configs:
-      - targets: ["127.0.0.1:8788"]
+    - job_name: run_escape
+      scrape_interval: 15s
+      metrics_path: /coop/metrics
+      static_configs:
+          - targets: ["127.0.0.1:8788"]
 ```
 
 Adjust the target port or metrics path if you changed the settings above. Samples have no labels
