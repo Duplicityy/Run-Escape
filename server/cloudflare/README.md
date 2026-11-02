@@ -92,7 +92,23 @@ else, and no domain: it runs at a `workers.dev` address.
    only get it in a new launcher download.
 
 **Updating it** after changing anything in `server/cloudflare/` is `npx wrangler deploy` again.
-Rooms in progress are dropped by a deploy, as restarting the Node relay drops them.
+Rooms carry on through a deploy, as through Cloudflare's own restarts (see below).
+
+**Restarts.** Cloudflare restarts Workers and Durable Objects now and then, on any plan: runtime
+updates, and moving objects between machines. Each one drops every connection to the object and
+what it had in memory, often more than once an hour. So:
+
+- A room keeps itself in storage, and gives each player a token when they make or join it.
+- A player whose connection drops keeps their place for 15 seconds. Their game reconnects to
+  `coop/room/<code>?resume=<token>` for up to 10 seconds, and the run carries on. Someone who
+  doesn't come back is let go, as if they'd left.
+- Frames the host sent meanwhile come again: each host message says where the one before it
+  ended, and a guest that sees a gap asks the host for what it missed (`resend` in `protocol.ts`,
+  kept for a minute in `CoopRun`).
+- The lobby's connection dropping doesn't touch a room: the game makes it again after.
+
+`npm run check` tests coming back. To see a restart for yourself under `wrangler dev`, save any
+file in `src/` during a run: wrangler reloads, which drops everything as Cloudflare does.
 
 **Settings** are in `wrangler.toml`: `MULTIPLAYER_ANY_MAP = "on"` lets players into rooms on maps
 they haven't unlocked, as on the Node relay. The other limits are at the top of `src/shared.mjs`,

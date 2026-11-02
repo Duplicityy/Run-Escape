@@ -101,11 +101,17 @@ export type GoneReason = "left" | "kicked" | "disbanded" | "hostLeft" | "idle";
 export type UpMessage =
     | { move: [number, number]; moveSeq?: number }
     | { action: CoopAction }
-    | { loaded: true };
+    | { loaded: true }
+    // The frames after this one again: some of the host's went missing (a
+    // dropped connection)
+    | { resend: number };
 
 // The host to everyone: the frames up to `upTo` are out, with what happened
 // at them, and now and then a check that everyone's run still agrees
 export type DownMessage = {
+    // The frames before were in the message before this one, so a guest can
+    // tell when one's gone missing
+    from?: number;
     upTo: number;
     events: FrameEvent[];
     hash?: [number, number];
@@ -153,7 +159,9 @@ export type ServerMessage =
           // Every room the relay can hold is taken
           full: boolean;
       }
-    | { t: "room"; room: RoomView; you: string }
+    // token: to come back to the room with, should the connection drop (the
+    // Cloudflare relay's; coop/room/<code>?resume=<token>)
+    | { t: "room"; room: RoomView; you: string; token?: string }
     // The relay keeps each room on its own connection (the Cloudflare relay,
     // server/cloudflare): make or join it there, at coop/room/<code>, with
     // this ticket. The Node relay never sends it.

@@ -139,6 +139,19 @@ host.room.send(JSON.stringify({ t: "down", d: { upTo: 5, events: [] } }));
 const down = await guest.next("down");
 ok(down.d.upTo === 5, "host's frames reach the guest");
 
+// A dropped connection comes back with the room's token, the run still on
+ok(typeof joined.room.token === "string", "the room gives a token to come back with");
+guest.room.close();
+await new Promise((resolve) => setTimeout(resolve, 500));
+guest.room = await guest.open(`${base}/room/${goto.code}?resume=${joined.room.token}`);
+const back = await guest.next("room");
+ok(back.room.started && back.room.members.length === 2, "the guest comes back, still in the run");
+host.room.send(JSON.stringify({ t: "down", d: { upTo: 6, events: [] } }));
+ok((await guest.next("down")).d.upTo === 6, "and the host's frames reach it again");
+const stranger = new Client("stranger");
+await stranger.open(`${base}/room/${goto.code}?resume=nottherighttoken`);
+ok(/closed/.test((await stranger.next("error")).message), "a wrong token is turned away");
+
 // Round trip guest -> host -> guest, the path a guest's input takes
 const loops = [];
 for (let i = 0; i < 20; i++) {

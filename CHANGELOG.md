@@ -3,6 +3,14 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
+## Unreleased
+
+### Fixed
+
+- Co-op: a guest who misses some of the host's updates gets them again, rather than freezing.
+  With a relay that supports it, a dropped connection reconnects within a few seconds and the run
+  carries on.
+
 ## 0.22.1 - 2026-11-02
 
 ### Added

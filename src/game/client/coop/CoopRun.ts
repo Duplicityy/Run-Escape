@@ -27,6 +27,11 @@ const LOAD_WAIT_MS = 20_000;
 // A move goes out this often at most: a touch stick changes nearly every
 // frame, and each one sent is a message from the host to everyone
 const MOVE_INTERVAL_MS = 66;
+// The host keeps what it's sent for this many frames (a minute), to send
+// again to a guest that missed some
+const RESEND_FRAMES = 3000;
+// A guest asks for missing frames this often at most
+const RESEND_ASK_MS = 1000;
 // Someone the run's waited on this long (a hidden tab, gone to make tea) has
 // it decided for them: the first reward, taking the casket, or walking away
 export const DECIDE_AFTER_MS = 20_000;
@@ -56,8 +61,11 @@ export class CoopRun {
     private next: FrameEvent[] = [];
     private outgoing: FrameEvent[] = [];
     private outgoingHash?: [number, number];
-    // The host's: the frames it's said are out
+    // The host's: the frames it's said are out, and what it's sent lately
     private sentUpTo = 0;
+    private sent: DownMessage[] = [];
+    // A guest's: when it last asked for frames it missed
+    private askedAt = -Infinity;
     // A guest's checks from the host still to compare
     private hashes = new Map<number, number>();
     private lastMove: [number, number] = [0, 0];
@@ -167,6 +175,8 @@ export class CoopRun {
         const action = "action" in message ? cleanAction(message.action) : undefined;
         if ("loaded" in message) {
             this.loading.delete(from);
+        } else if ("resend" in message) {
+            this.resend(message.resend);
         } else if (move) {
             const moveSeq = "moveSeq" in message ? cleanMoveSeq(message.moveSeq) : undefined;
             this.queue({ frame: 0, hero, move, ...(moveSeq !== undefined && { moveSeq }) });
@@ -220,6 +230,19 @@ export class CoopRun {
             !Array.isArray(message.events) ||
             !Number.isSafeInteger(message.upTo)
         ) {
+            return;
+        }
+        if (message.upTo <= this.upTo) {
+            // Had it already (sent again for someone else)
+            return;
+        }
+        if (Number.isSafeInteger(message.from) && message.from! > this.upTo) {
+            // Some went missing: these come again with them
+            const now = this.now();
+            if (now - this.askedAt >= RESEND_ASK_MS) {
+                this.askedAt = now;
+                this.link.sendUp({ resend: this.upTo });
+            }
             return;
         }
         for (const raw of message.events) {
@@ -297,13 +320,46 @@ export class CoopRun {
         ) {
             return;
         }
-        this.link.sendDown({
+        const message: DownMessage = {
+            from: this.sentUpTo,
             upTo: this.upTo,
             events: this.outgoing,
             ...(this.outgoingHash && { hash: this.outgoingHash }),
-        });
+        };
+        this.link.sendDown(message);
+        this.sent.push(message);
+        while (this.sent.length > 0 && this.upTo - this.sent[0].upTo > RESEND_FRAMES) {
+            this.sent.shift();
+        }
         this.outgoing = [];
         this.outgoingHash = undefined;
         this.sentUpTo = this.upTo;
+    }
+
+    // The host's: everything sent after a frame, again, as one message. Every
+    // guest gets it; those that had it already ignore it.
+    private resend(after: unknown): void {
+        if (!Number.isSafeInteger(after)) {
+            return;
+        }
+        const start = this.sent.findIndex((m) => m.from === after);
+        if (start < 0) {
+            return;
+        }
+        const missed = this.sent.slice(start);
+        const hash = missed.findLast((m) => m.hash)?.hash;
+        this.link.sendDown({
+            from: after as number,
+            upTo: missed[missed.length - 1].upTo,
+            events: missed.flatMap((m) => m.events),
+            ...(hash && { hash }),
+        });
+    }
+
+    // After the connection's come back: the next move goes out whatever it
+    // is, in case the last one didn't make it
+    resumed(): void {
+        this.lastMove = [NaN, NaN];
+        this.moveSentAt = -Infinity;
     }
 }

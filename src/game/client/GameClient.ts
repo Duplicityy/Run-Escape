@@ -383,6 +383,17 @@ export class GameClient implements GameFrameHandler {
         this.coop.onLeft = (id) => this.toCoopRun((run) => run.playerLeft(id));
         this.coop.onGone = (reason) => this.onCoopGone(reason);
         this.coop.onClosed = () => this.onCoopClosed();
+        this.coop.onReconnecting = () => {
+            if (this.coopRun) {
+                this.store.toast("Connection dropped. Reconnecting...", 4000);
+            }
+        };
+        this.coop.onResumed = () => {
+            if (this.coopRun) {
+                this.store.toast("Reconnected.", 2000);
+            }
+            this.toCoopRun((run) => run.resumed());
+        };
         // Co-op's offered only where there's a relay to play it through
         this.coop.checkAvailable();
         document.addEventListener("visibilitychange", this.onVisibilityChange);

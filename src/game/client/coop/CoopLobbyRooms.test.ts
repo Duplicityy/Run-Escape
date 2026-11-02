@@ -1,5 +1,5 @@
 import { GameStore } from "../GameStore";
-import { CoopLobby } from "./CoopLobby";
+import { CoopLobby, RESUME_WINDOW_MS } from "./CoopLobby";
 
 // A WebSocket that's open at once and keeps what's sent, for driving the
 // lobby as a relay would
@@ -78,11 +78,14 @@ describe("a relay that keeps each room on its own connection", () => {
             location: { href: "https://example.com/game/" },
             setInterval: () => 0,
             clearInterval: () => {},
+            setTimeout: (f: () => void, ms: number) => setTimeout(f, ms),
+            clearTimeout: (id: number) => clearTimeout(id),
         });
     });
 
     afterEach(() => {
         vi.unstubAllGlobals();
+        vi.useRealTimers();
     });
 
     it("makes the room on the room's connection, and talks to it there", async () => {
@@ -145,7 +148,7 @@ describe("a relay that keeps each room on its own connection", () => {
         expect(lobby.room?.code).toBe("HGFEDCBA");
     });
 
-    it("tells the game when the room's connection drops", async () => {
+    it("tells the game when the room's connection drops, with no way back", async () => {
         const { lobby, relay } = await connected();
         const onClosed = vi.fn();
         lobby.onClosed = onClosed;
@@ -158,6 +161,90 @@ describe("a relay that keeps each room on its own connection", () => {
         room.close();
         expect(lobby.room).toBeUndefined();
         expect(onClosed).toHaveBeenCalledOnce();
+    });
+
+    // In a room, with the token the relay gives to come back with
+    async function inRoom() {
+        const { lobby, relay } = await connected();
+        const onClosed = vi.fn();
+        const onResumed = vi.fn();
+        lobby.onClosed = onClosed;
+        lobby.onResumed = onResumed;
+        lobby.create(false, "lumbridge", false);
+        relay.receive({ t: "goto", code: "ABCDEFGH", ticket: "t1" });
+        const room = FakeSocket.all[1];
+        await flush();
+        room.receive({ t: "room", room: { ...ROOM, started: true }, you: "p1", token: "secret" });
+        vi.useFakeTimers();
+        return { lobby, relay, room, onClosed, onResumed };
+    }
+
+    it("comes back to the room after its connection drops, and sends what waited", async () => {
+        const { lobby, room, onClosed, onResumed } = await inRoom();
+        room.close();
+        // Still in, meanwhile, with what's said kept
+        expect(lobby.room?.code).toBe("ABCDEFGH");
+        lobby.sendDown({ upTo: 5, events: [] });
+        await vi.advanceTimersByTimeAsync(0);
+        const again = FakeSocket.all[2];
+        expect(again.url).toBe("wss://example.com/game/coop/room/ABCDEFGH?resume=secret");
+        again.receive({ t: "room", room: { ...ROOM, started: true }, you: "p1", token: "secret" });
+        expect(again.sent).toEqual([{ t: "down", d: { upTo: 5, events: [] } }]);
+        expect(onResumed).toHaveBeenCalledOnce();
+        expect(onClosed).not.toHaveBeenCalled();
+        // And it's the room's connection now
+        lobby.sendDown({ upTo: 6, events: [] });
+        expect(again.sent).toHaveLength(2);
+    });
+
+    it("keeps trying for a while, then gives the room up", async () => {
+        const { lobby, room, onClosed } = await inRoom();
+        room.close();
+        // Every try fails
+        for (let ms = 0; ms <= RESUME_WINDOW_MS + 2000; ms += 50) {
+            await vi.advanceTimersByTimeAsync(50);
+            const last = FakeSocket.all.at(-1)!;
+            if (last !== room && last.readyState !== FakeSocket.CLOSED) {
+                last.close();
+            }
+        }
+        const tries = FakeSocket.all.length - 2;
+        expect(tries).toBeGreaterThan(3);
+        expect(tries).toBeLessThan(15);
+        expect(lobby.room).toBeUndefined();
+        expect(onClosed).toHaveBeenCalledOnce();
+    });
+
+    it("gives up at once when the room's gone", async () => {
+        const { lobby, room, onClosed } = await inRoom();
+        room.close();
+        await vi.advanceTimersByTimeAsync(0);
+        FakeSocket.all[2].receive({ t: "error", message: "The room closed while you were away." });
+        expect(lobby.room).toBeUndefined();
+        expect(onClosed).toHaveBeenCalledOnce();
+        await vi.advanceTimersByTimeAsync(RESUME_WINDOW_MS);
+        expect(FakeSocket.all).toHaveLength(3);
+    });
+
+    it("doesn't come back to a room it left", async () => {
+        const { lobby, room } = await inRoom();
+        lobby.leave();
+        room.close();
+        await vi.advanceTimersByTimeAsync(RESUME_WINDOW_MS);
+        expect(FakeSocket.all).toHaveLength(2);
+    });
+
+    it("carries on in the room when the lobby's connection drops, and makes it again after", async () => {
+        const { lobby, relay, room, onClosed } = await inRoom();
+        relay.close();
+        expect(lobby.room?.code).toBe("ABCDEFGH");
+        expect(onClosed).not.toHaveBeenCalled();
+        expect(room.readyState).toBe(FakeSocket.OPEN);
+
+        room.receive({ t: "gone", reason: "disbanded" });
+        room.close();
+        expect(FakeSocket.all.at(-1)?.url).toBe("wss://example.com/game/coop");
+        expect(FakeSocket.all).toHaveLength(3);
     });
 
     it("ignores a goto it didn't ask for", async () => {

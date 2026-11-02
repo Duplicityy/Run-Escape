@@ -558,6 +558,14 @@ a room goes over that connection (`ROOM_MESSAGES` in `CoopLobby.ts`); pings, the
 making or joining go to the lobby's. The Node relay never sends `goto`, so with it there's only
 the one connection. Change the protocol in both relays.
 
+Cloudflare restarts its objects now and then, dropping their connections, so the Cloudflare relay's
+`room` message carries a `token`. `CoopLobby` reconnects to `coop/room/<code>?resume=<token>` for
+`RESUME_WINDOW_MS` when the room's connection drops, holding what's said meanwhile, and the room
+(kept in storage) holds the player's place a little longer. A guest that misses some of the host's
+frames sees it from `from` on the next `down` and asks for them with a `resend` up message; the
+host keeps a minute of what it's sent. That part works on either relay. The Node relay sends no
+token, so with it a dropped connection still ends a guest's run.
+
 The open rooms list comes a page at a time (8 rooms, the fullest first, then the ones waiting
 longest), worked out once after each change rather than for every request; the menu asks for its
 page every 5 seconds, and again when joining fails (a room that filled up or started meanwhile).

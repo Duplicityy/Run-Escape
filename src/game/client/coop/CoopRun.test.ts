@@ -41,10 +41,10 @@ function createSim(focus: number): Sim {
 // they were sent (a WebSocket keeps them in order)
 type Delivery = { at: number; order: number; deliver: () => void };
 
-describe("co-op lockstep", () => {
-    afterEach(() => usePortableMath(false));
-
-    it("keeps everyone's run the same through a lagging network", () => {
+// A minute of a three player run over a lagging network, where `lose` says
+// which messages never arrive (by connection and tick)
+function playLaggingRun(lose: (channel: string, tick: number) => boolean = () => false) {
+    {
         usePortableMath(true);
         let now = 0;
         let seed = 1;
@@ -57,6 +57,9 @@ describe("co-op lockstep", () => {
         // When each connection's last message arrives
         const lastAt = new Map<string, number>();
         const send = (channel: string, deliver: () => void) => {
+            if (lose(channel, now)) {
+                return;
+            }
             const at = Math.max(lastAt.get(channel) ?? 0, now + lag());
             lastAt.set(channel, at);
             queue.push({ at, order: order++, deliver });
@@ -117,14 +120,91 @@ describe("co-op lockstep", () => {
                 run.stepFrame();
             }
         }
-        const [host, ...guests] = runs;
-        expect(host.sim.level).toBeGreaterThan(1);
-        for (const guest of guests) {
-            expect(guest.frame).toBe(host.frame);
-            expect(guest.desynced).toBe(false);
-            expect(syncHash(guest.sim)).toBe(syncHash(host.sim));
-        }
+        return runs;
+    }
+}
+
+function expectInStep(runs: CoopRun[]): void {
+    const [host, ...guests] = runs;
+    expect(host.sim.level).toBeGreaterThan(1);
+    for (const guest of guests) {
+        expect(guest.frame).toBe(host.frame);
+        expect(guest.desynced).toBe(false);
+        expect(syncHash(guest.sim)).toBe(syncHash(host.sim));
+    }
+}
+
+describe("co-op lockstep", () => {
+    afterEach(() => usePortableMath(false));
+
+    it("keeps everyone's run the same through a lagging network", () => {
+        expectInStep(playLaggingRun());
     }, 30000);
+
+    it("gets back in step after a connection drops and messages go missing", () => {
+        const second = TICKS_PER_SECOND;
+        const runs = playLaggingRun(
+            (channel, tick) =>
+                // The first guest's connection drops for 3 seconds, both ways
+                ((channel === "down:0" || channel === "up:guest1") &&
+                    tick >= 10 * second &&
+                    tick < 13 * second) ||
+                // The second loses a few of the host's frames
+                (channel === "down:1" && tick >= 30 * second && tick < 30.5 * second) ||
+                // Everyone's lose the host's for a moment, as the relay restarts
+                (channel.startsWith("down:") && tick >= 45 * second && tick < 46 * second),
+        );
+        expectInStep(runs);
+    }, 30000);
+
+    it("sends a guest what it missed, in one message, once it says what it has", () => {
+        const clock = { now: 0 };
+        const { run, sent } = hostRun(clock);
+        for (let i = 0; i < 10; i++) {
+            run.setMove(i % 2, 0);
+            run.stepFrame();
+            run.flush(true);
+        }
+        const upTo = sent[sent.length - 1].upTo;
+        const events = sent.flatMap((m) => m.events);
+        sent.length = 0;
+        run.receiveUp("guest1", { resend: 4 });
+        expect(sent).toHaveLength(1);
+        expect(sent[0].from).toBe(4);
+        expect(sent[0].upTo).toBe(upTo);
+        expect(sent[0].events).toEqual(events.filter((e) => e.frame > 4));
+        // Nothing for a frame it never sent from, or isn't a number
+        sent.length = 0;
+        run.receiveUp("guest1", { resend: 999 });
+        run.receiveUp("guest1", { resend: "4" as unknown as number });
+        expect(sent).toHaveLength(0);
+    });
+
+    it("a guest takes frames once, and asks for any that went missing", () => {
+        const ups: UpMessage[] = [];
+        const link: CoopLink = { sendUp: (m) => ups.push(m), sendDown: () => {} };
+        const heroes = new Map(IDS.map((id, i) => [id, i]));
+        const clock = { now: 0 };
+        const guest = new CoopRun(createSim(1), false, link, heroes, "host", () => clock.now);
+        guest.receiveDown({ from: 0, upTo: 2, events: [] });
+        expect(guest.behind).toBe(2);
+        // The same again (sent for someone else): nothing changes
+        guest.receiveDown({ from: 0, upTo: 2, events: [] });
+        expect(guest.behind).toBe(2);
+        // 2 to 4 went missing
+        guest.receiveDown({ from: 4, upTo: 6, events: [] });
+        expect(guest.behind).toBe(2);
+        expect(ups).toEqual([{ resend: 2 }]);
+        // It asks once a second at most
+        guest.receiveDown({ from: 6, upTo: 8, events: [] });
+        expect(ups).toHaveLength(1);
+        clock.now += 1000;
+        guest.receiveDown({ from: 8, upTo: 10, events: [] });
+        expect(ups).toEqual([{ resend: 2 }, { resend: 2 }]);
+        // Then they come, together
+        guest.receiveDown({ from: 2, upTo: 10, events: [] });
+        expect(guest.behind).toBe(10);
+    });
 
     // A host's run, on a clock the test moves, with what it sends kept
     function hostRun(clock: { now: number }) {
