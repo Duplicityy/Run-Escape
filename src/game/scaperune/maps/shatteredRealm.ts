@@ -1,16 +1,19 @@
 import type { RunEventDef } from "../../content/types";
 import { RUN_LENGTH, paced } from "../../content/waves";
 import { Ground } from "../Ground";
-import { CLIFF_FALL } from "../biomes";
-import { blockTile, findReachable, findStranded, getCollisionFlags } from "../collision";
+import { WATERFALL } from "../biomes";
+import { TileRect, blockTile, findReachable, findStranded, getCollisionFlags } from "../collision";
+import { RockKit, dressGround, dressRock, paintRockFloor } from "../dress";
+import { FALL_WIDTH, forSeatCorners, getFallDrop, getFallSeat } from "../falls";
 import { TILE_BLOCKED, TileGrid } from "../format";
 import { GeneratedMap } from "../generator";
+import { lerp } from "../mapBuild";
 import { Rng, createNoise, createRng, smoothField } from "../noise";
 import { addPathToField, smoothPath } from "../paths";
 import { rotatePrefab } from "../prefab";
 import { BRIDGES, PrefabKit, loadPrefab } from "../prefabs";
 import { BuildContext, MapRecipe } from "../recipe";
-import { Terrain, getTileSlope, limitNorthFaces, spreadNearest } from "../terrain";
+import { Terrain, getTileSlope, liftFaces, limitNorthFaces, spreadNearest } from "../terrain";
 
 // The Shards of Ysmar: a hand-made map. When the sky god Ysmar fell, he broke the world he
 // landed on. Six pieces of it still hang over the stars, joined by causeways his priests
@@ -45,9 +48,23 @@ const VOID_STARS = 39;
 const VOID_BLACK = 139;
 // How much of the noise is cloud
 const CLOUD_LINE = 0.56;
-const ROCK_STONE = 20;
-const ROCK_DARK = 32;
+const ROCK_STONE = 2;
+const ROCK_DARK = 99;
 const COBBLES = 12;
+const PLAIN_STONE = 10;
+const STEEPEST_FACE = 72;
+const DAIS_SIZE = 12;
+const DAIS_RISE = 12;
+const DAIS_STATUE = 7002;
+const PILE_OF_BRICKS = 4769;
+// Grey stone, on grey rock
+const ROCK_KIT: RockKit = {
+    pebbles: [336, 14483, 14482],
+    rubble: [
+        [11434, 2],
+        [11435, 2],
+    ],
+};
 const BLOOD = 331;
 const LAVA = 19;
 // A clear blue-green, for the Glasswood. Its one colour's edge is the shore's
@@ -341,6 +358,9 @@ const ROADS: { shard: number; points: Point[]; halfWidth: number; broken?: boole
 // The river, north to south off the Glasswood's edge, with a lake at the head of it. Its
 // straight is where the bridge goes.
 const RIVER_LEVEL = 146;
+// Where a bridge's deck starts and stops, in its stamp's corners
+const DECK_WEST = 4;
+const DECK_EAST = 15;
 const BRIDGE_ROW = 104;
 const RIVER_X = 270;
 const RIVER: Point[] = [
@@ -628,6 +648,8 @@ type BridgeSite = {
     y: number;
     height: number;
     bankHeight: number;
+    // Over the river, rather than the void
+    overWater?: boolean;
 };
 
 function makeLand(map: Map3): void {
@@ -723,23 +745,6 @@ function shapeGround(map: Map3, plots: Plot[]): void {
     // Flat where the Heartkeep stands
     terrain.pinRect(156, 158, 72, 78, KEEP_HEIGHT);
 
-    // The bridges' own ground. The deck's stored over what's under it, so that has to stay
-    // as it was in the prefab, even over the void, where it isn't drawn.
-    for (const bridge of map.bridges) {
-        const cornersOfStamp = bridge.prefab.sizeX + 1;
-        for (let cy = 0; cy <= bridge.prefab.sizeY; cy++) {
-            for (let cx = 0; cx <= bridge.prefab.sizeX; cx++) {
-                const own = bridge.prefab.levels[0].heights[cx + cy * cornersOfStamp];
-                const onDeck = cx >= 4 && cx <= 15;
-                const rise = onDeck ? own - bridge.bankHeight : 0;
-                terrain.pin(bridge.x + cx, bridge.y + cy, bridge.height + rise);
-                if (land[bridge.x + cx + (bridge.y + cy) * CORNERS] <= 0) {
-                    map.spanCorners[bridge.x + cx + (bridge.y + cy) * CORNERS] = 1;
-                }
-            }
-        }
-    }
-
     // Water stands level, with its corners held
     const water = new Float32Array(count).fill(-4);
     const riverLine = smoothLine(RIVER);
@@ -773,6 +778,38 @@ function shapeGround(map: Map3, plots: Plot[]): void {
             }
         }
     }
+    // The bridges' own ground. A deck's stored over what's under it: over the void that stays as
+    // it was in the prefab, where it isn't drawn, and over the river it's stored again once the
+    // heights are done (reseatDecks). Water stays level, and a bank runs level to the deck's ends.
+    for (const bridge of map.bridges) {
+        const cornersOfStamp = bridge.prefab.sizeX + 1;
+        for (let cy = 0; cy <= bridge.prefab.sizeY; cy++) {
+            for (let cx = 0; cx <= bridge.prefab.sizeX; cx++) {
+                const x = bridge.x + cx;
+                const y = bridge.y + cy;
+                const at = x + y * CORNERS;
+                const own = bridge.prefab.levels[0].heights[cx + cy * cornersOfStamp];
+                const onDeck = cx >= DECK_WEST && cx <= DECK_EAST;
+                const rise = onDeck && !bridge.overWater ? own - bridge.bankHeight : 0;
+                const wet =
+                    bridge.overWater &&
+                    cx > DECK_WEST &&
+                    (water[at] > 0 ||
+                        water[at + 1] > 0 ||
+                        water[at - 1] > 0 ||
+                        water[at + CORNERS] > 0 ||
+                        water[at - CORNERS] > 0);
+                if (!wet) {
+                    // Ahead of the water's own margin
+                    terrain.pin(x, y, bridge.height + rise, -1);
+                }
+                if (land[at] <= 0) {
+                    map.spanCorners[at] = 1;
+                }
+            }
+        }
+    }
+
     map.waterField.set(water);
 
     // Causeways, from the height of one end to the other
@@ -852,6 +889,14 @@ function dropEdges(map: Map3): void {
             terrain.height[at] = surface[at] * Math.pow(fall, 1.25);
         }
     }
+}
+
+// No face past what the real world has: the rock off the edge comes up to meet the land, which
+// stays as it is
+function easeEdges(map: Map3): void {
+    const { terrain, land, spanCorners } = map;
+    const held = Uint8Array.from(land, (value, i) => (value > 0 || spanCorners[i] ? 1 : 0));
+    liftFaces(terrain.height, CORNERS, CORNERS, STEEPEST_FACE, held);
 }
 
 // Ground made flat: for one big thing, which check-maps.ts holds to it, or a whole site
@@ -994,8 +1039,15 @@ function paintWays(map: Map3): void {
         }
     }
 
-    // The river and lake, and the blood
-    const waterTiles = ground.paintField(map.waterField, WATER, true);
+    // The river and lake, and the blood. A deck comes down on its banks, so no water at its ends.
+    const deckEnds = new Uint8Array(SIZE * SIZE);
+    for (const { x, y, prefab, overWater } of map.bridges) {
+        for (let ty = y - 1; ty <= y + prefab.sizeY && overWater; ty++) {
+            deckEnds[x + DECK_WEST - 1 + ty * SIZE] = 1;
+            deckEnds[x + DECK_WEST + ty * SIZE] = 1;
+        }
+    }
+    const waterTiles = ground.paintField(map.waterField, WATER, true, deckEnds);
     map.water.set(waterTiles);
     const pool = BLOOD_POOL;
     const blood = new Float32Array(count);
@@ -1049,7 +1101,7 @@ function paintWays(map: Map3): void {
     const paved = paving.map((value, i) =>
         Math.max(Math.min(value, -fissures[i] - 1.6), raised[i]),
     );
-    ground.paintField(paved, COBBLES, false);
+    ground.paintField(paved, getPaving, false);
     ground.paintField(fissures, LAVA, true);
 
     // The terrace's cliff
@@ -1062,10 +1114,18 @@ function paintWays(map: Map3): void {
             }
         }
     }
-    ground.paintOverlay(cliff, ROCK_STONE, false, map.water);
+    paintRockFloor(ground, cliff, ROCK_STONE, map.water);
+}
+
+// Plain paving, as real towns are, and cobbles only in the square round the heart: a texture's
+// for a small patch, and over a whole yard it's a band across the screen
+function getPaving(x: number, y: number): number {
+    const inSquare = Math.abs(x - HEART_SQUARE.x) < HEART_SQUARE.half;
+    return inSquare && Math.abs(y - HEART_SQUARE.y) < HEART_SQUARE.half ? COBBLES : PLAIN_STONE;
 }
 
 const YARD = { x0: 166, y0: 170, x1: 218, y1: 226 };
+const HEART_SQUARE = { x: 192, y: 198, half: 14 };
 const KEEP_HEIGHT = 196;
 const WALL_RISE = 46;
 const TOWER_RISE = 74;
@@ -1092,6 +1152,9 @@ const TERRACE: Point[] = [
 const TERRACE_RISE = 38;
 const TERRACE_RAMP = { y: 161, halfWidth: 3, x0: 279, x1: 293 };
 const FALL = { x: 285, y: 147 };
+const FALL_SEAT = getFallSeat(RIVER_LEVEL, 208)!;
+// Where the river runs off the rock's edge
+const RIVER_EDGE: TileRect = { x0: 260, y0: 68, x1: 268, y1: 80 };
 
 function raiseTerrace(map: Map3): void {
     const { terrain, land } = map;
@@ -1108,6 +1171,11 @@ function raiseTerrace(map: Map3): void {
             terrain.height[at] += TERRACE_RISE * (onRamp ? up : Math.min(inside / 1.2, 1));
         }
     }
+    // The fall's seat, cut into its south edge
+    forSeatCorners(FALL.x, FALL.y, FALL_SEAT, FALL_WIDTH, (x, y, seated, out) => {
+        const at = x + y * CORNERS;
+        terrain.height[at] = lerp(seated, terrain.height[at], out);
+    });
 }
 
 // A field that's above 0 where the ground's over a height, near the keep
@@ -1179,23 +1247,61 @@ const PLOTS: Plot[] = [
     // The keep's yard's already flat
 ];
 
-// A round mosaic, four locs making a square 12 tiles a side. It blocks though it looks like a
-// floor, so a rail goes round it: nothing that stops you should look like ground.
+// A floor of plain stone raised on the ground, 12 tiles a side, with a rail round it and a
+// statue at each corner. It blocks, and nothing that stops you should look like ground, so
+// it stands proud and the rail says so.
 function placeDais(map: Map3, x: number, y: number): void {
-    placeProp(map, 45881, 6, x, y + 6);
-    placeProp(map, 45882, 6, x + 6, y + 6);
-    placeProp(map, 45886, 6, x, y);
-    placeProp(map, 45887, 6, x + 6, y);
-    const { locs } = map.ground.grid;
+    const { ground } = map;
+    const { locs } = ground.grid;
+    for (let cy = y; cy <= y + DAIS_SIZE; cy++) {
+        for (let cx = x; cx <= x + DAIS_SIZE; cx++) {
+            ground.setHeight(cx, cy, ground.getHeight(cx, cy) + DAIS_RISE);
+        }
+    }
+    const { overlays, shapes, rotations, flags } = ground.level0;
+    for (let ty = y; ty < y + DAIS_SIZE; ty++) {
+        for (let tx = x; tx < x + DAIS_SIZE; tx++) {
+            const i = ground.tile(tx, ty);
+            overlays[i] = PLAIN_STONE;
+            shapes[i] = 0;
+            rotations[i] = 0;
+            flags[i] |= TILE_BLOCKED;
+            ground.reserved[i] = 1;
+        }
+    }
     const rail = (tx: number, ty: number, rotation: number) =>
         locs.push({ id: 1902, type: LOC_WALL, rotation, level: 0, x: tx, y: ty });
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < DAIS_SIZE; i++) {
         rail(x + i, y, WALL_SOUTH);
-        rail(x + i, y + 11, WALL_NORTH);
+        rail(x + i, y + DAIS_SIZE - 1, WALL_NORTH);
         rail(x, y + i, WALL_WEST);
-        rail(x + 11, y + i, WALL_EAST);
+        rail(x + DAIS_SIZE - 1, y + i, WALL_EAST);
+    }
+    for (const [tx, ty] of [
+        [x + 1, y + 1],
+        [x + DAIS_SIZE - 3, y + 1],
+        [x + 1, y + DAIS_SIZE - 3],
+        [x + DAIS_SIZE - 3, y + DAIS_SIZE - 3],
+    ]) {
+        placeProp(map, DAIS_STATUE, 2, tx, ty);
     }
 }
+
+// What came down of the keep: heaps of stone, with bricks among them
+function placeFallenStone(map: Map3, x: number, y: number): void {
+    placeProp(map, 11433, 2, x + 1, y + 3, x & 3);
+    placeProp(map, 11434, 2, x + 3, y + 1, y & 3);
+    placeProp(map, 11435, 2, x + 4, y + 4, (x + y) & 3);
+    placeProp(map, PILE_OF_BRICKS, 1, x, y + 1, 1);
+    placeProp(map, PILE_OF_BRICKS, 1, x + 3, y + 3, 2);
+    placeProp(map, PILE_OF_BRICKS, 1, x + 6, y + 3, 0);
+}
+
+// Where the river goes over the edge, 3 tiles of foam each
+const RIVER_DROPS: { x: number; y: number }[] = [
+    { x: 263, y: 80 },
+    { x: 266, y: 80 },
+];
 
 const GIANT_MUSHROOMS: Point[] = [
     [266, 289],
@@ -1249,8 +1355,8 @@ function placeSetPieces(map: Map3): void {
 
     // The Glasswood's: spires round the lake, one standing in it, and elven walls beyond
     placeProp(map, 27878, 5, 284, 136);
-    placeProp(map, 48972, 6, 262, 120);
-    placeProp(map, 48973, 6, 296, 118);
+    placeProp(map, 27878, 5, 262, 120);
+    placeProp(map, 27882, 3, 296, 118);
     placeProp(map, 27878, 5, 266, 156);
     placeProp(map, 27878, 5, 278, 88);
     placeProp(map, 27882, 3, 296, 96);
@@ -1292,8 +1398,7 @@ function placeSetPieces(map: Map3): void {
         const y = 250 + i * 6;
         placeProp(map, 49341, 4, 84, y, 0);
         placeProp(map, 49341, 4, 96, y, 2);
-        placeProp(map, 60438, 1, 94, y + 1, 0);
-        placeProp(map, 60438, 1, 95, y + 3, 1);
+        placeProp(map, 11434, 2, 94, y + 1, i & 3);
     }
     placeProp(map, 59324, 3, 102, 240, 0);
 
@@ -1362,9 +1467,9 @@ function placeSetPieces(map: Map3): void {
     }
 
     // Bits of the keep's roof, where they came down
-    placeProp(map, 48333, 7, 172, 196);
-    placeProp(map, 48332, 7, 206, 200);
-    placeProp(map, 48328, 7, 176, 216);
+    placeFallenStone(map, 172, 196);
+    placeFallenStone(map, 206, 200);
+    placeFallenStone(map, 176, 216);
 
     // The crown, where the north causeways meet
     placeDais(map, 186, 260);
@@ -1387,7 +1492,7 @@ function placeSetPieces(map: Map3): void {
     }
 
     // The fall off the terrace, into the lake
-    placeProp(map, CLIFF_FALL, 3, FALL.x, FALL.y);
+    placeProp(map, FALL_SEAT.id, FALL_WIDTH, FALL.x, FALL.y);
 
     // What's on the bits that broke off
     for (const [x, y, , , , prop] of ISLETS) {
@@ -1405,8 +1510,8 @@ function placeSetPieces(map: Map3): void {
     }
 
     // The river goes over the edge
-    for (const x of [263, 266]) {
-        ground.grid.locs.push({ id: 26499, type: LOC_NORMAL, rotation: 0, level: 0, x, y: 80 });
+    for (const { x, y } of RIVER_DROPS) {
+        ground.grid.locs.push({ id: WATERFALL, type: LOC_NORMAL, rotation: 0, level: 0, x, y });
     }
 }
 
@@ -1490,8 +1595,8 @@ const STREWN: Strewn[] = [
             [10820, 3],
         ],
         big: [
-            [60438, 1],
-            [60440, 2],
+            [10790, 2],
+            [11434, 2],
         ],
         rocks: [
             [5605, 1],
@@ -1521,7 +1626,7 @@ const STREWN: Strewn[] = [
             [60918, 2],
             [60927, 2],
         ],
-        decor: [652, 13312, 40837, 40836, 40838, 61097, 61098],
+        decor: [652, 652, 40837, 40836, 40838, 61097, 61098],
         flowers: [30830, 60876, 60877],
         treeChance: 0.26,
         bigChance: 0.01,
@@ -1545,7 +1650,7 @@ const STREWN: Strewn[] = [
         ],
         rocks: [
             [11933, 2],
-            [60438, 1],
+            [4605, 2],
         ],
         decor: [3549, 3548, 3547, 12931, 5358, 5359, 14523],
         flowers: [404, 405, 401, 400],
@@ -1566,7 +1671,7 @@ const STREWN: Strewn[] = [
             [12749, 2],
             [23564, 2],
         ],
-        rocks: [[60438, 1]],
+        rocks: [[11933, 2]],
         decor: [3549, 3548, 3547, 3614, 11439, 185, 3703],
         flowers: [],
         treeChance: 0.02,
@@ -1608,8 +1713,6 @@ const STREWN: Strewn[] = [
             [27882, 3],
             [27878, 5],
             [36530, 3],
-            [48972, 6],
-            [48973, 6],
         ],
         rocks: [
             [3896, 1],
@@ -1706,6 +1809,7 @@ function buildDetail(context: BuildContext): GeneratedMap {
                 y: BRIDGE_ROW - 3,
                 height: RIVER_LEVEL + def.bankHeight,
                 bankHeight: def.bankHeight,
+                overWater: true,
             },
             {
                 prefab,
@@ -1723,6 +1827,7 @@ function buildDetail(context: BuildContext): GeneratedMap {
     dropEdges(map);
     raiseKeep(map);
     raiseTerrace(map);
+    easeEdges(map);
     map.terrain.write((x, y, height) => ground.setHeight(x, y, height));
     paintFloors(map);
     paintWays(map);
@@ -1737,6 +1842,18 @@ function buildDetail(context: BuildContext): GeneratedMap {
             keepUnderlays: true,
             keepHeights: true,
         });
+        // A deck stands where it stood in the prefab, over whatever's under it now
+        const stampCorners = prefab.sizeX + 1;
+        const decks = ground.grid.levels[1].heights;
+        for (let cy = 0; cy <= prefab.sizeY && bridge.overWater; cy++) {
+            for (let cx = 0; cx <= prefab.sizeX; cx++) {
+                const x = bridge.x + cx;
+                const y = bridge.y + cy;
+                const own = prefab.levels[0].heights[cx + cy * stampCorners];
+                const deck = bridge.height - bridge.bankHeight + own + decks[x + y * CORNERS];
+                decks[x + y * CORNERS] = Math.max(deck - ground.getHeight(x, y), 0);
+            }
+        }
     }
 
     // Ruins in the Heartkeep's yard
@@ -1777,6 +1894,18 @@ function buildDetail(context: BuildContext): GeneratedMap {
     for (const i of findStranded(collision, SIZE, rect, reached)) {
         blockTile(ground.grid, i);
     }
+
+    // What's on the rock, and on the ground
+    const { overlays } = ground.level0;
+    const rock = Uint8Array.from(overlays, (overlay, i) =>
+        (overlay === ROCK_STONE || overlay === ROCK_DARK) && flags[i] & TILE_BLOCKED ? 1 : 0,
+    );
+    dressRock(ground, rock, { kitAt: () => ROCK_KIT, seed: 202, share: 1 });
+    dressGround(ground, {
+        seed: 300,
+        density: 1,
+        biomeDecor: (x, y) => STREWN[Math.max(map.owner[x + y * CORNERS], 0)].decor,
+    });
     return {
         grid: ground.grid,
         footprint: ground.footprint,
@@ -1795,7 +1924,8 @@ function buildDetail(context: BuildContext): GeneratedMap {
         walkSlope: WALK_SLOPE,
         caves: [],
         falls: [FALL],
-        waterfalls: [],
+        waterfalls: RIVER_DROPS,
+        waterDrops: [RIVER_EDGE, getFallDrop(FALL)],
     };
 }
 

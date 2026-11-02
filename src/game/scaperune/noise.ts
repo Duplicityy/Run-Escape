@@ -30,8 +30,10 @@ export function createNoise(seed: number, scales: 1 | 2 | 3 = 3): Noise {
         const iy = Math.floor(y);
         const fx = smooth(x - ix);
         const fy = smooth(y - iy);
-        const south = hash(ix, iy) + (hash(ix + 1, iy) - hash(ix, iy)) * fx;
-        const north = hash(ix, iy + 1) + (hash(ix + 1, iy + 1) - hash(ix, iy + 1)) * fx;
+        const sw = hash(ix, iy);
+        const nw = hash(ix, iy + 1);
+        const south = sw + (hash(ix + 1, iy) - sw) * fx;
+        const north = nw + (hash(ix + 1, iy + 1) - nw) * fx;
         return south + (north - south) * fy;
     };
     return (x, y) => {
@@ -61,9 +63,10 @@ export function createGradientNoise(seed: number): Noise {
         const iy = Math.floor(y);
         const fx = fade(x - ix);
         const fy = fade(y - iy);
-        const south = dot(ix, iy, x, y) + (dot(ix + 1, iy, x, y) - dot(ix, iy, x, y)) * fx;
-        const north =
-            dot(ix, iy + 1, x, y) + (dot(ix + 1, iy + 1, x, y) - dot(ix, iy + 1, x, y)) * fx;
+        const sw = dot(ix, iy, x, y);
+        const nw = dot(ix, iy + 1, x, y);
+        const south = sw + (dot(ix + 1, iy, x, y) - sw) * fx;
+        const north = nw + (dot(ix + 1, iy + 1, x, y) - nw) * fx;
         return (south + (north - south) * fy) * 1.5;
     };
 }

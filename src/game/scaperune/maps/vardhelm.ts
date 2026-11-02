@@ -1,7 +1,17 @@
 import { Ground } from "../Ground";
-import { BIOMES, BiomeDef, CLIFF_FALL, WATERFALL } from "../biomes";
+import { BIOMES, BiomeDef, CLIFF_FALL } from "../biomes";
 import { Exit } from "../building";
 import { TileRect, blockTile, findReachable, findStranded, getCollisionFlags } from "../collision";
+import { dressGround, dressRock, paintRockFloor } from "../dress";
+import {
+    FALL_ROWS,
+    getFallDrop,
+    getFallSeat,
+    getSeatHeight,
+    getSeatTiles,
+    placeFalls,
+    seatFall,
+} from "../falls";
 import { TILE_BLOCKED, TILE_BRIDGE } from "../format";
 import { GeneratedMap } from "../generator";
 import { shapeCliffs } from "../landforms";
@@ -26,7 +36,7 @@ import { BRIDGE_ROAD_HALF_WIDTH, RoadNetwork, placeBridges } from "../roads";
 import { DEFAULT_SETTINGS, GeneratorSettings } from "../settings";
 import { PlacedBuilding, pinPlot } from "../settlements";
 import { FOUNTAIN, PAVING, placeWaymarkers } from "../structures";
-import { Terrain, getTileSlope } from "../terrain";
+import { Terrain, getTileSlope, spreadNearest } from "../terrain";
 
 // Vardhelm, a hand-made map: a kingdom that climbs a mountain from south to north, so that
 // every cliff faces the camera. Nothing here's generated: the land's carved by hand out of
@@ -43,6 +53,8 @@ const SPAWN: Point = { x: 112, y: 100 };
 const ROAD_WIDEN = 12;
 // The walled city, in tiles
 const CITY: TileRect = { x0: 170, y0: 248, x1: 244, y1: 315 };
+// Where a rockfall stops the road south, out to the arena's edge
+const ROCKFALL: TileRect = { x0: 100, y0: 64, x1: 116, y1: 71 };
 // Keep Le Faye's wall, and the round towers at its door
 const CITY_WALL = 1911;
 const CITY_TOWER = 1867;
@@ -57,8 +69,9 @@ const BROWN_ROCK = 92;
 const DRY_ROCK = [171, 172];
 const GREY_ROCK = 111;
 const NEUTRAL_SNOW = 58;
+const SNOW_FROM = 205;
 const FIELD_FENCE = BIOMES.meadow.fence;
-const GREAT_BOULDER = 60444;
+const GREAT_BOULDER = 11433;
 const PARAPET = 1902;
 const GUARD = 818;
 const SHRINE_CRYSTAL = 27878;
@@ -97,6 +110,8 @@ const SHELF = 90;
 const HIGH = 216;
 const RIVER_VALE = 16;
 const RIVER_SHELF = 60;
+// The ledge the great fall lands on halfway up
+const RIVER_LEDGE = 123;
 const RIVER_HIGH = 186;
 const SHRINE = 232;
 
@@ -124,35 +139,43 @@ const COURSE: [number, number, number][] = [
     [112, 150, 4.5],
     [124, 145, 6],
     [138, 140, 6],
-    [147, 139, 3.5],
-    [149, 139, 3],
+    [147, 139.5, 4.5],
+    [151, 139.5, 4.5],
     [160, 137, 4],
     [172, 128, 4.5],
     [184, 126, 4.5],
     [208, 126, 4.5],
     [218, 129, 4],
     [228, 132, 5],
-    [236, 133, 3],
-    [238, 134, 3],
-    [249, 146, 4.5],
+    [236, 133.5, 4.5],
+    [245, 133.5, 4.5],
+    [255, 146, 4.5],
     [274, 146, 4.5],
     [286, 142, 5],
     [300, 140, 5],
 ];
 const CROSSINGS = [100, 196, 262];
-// Where it falls: the rows between its foot and its lip have rock, and the falls on it. Those
-// are short, because CLIFF_FALL only covers about 3 tiles from its foot, however tall the cliff.
-const FALLS: { foot: number; lip: number; low: number; high: number }[] = [
-    { foot: 147, lip: 149, low: RIVER_VALE, high: RIVER_SHELF },
-    { foot: 236, lip: 238, low: RIVER_SHELF, high: RIVER_HIGH },
+// Where it falls: side by side across the river from x, on seats, so that the river's rows from
+// foot to lip are level across and go by getSeatHeight. A fall's as tall as its model, so the
+// great fall's two, one on the other's lip.
+// They overlap by a tile, or the join shows the dark inside of a model's edge.
+const FALL_STEP = 2;
+const FALLS = [
+    { foot: 147, x: 136, models: 3, seat: getFallSeat(RIVER_VALE, RIVER_SHELF)! },
+    { foot: 236, x: 130, models: 3, seat: getFallSeat(RIVER_SHELF, RIVER_LEDGE)! },
+    { foot: 240, x: 130, models: 3, seat: getFallSeat(RIVER_LEDGE, RIVER_HIGH)! },
 ];
 
 // A pool of its own under a cliff, for a fall with no river behind it
 const POOLS = [
-    { x: 214, y: 225, across: 6, out: 4, level: 72, fall: true },
+    { x: 214, y: 225, across: 6, out: 4, level: 72 },
+    // What feeds it, up on the cliff's lip
+    { x: 214, y: 234, across: 4, out: 3, level: 137 },
     // Aldmere Water
-    { x: 204, y: 90, across: 19, out: 12, level: 26, fall: false },
+    { x: 204, y: 90, across: 19, out: 12, level: 26 },
 ];
+// The fall from one to the other
+const POOL_FALL = { x: 213, y: 227, seat: getFallSeat(72, 137)! };
 
 function getCourse(y: number): { centre: number; half: number } {
     let i = 0;
@@ -167,9 +190,9 @@ function getCourse(y: number): { centre: number; half: number } {
 
 function getRiverLevel(y: number): number {
     let level = RIVER_VALE;
-    for (const { foot, lip, low, high } of FALLS) {
+    for (const { foot, seat } of FALLS) {
         if (y >= foot) {
-            level = lerp(low, high, Math.min((y - foot) / (lip - foot), 1));
+            level = getSeatHeight(seat, y - foot);
         }
     }
     return level;
@@ -375,16 +398,17 @@ function shapeLand(terrain: Terrain): Float32Array {
     return massif;
 }
 
+// The rows of corners in a fall that aren't water: from its seat up to its lip
+function isFallRow(y: number, foot: number): boolean {
+    return y > foot + 1 && y < foot + FALL_ROWS;
+}
+
 // Where the water goes: above 0 is water. rock leaves the falls' rows out of it.
 function getWaterField(terrain: Terrain, rock: boolean): Float32Array {
     const { cornersX, cornersY } = terrain;
     const field = new Float32Array(cornersX * cornersY).fill(-100);
     for (let y = 0; y < cornersY; y++) {
         const { centre, half } = getCourse(y);
-        const fall = FALLS.some(({ foot, lip }) => y > foot && y < lip);
-        if (rock && fall) {
-            continue;
-        }
         for (let x = 0; x < cornersX; x++) {
             field[x + y * cornersX] = half - Math.abs(x - centre);
         }
@@ -410,8 +434,8 @@ function getWaterField(terrain: Terrain, rock: boolean): Float32Array {
     const smoothed = smoothField(field, cornersX, cornersY, 2);
     // Not across a fall's lip and foot: those are straight lines across the river
     if (rock) {
-        for (const { foot, lip } of FALLS) {
-            for (let y = foot + 1; y < lip; y++) {
+        for (let y = 0; y < cornersY; y++) {
+            if (FALLS.some(({ foot }) => isFallRow(y, foot))) {
                 smoothed.fill(-4, y * cornersX, (y + 1) * cornersX);
             }
         }
@@ -502,6 +526,7 @@ function createBuild(context: BuildContext): Build {
         terrain,
         cliffs: new Uint8Array(SIZE_X * SIZE_Y),
         heldCorners: new Uint8Array(corners.x * corners.y),
+        faces: new Uint8Array(SIZE_X * SIZE_Y),
         heldForNow: [],
         mainland: new Uint8Array(SIZE_X * SIZE_Y).fill(1),
         tileHeights: new Float32Array(SIZE_X * SIZE_Y),
@@ -535,7 +560,9 @@ function paintFloors(build: Build, massif: Float32Array): void {
                           ? DRY_ROCK[patch > 0.5 ? 0 : 1]
                           : BROWN_ROCK;
             }
-            if (height > 188 || y >= 243 || toTarn(x, y) < 30) {
+            // Snow's for the heights: on a lone peak lower down, rock running straight into it
+            // blends through bright green
+            if ((height > 188 && y > SNOW_FROM) || y >= 243 || toTarn(x, y) < 30) {
                 floor = patch > 0.7 ? 218 : 59;
             }
             if (x > CITY.x0 && x < CITY.x1 && y > CITY.y0 && y < CITY.y1) {
@@ -628,13 +655,12 @@ function scatter(build: Build, massif: Float32Array): void {
     }
 }
 
-// Rock on everything that's blocked for being steep, up to the snow: paintRock's, with an edge
-// smoothed further, because here it's looked at close to
-function paintRockFaces(build: Build, skip: Uint8Array, massif: Float32Array): void {
+// Rock on everything that's blocked for being steep, up to the snow. Returns its tiles.
+function paintRockFaces(build: Build, skip: Uint8Array, massif: Float32Array): Uint8Array {
     const { ground, sizeX, sizeY, corners, cliffs, terrain } = build;
     const { heights, flags } = ground.level0;
     const snowLine = getSnowLine(SETTINGS);
-    const rock = new Float32Array(corners.x * corners.y).fill(-1);
+    const rock = new Uint8Array(sizeX * sizeY);
     for (let y = 0; y < sizeY; y++) {
         for (let x = 0; x < sizeX; x++) {
             const i = ground.tile(x, y);
@@ -642,50 +668,26 @@ function paintRockFaces(build: Build, skip: Uint8Array, massif: Float32Array): v
             const summit =
                 massif[terrain.corner(x, y)] > 0.8 && heights[x + y * corners.x] > snowLine;
             if (flags[i] & TILE_BLOCKED && steep && !skip[i] && !summit) {
-                const at = x + y * corners.x;
-                for (const corner of [at, at + 1, at + corners.x, at + corners.x + 1]) {
-                    rock[corner] = 1;
-                }
+                rock[i] = 1;
             }
         }
     }
-    const field = smoothField(rock, corners.x, corners.y, 2);
-    ground.paintField(field, (x, y) => build.biomeAt(x, y).rock.overlay, false, skip);
+    paintRockFloor(ground, rock, (x, y) => build.biomeAt(x, y).rock.overlay, skip);
+    return rock;
 }
 
-// Boulders along the foot of the cliffs, on flat ground, where they stand as they should
-function placeEdgeStones(build: Build, massif: Float32Array): void {
-    const { ground, sizeX, sizeY, cliffs, rng } = build;
-    const { flags } = ground.level0;
-    for (let y = 2; y < sizeY - 2; y++) {
-        for (let x = 2; x < sizeX - 2; x++) {
-            const i = ground.tile(x, y);
-            if (flags[i] & TILE_BLOCKED || ground.reserved[i] || !cliffs[i + sizeX]) {
-                continue;
-            }
-            if (rng() < 0.22 && massif[build.terrain.corner(x, y)] < 0.9) {
-                const { boulders } = build.biomeAt(x, y).rock;
-                const id = boulders[Math.floor(rng() * boulders.length)];
-                ground.place(
-                    { id, type: 10, rotation: Math.floor(rng() * 4), level: 0, x, y },
-                    1,
-                    1,
-                );
-            }
-        }
-    }
-}
-
-// A field with a fence round it, crops in rows
+// A field with a fence round it, crops in rows, on a level plot of its own
 function fencedField(
     build: Build,
     x0: number,
     y0: number,
     sizeX: number,
     sizeY: number,
+    height: number,
     crops: number[],
-): void {
+): TileRect {
     const { ground, rng } = build;
+    pinPlot(build, x0, y0, sizeX, sizeY, height);
     const x1 = x0 + sizeX - 1;
     const y1 = y0 + sizeY - 1;
     const fence = (x: number, y: number, rotation: number) => {
@@ -712,6 +714,7 @@ function fencedField(
             ground.reserved[i] = 1;
         }
     }
+    return { x0, y0, x1, y1 };
 }
 
 // The city's wall, with round towers along it and a gate to the west where the road comes in
@@ -748,26 +751,52 @@ export function buildVardhelm(context: BuildContext): GeneratedMap {
 
     // The river. Its bed's carved along the falls' rows too, and painted only off them.
     const carved = getTouchedTiles(getWaterField(terrain, false), sizeX, sizeY);
-    const levels = new Float32Array(corners.x * corners.y);
-    for (let y = 0; y < corners.y; y++) {
-        levels.fill(getRiverLevel(y), y * corners.x, (y + 1) * corners.x);
-    }
-    for (const { x, y, across, level } of POOLS) {
-        for (let cy = y - 14; cy <= y + 14; cy++) {
-            levels.fill(level, x - across - 12 + cy * corners.x, x + across + 12 + cy * corners.x);
+    const levels = new Float32Array(corners.x * corners.y).fill(Infinity);
+    for (let y = 0; y < sizeY; y++) {
+        for (let x = 0; x < sizeX; x++) {
+            if (carved[ground.tile(x, y)]) {
+                for (const [cx, cy] of [
+                    [x, y],
+                    [x + 1, y],
+                    [x, y + 1],
+                    [x + 1, y + 1],
+                ]) {
+                    levels[cx + cy * corners.x] = getRiverLevel(cy);
+                }
+            }
         }
     }
+    // The ground beside water goes by the nearest, so a pool takes the corners round it too
+    for (const { x, y, across, out, level } of POOLS) {
+        for (let cy = y - out * 2; cy <= y + out * 2; cy++) {
+            for (let cx = x - across * 2; cx <= x + across * 2; cx++) {
+                const away = Math.hypot((cx - x) / across, (cy - y) / out);
+                if (levels[cx + cy * corners.x] !== Infinity && away < 1.5) {
+                    levels[cx + cy * corners.x] = level;
+                }
+            }
+        }
+    }
+    spreadNearest(levels, corners.x, corners.y);
     sinkFresh(build, distanceTo(carved, sizeX, sizeY, MAX_BANK), levels);
     const waterTiles = ground.paintField(getWaterField(terrain, true), BIOMES.meadow.water, true);
     holdWater(build, waterTiles);
 
     build.cliffs.set(shapeCliffs(terrain, SETTINGS.walkSlope));
     // Nothing wears the cliffs away but what's built on them
-    for (const { foot, lip } of FALLS) {
-        for (let y = foot; y < lip; y++) {
+    for (const { foot } of FALLS) {
+        for (let y = foot + 2; y < foot + FALL_ROWS; y++) {
             const { centre, half } = getCourse(y);
             for (let x = Math.floor(centre - half - 1); x <= centre + half + 1; x++) {
+                build.faces[ground.tile(x, y)] = 1;
                 build.cliffs[ground.tile(x, y)] = 1;
+            }
+        }
+        // The bed stays as it's carved, level across, whatever's pinned nearby
+        for (let y = foot; y <= foot + FALL_ROWS; y++) {
+            const { centre, half } = getCourse(y);
+            for (let x = Math.floor(centre - half); x <= Math.ceil(centre + half); x++) {
+                terrain.pin(x, y, getRiverLevel(y));
             }
         }
     }
@@ -782,6 +811,13 @@ export function buildVardhelm(context: BuildContext): GeneratedMap {
             }
         }
     });
+    seatFall(terrain, POOL_FALL.x, POOL_FALL.y, POOL_FALL.seat);
+    {
+        const { x0, y0, x1, y1 } = getSeatTiles(POOL_FALL.x, POOL_FALL.y);
+        for (let y = y0; y <= y1; y++) {
+            build.faces.fill(1, ground.tile(x0, y), ground.tile(x1 + 1, y));
+        }
+    }
     terrain.pinRect(spawn.x - 8, spawn.y - 8, 16, 16, VALE);
     paintFloors(build, massif);
 
@@ -922,11 +958,18 @@ export function buildVardhelm(context: BuildContext): GeneratedMap {
             [176, 262, HIGH],
             [192, 262, HIGH],
             [206, 263, HIGH],
-            [206, 278, HIGH],
-            [206, 282, HIGH],
+            [206, 266, HIGH],
         ],
         cEast.lead,
         cEast.height,
+    );
+    // The square's between them, with its fountain
+    lay(
+        [
+            [206, 278, HIGH],
+            [206, 282, HIGH],
+        ],
+        [],
     );
     lay(
         [
@@ -948,7 +991,7 @@ export function buildVardhelm(context: BuildContext): GeneratedMap {
         [
             [221.5, 263, HIGH],
             [221.5, 290, HIGH],
-            [221.5, 311, HIGH],
+            [221.5, 308, HIGH],
         ],
         [],
     );
@@ -1084,12 +1127,14 @@ export function buildVardhelm(context: BuildContext): GeneratedMap {
         place(GUARD, x, 266, 1, 2);
     }
     // Crops, by the road out of Aldmere
-    fencedField(build, 98, 116, 24, 12, [15506, 15507, 15508]);
-    fencedField(build, 120, 72, 14, 10, [312]);
+    const fields = [
+        fencedField(build, 98, 116, 24, 12, VALE, [15506, 15507, 15508]),
+        fencedField(build, 118, 76, 20, 6, VALE, [312]),
+        // And Lastlight's, what little grows up here
+        fencedField(build, 214, 204, 12, 8, SHELF, [312]),
+    ];
     place(299, 96, 113);
     place(304, 94, 114);
-    // And Lastlight's, what little grows up here
-    fencedField(build, 214, 204, 12, 8, [312]);
     // The old stones at Stonewake, on the Shelf's west end, and their dead
     for (let stone = 0; stone < 9; stone++) {
         const angle = (stone / 9) * Math.PI * 2;
@@ -1099,7 +1144,7 @@ export function buildVardhelm(context: BuildContext): GeneratedMap {
             Math.round(180 + Math.sin(angle) * 6),
         );
     }
-    place(GREAT_BOULDER, 89, 178, 4);
+    place(GREAT_BOULDER, 91, 179, 2);
     for (let row = 0; row < 3; row++) {
         for (let grave = 0; grave < 6; grave++) {
             place(GRAVES[(row * 3 + grave) % GRAVES.length], 104 + grave * 2, 166 + row * 2);
@@ -1161,7 +1206,7 @@ export function buildVardhelm(context: BuildContext): GeneratedMap {
     }
     place(SHRINE_CRYSTAL, 97, 304, 5);
     // Rocks and dead trees on the way up Hillfoot
-    place(GREAT_BOULDER, 228, 144, 4);
+    place(GREAT_BOULDER, 228, 144, 2);
     place(1282, 206, 146, 2);
     place(1283, 226, 158, 2);
     place(1284, 204, 128, 2);
@@ -1178,10 +1223,11 @@ export function buildVardhelm(context: BuildContext): GeneratedMap {
         }
     }
     // A rockfall has shut the road south
-    for (let x = 100; x < 116; x += 2) {
+    for (let x = ROCKFALL.x0; x < ROCKFALL.x1; x += 2) {
         place(11434, x, 68 + (x % 3), 2);
     }
 
+    roads.pinTiles();
     terrain.smoothPins(2);
     // Whatever's been built on stops being cliff
     const pinned = new Uint8Array(corners.x * corners.y);
@@ -1201,10 +1247,10 @@ export function buildVardhelm(context: BuildContext): GeneratedMap {
     }
     finishHeights(build);
     blockSteepGround(build);
-    // The massif's only to look at, however gently it rises
+    // The massif's only to look at, however gently it rises, but for a road through it
     for (let y = 0; y < sizeY; y++) {
         for (let x = 0; x < sizeX; x++) {
-            if (massif[terrain.corner(x, y)] > 0.5) {
+            if (massif[terrain.corner(x, y)] > 0.5 && !roads.isRoad(x, y)) {
                 ground.level0.flags[ground.tile(x, y)] |= TILE_BLOCKED;
             }
         }
@@ -1219,42 +1265,27 @@ export function buildVardhelm(context: BuildContext): GeneratedMap {
     for (let i = 0; i < rockSkip.length; i++) {
         rockSkip[i] = waterTiles[i] | roadTiles[i] | ground.footprint[i] | bridgeZone[i];
     }
-    paintRockFaces(build, rockSkip, massif);
-    for (const { foot, centre } of [
-        { foot: 147, centre: 139 },
-        { foot: 236, centre: 133 },
-    ]) {
-        for (const x of [centre - 4, centre - 2, centre]) {
-            ground.grid.locs.push({
-                id: CLIFF_FALL,
-                type: 10,
-                rotation: 0,
-                level: 0,
-                x,
-                y: foot - 2,
-            });
+    const rock = paintRockFaces(build, rockSkip, massif);
+    const waterDrops: TileRect[] = [];
+    for (const { foot, x, models, seat } of FALLS) {
+        for (let model = 0; model < models; model++) {
+            const fall = { x: x + model * FALL_STEP, y: foot, id: seat.id };
+            placeFalls(build, [fall]);
+            falls.push(fall);
         }
-        falls.push({ x: centre - 2, y: foot - 2 });
-        // Foam along the water's edge, over the strip of ground under the model's own
-        for (const x of [centre - 4, centre - 1, centre + 2]) {
-            ground.grid.locs.push({ id: WATERFALL, type: 10, rotation: 0, level: 0, x, y: foot });
-        }
+        waterDrops.push(getFallDrop({ x, y: foot }, models * FALL_STEP + 1));
     }
-    for (const { x, y, out } of POOLS.filter((pool) => pool.fall)) {
-        ground.grid.locs.push({
-            id: CLIFF_FALL,
-            type: 10,
-            rotation: 0,
-            level: 0,
-            x: x - 1,
-            y: y + out - 1,
-        });
-        falls.push({ x: x - 1, y: y + out - 1 });
-    }
+    placeFalls(build, [{ ...POOL_FALL, id: POOL_FALL.seat.id }]);
+    falls.push(POOL_FALL);
+    waterDrops.push(getFallDrop(POOL_FALL));
     placeCityWall(build, roadTiles);
     placeWaymarkers(build, roads);
-    placeEdgeStones(build, massif);
     scatter(build, massif);
+    dressRock(ground, rock, {
+        kitAt: (x, y) => build.biomeAt(x, y).rock,
+        seed: SETTINGS.seed + 202,
+        share: SETTINGS.rockFaces,
+    });
 
     // Anything you can't get to is only to look at
     const flags = getCollisionFlags(ground.grid, context.locs);
@@ -1262,10 +1293,20 @@ export function buildVardhelm(context: BuildContext): GeneratedMap {
     for (const i of findStranded(flags, sizeX, arena, reached)) {
         blockTile(ground.grid, i);
     }
+    dressGround(ground, {
+        seed: SETTINGS.seed + 300,
+        density: SETTINGS.dressing,
+        biomeDecor: (x, y) => build.biomeAt(x, y).decor,
+    });
+    roads.clearLocs(
+        roadTiles,
+        (x, y) => x >= ROCKFALL.x0 && y >= ROCKFALL.y0 && x <= ROCKFALL.x1 && y <= ROCKFALL.y1,
+    );
     return {
         grid: ground.grid,
         footprint: ground.footprint,
         roadTiles,
+        clippedRoads: roads.clipped,
         lines: roads.lines,
         buildings,
         landmarks: [],
@@ -1274,6 +1315,9 @@ export function buildVardhelm(context: BuildContext): GeneratedMap {
         caves: [],
         falls,
         waterfalls: [],
+        waterDrops,
+        fields,
+        closedRoads: [{ ...ROCKFALL, shownBy: "rubble" }],
     };
 }
 

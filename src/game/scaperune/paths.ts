@@ -1,9 +1,75 @@
+// A heap of tiles by priority, in arrays of numbers: a find on a big map pushes millions
+class TileHeap {
+    size = 0;
+    private priorities = new Float64Array(1024);
+    private tiles = new Int32Array(1024);
+
+    get topPriority(): number {
+        return this.priorities[0];
+    }
+
+    push(priority: number, tile: number): void {
+        if (this.size === this.tiles.length) {
+            const priorities = new Float64Array(this.size * 2);
+            const tiles = new Int32Array(this.size * 2);
+            priorities.set(this.priorities);
+            tiles.set(this.tiles);
+            this.priorities = priorities;
+            this.tiles = tiles;
+        }
+        const { priorities, tiles } = this;
+        let at = this.size++;
+        while (at > 0) {
+            const up = (at - 1) >> 1;
+            if (priorities[up] <= priority) {
+                break;
+            }
+            priorities[at] = priorities[up];
+            tiles[at] = tiles[up];
+            at = up;
+        }
+        priorities[at] = priority;
+        tiles[at] = tile;
+    }
+
+    pop(): number {
+        const { priorities, tiles } = this;
+        const top = tiles[0];
+        const size = --this.size;
+        const priority = priorities[size];
+        const tile = tiles[size];
+        let at = 0;
+        for (;;) {
+            let child = at * 2 + 1;
+            if (child >= size) {
+                break;
+            }
+            if (child + 1 < size && priorities[child + 1] < priorities[child]) {
+                child++;
+            }
+            if (priority <= priorities[child]) {
+                break;
+            }
+            priorities[at] = priorities[child];
+            tiles[at] = tiles[child];
+            at = child;
+        }
+        priorities[at] = priority;
+        tiles[at] = tile;
+        return top;
+    }
+}
+
 // Finds cheapest paths on one grid, again and again without clearing it each time:
 // a big map has hundreds of roads to lay.
 export class PathFinder {
     private readonly best: Float64Array;
     private readonly from: Int32Array;
     private readonly seen: Uint32Array;
+    // What stepping onto a tile costs, asked once a find, as its neighbours each want it
+    private readonly costs: Float64Array;
+    private readonly costSeen: Uint32Array;
+    private readonly heap = new TileHeap();
     private stamp = 0;
 
     constructor(
@@ -14,6 +80,8 @@ export class PathFinder {
         this.best = new Float64Array(count);
         this.from = new Int32Array(count);
         this.seen = new Uint32Array(count);
+        this.costs = new Float64Array(count);
+        this.costSeen = new Uint32Array(count);
     }
 
     // The cheapest path from a tile to any tile a test accepts (Dijkstra, eight ways
@@ -28,52 +96,26 @@ export class PathFinder {
         isEnd: (i: number) => boolean,
         climb?: (from: number, to: number) => number,
     ): number[] {
-        const { sizeX, sizeY, best, from, seen } = this;
+        const { sizeX, sizeY, best, from, seen, costs, costSeen, heap } = this;
         const stamp = ++this.stamp;
-        const heap: [number, number][] = [];
-        const push = (priority: number, i: number) => {
-            heap.push([priority, i]);
-            let at = heap.length - 1;
-            while (at > 0) {
-                const up = (at - 1) >> 1;
-                if (heap[up][0] <= heap[at][0]) {
-                    break;
-                }
-                [heap[up], heap[at]] = [heap[at], heap[up]];
-                at = up;
+        const costAt = (x: number, y: number) => {
+            const i = x + y * sizeX;
+            if (costSeen[i] !== stamp) {
+                costSeen[i] = stamp;
+                costs[i] = cost(x, y);
             }
-        };
-        const pop = (): [number, number] => {
-            const top = heap[0];
-            const last = heap.pop()!;
-            if (heap.length > 0) {
-                heap[0] = last;
-                let at = 0;
-                for (;;) {
-                    let child = at * 2 + 1;
-                    if (child >= heap.length) {
-                        break;
-                    }
-                    if (child + 1 < heap.length && heap[child + 1][0] < heap[child][0]) {
-                        child++;
-                    }
-                    if (heap[at][0] <= heap[child][0]) {
-                        break;
-                    }
-                    [heap[at], heap[child]] = [heap[child], heap[at]];
-                    at = child;
-                }
-            }
-            return top;
+            return costs[i];
         };
 
+        heap.size = 0;
         const first = start.x + start.y * sizeX;
         best[first] = 0;
         from[first] = -1;
         seen[first] = stamp;
-        push(0, first);
-        while (heap.length > 0) {
-            const [priority, i] = pop();
+        heap.push(0, first);
+        while (heap.size > 0) {
+            const priority = heap.topPriority;
+            const i = heap.pop();
             if (priority > best[i]) {
                 continue;
             }
@@ -96,13 +138,13 @@ export class PathFinder {
                     if (
                         dx !== 0 &&
                         dy !== 0 &&
-                        (cost(nx, y) === Infinity || cost(x, ny) === Infinity)
+                        (costAt(nx, y) === Infinity || costAt(x, ny) === Infinity)
                     ) {
                         continue;
                     }
                     const j = nx + ny * sizeX;
                     const step =
-                        cost(nx, ny) *
+                        costAt(nx, ny) *
                         (dx !== 0 && dy !== 0 ? 1.41 : 1) *
                         (climb ? climb(i, j) : 1);
                     const total = priority + step;
@@ -110,7 +152,7 @@ export class PathFinder {
                         seen[j] = stamp;
                         best[j] = total;
                         from[j] = i;
-                        push(total, j);
+                        heap.push(total, j);
                     }
                 }
             }

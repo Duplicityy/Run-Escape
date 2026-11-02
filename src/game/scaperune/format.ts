@@ -16,6 +16,8 @@ const LEVEL_HEIGHT = 30;
 export const TILE_BLOCKED = 0x1;
 export const TILE_BRIDGE = 0x2;
 export const TILE_INSIDE = 0x4;
+// Drawn from the ground whatever floor it's on: the top of a city wall
+export const TILE_SHOWN = 0x8;
 
 // One level of tiles, x + y * sizeX
 export type TileLevel = {

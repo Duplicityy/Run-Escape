@@ -1,5 +1,14 @@
 import { WATERFALL } from "./biomes";
-import { Build, LOC_NORMAL, SPAWN_CLEAR, getCornerDistance, hasRelief, lerp } from "./mapBuild";
+import { TileRect } from "./collision";
+import {
+    Build,
+    LOC_NORMAL,
+    SPAWN_CLEAR,
+    getCornerDistance,
+    getTouchedTiles,
+    hasRelief,
+    lerp,
+} from "./mapBuild";
 import { Noise, createNoise, createRng, smoothField } from "./noise";
 import { spreadNearest } from "./terrain";
 
@@ -35,16 +44,25 @@ const GORGE_SLOPE = 34;
 
 const VALLEY_SLOPE = 7;
 
-// Tiles either side of a crossing where a river runs level
+// Tiles either side of a crossing a river can't fall in
 const LEVEL_AT_CROSSING = 13;
 
 // How far a river has to fall for it to come down as a waterfall, and tiles it keeps clear
 // of a crossing
 const WATERFALL_DROP = 16;
 
+// Two levels of water closer than this are one level: there's no fall to see
+const LEAST_DROP = 4;
+
+// Tiles past a river's edge that a drop parts, for a bank that wanders
+const DROP_REACH = 2;
+
 const WATERFALL_RUN = 6;
 
 const WATERFALL_SPACING = 30;
+
+// A river can't lay this much fall by for later, however close its last drop was
+const WATERFALL_TALL = 56;
 
 const WATERFALL_WIDTH = 3;
 
@@ -62,14 +80,18 @@ export type River = {
     halfWidth: number;
     // Its column or row along its length, where the land gives it a valley to run in
     valley?: Float32Array;
-    // How high the water is along its length
+    // How high the water is along its length: flat reaches, with drops between them
     levels: Float32Array;
-    // Where it falls, for waterfalls
-    drops: { along: number; level: number }[];
+    // Where it falls, for waterfalls: the corners its lower reach starts at, and the row of
+    // tiles that drops
+    drops: RiverDrop[];
 };
 
-// A lake or pond: where it is, and how high its water stands
-export type Pool = { x: number; y: number; radius: number; level: number };
+export type RiverDrop = { along: number; level: number; row: number };
+
+// A lake or pond: where it is, and how high its water stands. A river runs out of a source and
+// never falls into it.
+export type Pool = { x: number; y: number; radius: number; level: number; source?: boolean };
 
 function riverStraightness(river: River, along: number): number {
     let away = Infinity;
@@ -363,9 +385,9 @@ export function sinkSea(build: Build, toSea: Float32Array): void {
     }
 }
 
-// How high a river's water stands along its length: under the ground, always downhill to
-// its lower end, and level at a crossing for a bridge's sake. One with the sea at both ends
-// runs down to each from its highest point.
+// How high a river's water stands along its length: under the ground, in flat reaches. Water
+// doesn't slope: a river only changes level at a drop, and with none it's one level end to end.
+// One with the sea at both ends runs down to each from its highest point.
 function setRiverLevels(build: Build, river: River): void {
     const { terrain, corners } = build;
     const count = river.vertical ? corners.y : corners.x;
@@ -389,71 +411,119 @@ function setRiverLevels(build: Build, river: River): void {
             levels[along] = Math.min(levels[along], levels[along - way]);
         }
     };
+    let peak = high;
     if (first < RIVER_BED + 2 && last < RIVER_BED + 2) {
         fall(high, 0);
         fall(high, count - 1);
     } else if (first > last) {
         fall(0, count - 1);
+        peak = 0;
     } else {
         fall(count - 1, 0);
+        peak = count - 1;
     }
-    for (const crossing of river.crossings) {
-        const level = levels[Math.min(Math.max(crossing, 0), count - 1)];
-        for (
-            let along = crossing - LEVEL_AT_CROSSING;
-            along <= crossing + LEVEL_AT_CROSSING;
-            along++
-        ) {
-            if (along >= 0 && along < count) {
-                levels[along] = level;
-            }
-        }
-    }
-    levels.set(smoothLine(levels, 3));
-    stepRiver(build, river);
+    stepRiver(build, river, peak, count);
 }
 
-// Gathers a river's fall into drops, for waterfalls, away from crossings
-function stepRiver(build: Build, river: River): void {
+// Gathers a river's fall into drops, away from crossings, and lays each reach flat at the lowest
+// it comes to, so that water never stands above its own banks. Its count levels fall away from
+// peak.
+function stepRiver(build: Build, river: River, peak: number, count: number): void {
     const { settings } = build;
-    if (settings.waterfalls <= 0) {
-        return;
-    }
     const { levels } = river;
     const roll = createRng(settings.seed + 300 + river.line);
     const clear = (along: number) =>
         river.crossings.every(
             (crossing) => Math.abs(along - crossing) > LEVEL_AT_CROSSING + WATERFALL_RUN,
         );
-    const way = levels[0] >= levels[levels.length - 1] ? 1 : -1;
-    const first = way > 0 ? 0 : levels.length - 1;
-    let held = levels[first];
-    let last = -Infinity;
-    for (let along = first; along >= 0 && along < levels.length; along += way) {
-        const drop = held - levels[along];
-        const due = Math.abs(along - last) >= WATERFALL_SPACING;
-        if (drop >= WATERFALL_DROP && due && clear(along) && roll() < settings.waterfalls) {
-            river.drops.push({ along, level: levels[along] });
-            held = levels[along];
-            last = along;
-        } else if (!clear(along)) {
-            held = levels[along];
+    const drops: RiverDrop[] = [];
+    if (settings.waterfalls > 0) {
+        for (const way of [-1, 1]) {
+            let held = levels[peak];
+            let last = -Infinity;
+            for (let along = peak + way; along >= 0 && along < count; along += way) {
+                const drop = held - levels[along];
+                const due =
+                    Math.abs(along - last) >= WATERFALL_SPACING && roll() < settings.waterfalls;
+                const tall = drop >= WATERFALL_TALL;
+                if (drop >= WATERFALL_DROP && (due || tall) && clear(along)) {
+                    drops.push({ along, level: levels[along], row: way > 0 ? along - 1 : along });
+                    held = levels[along];
+                    last = along;
+                }
+            }
         }
-        levels[along] = held;
     }
+    // Reaches: from one drop to the next along the river
+    const edges = [...drops.map(({ row }) => row + 1), 0, count].sort((a, b) => a - b);
+    for (let i = 0; i + 1 < edges.length; i++) {
+        const reach = levels.subarray(edges[i], edges[i + 1]);
+        reach.fill(Math.round(Math.min(...reach)));
+    }
+    river.drops = drops;
+}
+
+// Tiles of water in pieces that touch, at a side or just a corner: they share corners, so each
+// has to be one level. Tiles in cut aren't in any: that's how a drop parts two reaches.
+export function findWaterPieces(build: Build, tiles: Uint8Array, cut: Uint8Array): Int32Array {
+    const { sizeX, sizeY } = build;
+    const pieces = new Int32Array(tiles.length).fill(-1);
+    let next = 0;
+    const stack: number[] = [];
+    for (let start = 0; start < tiles.length; start++) {
+        if (!tiles[start] || cut[start] || pieces[start] >= 0) {
+            continue;
+        }
+        pieces[start] = next;
+        stack.push(start);
+        while (stack.length > 0) {
+            const i = stack.pop()!;
+            const x = i % sizeX;
+            const y = (i - x) / sizeX;
+            for (let ny = Math.max(y - 1, 0); ny <= Math.min(y + 1, sizeY - 1); ny++) {
+                for (let nx = Math.max(x - 1, 0); nx <= Math.min(x + 1, sizeX - 1); nx++) {
+                    const j = nx + ny * sizeX;
+                    if (tiles[j] && !cut[j] && pieces[j] < 0) {
+                        pieces[j] = next;
+                        stack.push(j);
+                    }
+                }
+            }
+        }
+        next++;
+    }
+    return pieces;
+}
+
+// The tiles of a river's row that a drop takes in: bank to bank, whatever's touching them
+function getDropTiles(build: Build, river: River, { row }: RiverDrop): TileRect {
+    const centre = riverCentre(river, row);
+    const reach = riverHalfWidth(river, row) + DROP_REACH;
+    const [low, high] = [Math.floor(centre - reach), Math.ceil(centre + reach)];
+    return river.vertical
+        ? { x0: low, y0: row, x1: high, y1: row }
+        : { x0: row, y0: low, x1: row, y1: high };
+}
+
+// Every tile that drops at a fall on these rivers. Nothing else in the water can tilt.
+export function getWaterDrops(build: Build, rivers: River[]): TileRect[] {
+    return rivers.flatMap((river) => river.drops.map((drop) => getDropTiles(build, river, drop)));
 }
 
 // How high the fresh water stands at each corner, and everywhere else the height of the
-// nearest water
+// nearest water. Water's one level to a piece: wherever two levels meet, the lower wins, and
+// only a river's drops part them. That's the rule, so it's worked out on what's really touching
+// after everything's been asked for. sea is the tiles of sea, which everything joining it meets.
 export function createWaterLevels(
     build: Build,
     rivers: River[],
     pools: Pool[],
     fresh: Float32Array,
     flood: Uint8Array,
+    sea?: Uint8Array,
 ): Float32Array {
-    const { terrain, corners } = build;
-    const levels = new Float32Array(fresh.length).fill(Infinity);
+    const { terrain, corners, sizeX, sizeY } = build;
+    const asked = new Float32Array(fresh.length).fill(Infinity);
     for (const river of rivers) {
         setRiverLevels(build, river);
         const [alongCount, acrossCount] = river.vertical
@@ -466,27 +536,11 @@ export function createWaterLevels(
             const last = Math.min(Math.ceil(centre + reach), acrossCount - 1);
             for (let across = first; across <= last; across++) {
                 const i = river.vertical ? across + along * corners.x : along + across * corners.x;
-                levels[i] = Math.min(levels[i], river.levels[along]);
+                asked[i] = Math.min(asked[i], river.levels[along]);
             }
         }
     }
-    // A pool's as high as its lowest shore, or as what runs into it, and it's level all
-    // over: a step in water shows as a dark line across it
-    const forPoolCorners = (pool: Pool, visit: (i: number) => void) => {
-        const reach = pool.radius * 1.5 + 8;
-        const x0 = Math.max(Math.floor(pool.x - reach), 0);
-        const x1 = Math.min(Math.ceil(pool.x + reach), corners.x - 1);
-        const y0 = Math.max(Math.floor(pool.y - reach), 0);
-        const y1 = Math.min(Math.ceil(pool.y + reach), corners.y - 1);
-        for (let cy = y0; cy <= y1; cy++) {
-            for (let cx = x0; cx <= x1; cx++) {
-                const i = cx + cy * corners.x;
-                if (fresh[i] > -8) {
-                    visit(i);
-                }
-            }
-        }
-    };
+    // A pool's as high as its lowest shore
     for (const pool of pools) {
         pool.level = Infinity;
         const reach = pool.radius * 1.5 + 8;
@@ -496,28 +550,123 @@ export function createWaterLevels(
             const y = pool.y + Math.sin(angle) * reach;
             pool.level = Math.min(pool.level, terrain.getHeight(x, y) - WATER_DROP);
         }
-        forPoolCorners(pool, (i) => {
-            pool.level = Math.min(pool.level, levels[i]);
-        });
-        pool.level = Math.max(pool.level, RIVER_BED);
+        pool.level = Math.round(Math.max(pool.level, RIVER_BED));
     }
-    const touches = (pool: Pool, other: Pool) =>
-        Math.hypot(pool.x - other.x, pool.y - other.y) < (pool.radius + other.radius) * 1.5 + 16;
-    for (const pool of pools) {
-        for (const other of pools) {
-            if (touches(pool, other)) {
-                pool.level = Math.min(pool.level, other.level);
+    const tiles = getTouchedTiles(fresh, sizeX, sizeY);
+    const cut = new Uint8Array(tiles.length);
+    const cutDrop = (river: River, drop: RiverDrop, value: number) => {
+        const { x0, y0, x1, y1 } = getDropTiles(build, river, drop);
+        for (let y = Math.max(y0, 0); y <= Math.min(y1, sizeY - 1); y++) {
+            for (let x = Math.max(x0, 0); x <= Math.min(x1, sizeX - 1); x++) {
+                cut[x + y * sizeX] = value;
             }
         }
+    };
+    rivers.forEach((river) => river.drops.forEach((drop) => cutDrop(river, drop, 1)));
+
+    const forCorners = (i: number, visit: (at: number) => void) => {
+        const at = (i % sizeX) + Math.floor(i / sizeX) * corners.x;
+        visit(at);
+        visit(at + 1);
+        visit(at + corners.x);
+        visit(at + corners.x + 1);
+    };
+    // The level a piece of water gets: the least that anything in it asks for
+    const solve = () => {
+        const pieces = findWaterPieces(build, tiles, cut);
+        const wanted = new Map<number, number>();
+        const sources = new Set<number>();
+        const ask = (piece: number, level: number) => {
+            wanted.set(piece, Math.min(wanted.get(piece) ?? Infinity, level));
+        };
+        const lowest = new Map<number, number>();
+        for (let i = 0; i < tiles.length; i++) {
+            const piece = pieces[i];
+            if (piece < 0) {
+                continue;
+            }
+            forCorners(i, (at) => {
+                ask(piece, flood[at] ? RIVER_BED : asked[at]);
+                lowest.set(piece, Math.min(lowest.get(piece) ?? Infinity, terrain.height[at]));
+            });
+            const x = i % sizeX;
+            const y = (i - x) / sizeX;
+            for (const pool of pools) {
+                if (Math.hypot(x + 0.5 - pool.x, y + 0.5 - pool.y) <= pool.radius) {
+                    ask(piece, pool.level);
+                    if (pool.source) {
+                        sources.add(piece);
+                    }
+                }
+            }
+            for (let ny = Math.max(y - 1, 0); ny <= Math.min(y + 1, sizeY - 1); ny++) {
+                for (let nx = Math.max(x - 1, 0); nx <= Math.min(x + 1, sizeX - 1); nx++) {
+                    if (sea?.[nx + ny * sizeX]) {
+                        ask(piece, SEA_BED);
+                    }
+                }
+            }
+        }
+        for (const [piece, level] of wanted) {
+            if (level === Infinity) {
+                wanted.set(piece, Math.max(lowest.get(piece)! - WATER_DROP, RIVER_BED));
+            }
+        }
+        return { pieces, wanted, sources };
+    };
+    // What stands on one side of a drop: the row of tiles next to it, in the river
+    const pieceBy = (river: River, row: number, { pieces }: ReturnType<typeof solve>) => {
+        const across = Math.floor(riverCentre(river, row));
+        const inside = across >= 0 && row >= 0 && row < (river.vertical ? sizeY : sizeX);
+        return inside ? pieces[river.vertical ? across + row * sizeX : row + across * sizeX] : -1;
+    };
+    // Levels can come down to meet a pool until a drop isn't one any more: it goes, and its
+    // two reaches are one, until nothing changes
+    let solved = solve();
+    for (let changed = true; changed; ) {
+        changed = false;
+        for (const river of rivers) {
+            for (const drop of river.drops) {
+                const [before, after] = [drop.row - 1, drop.row + 1].map((row) =>
+                    pieceBy(river, row, solved),
+                );
+                const [lower, upper] = drop.along === drop.row ? [before, after] : [after, before];
+                const gone = lower < 0 || upper < 0 || solved.sources.has(lower);
+                const fall = solved.wanted.get(upper)! - solved.wanted.get(lower)!;
+                if (gone || fall < LEAST_DROP) {
+                    river.drops = river.drops.filter((other) => other !== drop);
+                    cutDrop(river, drop, 0);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        // Cuts can overlap, so put back those still standing
+        rivers.forEach((river) => river.drops.forEach((drop) => cutDrop(river, drop, 1)));
+        if (changed) {
+            solved = solve();
+        }
     }
-    for (const pool of pools) {
-        forPoolCorners(pool, (i) => {
-            levels[i] = pool.level;
-        });
+
+    const levels = new Float32Array(fresh.length).fill(Infinity);
+    for (let i = 0; i < tiles.length; i++) {
+        const piece = solved.pieces[i];
+        if (piece >= 0) {
+            const level = solved.wanted.get(piece)!;
+            forCorners(i, (at) => {
+                levels[at] = Math.min(levels[at], level);
+            });
+        }
     }
-    for (let i = 0; i < levels.length; i++) {
-        if (flood[i]) {
-            levels[i] = RIVER_BED;
+    // What's left of a drop's row, whose corners are its reaches', and what bridges read
+    for (const river of rivers) {
+        const count = river.levels.length;
+        for (let along = 0; along < count; along++) {
+            const centre = Math.round(riverCentre(river, along));
+            const at = river.vertical ? centre + along * corners.x : along + centre * corners.x;
+            if (at >= 0 && at < levels.length && levels[at] !== Infinity) {
+                river.levels[along] = levels[at];
+            }
         }
     }
     spreadNearest(levels, corners.x, corners.y);
@@ -525,8 +674,13 @@ export function createWaterLevels(
 }
 
 // Takes the land down to the fresh water. Tall ground needs a wider valley to get down in,
-// as wide as the setting says.
-export function sinkFresh(build: Build, toFresh: Float32Array, levels: Float32Array): void {
+// as wide as the setting says. toSea leaves the sea's own corners alone.
+export function sinkFresh(
+    build: Build,
+    toFresh: Float32Array,
+    levels: Float32Array,
+    toSea?: Float32Array,
+): void {
     const { terrain, corners, settings } = build;
     const { height } = terrain;
     const slope = lerp(GORGE_SLOPE, VALLEY_SLOPE, settings.riverValley);
@@ -534,7 +688,7 @@ export function sinkFresh(build: Build, toFresh: Float32Array, levels: Float32Ar
         for (let x = 0; x < corners.x; x++) {
             const at = terrain.corner(x, y);
             const level = levels[at];
-            if (level === Infinity) {
+            if (level === Infinity || (toSea && getCornerDistance(build, toSea, x, y) === 0)) {
                 continue;
             }
             const bank = Math.max((height[at] - level) / slope, MIN_BANK);
@@ -544,17 +698,18 @@ export function sinkFresh(build: Build, toFresh: Float32Array, levels: Float32Ar
     }
 }
 
-// The corners of water tiles: nothing moves them from here on
+// The corners of water tiles: nothing moves them from here on, and nothing can pin them. The
+// ground meets the water, never the other way round: a corner of water that moves tilts its tile.
 export function holdWater(build: Build, tiles: Uint8Array): void {
-    const { sizeX, sizeY, corners, heldCorners } = build;
+    const { sizeX, sizeY, corners, heldCorners, terrain } = build;
     for (let y = 0; y < sizeY; y++) {
         for (let x = 0; x < sizeX; x++) {
             if (tiles[x + y * sizeX]) {
                 const at = x + y * corners.x;
-                heldCorners[at] = 1;
-                heldCorners[at + 1] = 1;
-                heldCorners[at + corners.x] = 1;
-                heldCorners[at + corners.x + 1] = 1;
+                for (const corner of [at, at + 1, at + corners.x, at + corners.x + 1]) {
+                    heldCorners[corner] = 1;
+                    terrain.lock(corner);
+                }
             }
         }
     }

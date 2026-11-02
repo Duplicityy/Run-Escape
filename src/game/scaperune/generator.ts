@@ -1,9 +1,16 @@
 import { Ground } from "./Ground";
 import { BIOMES, BiomeDef } from "./biomes";
 import { TileRect, blockTile, findReachable, findStranded, getCollisionFlags } from "./collision";
-import { placeFallPools, placeFalls } from "./falls";
+import { dressGround } from "./dress";
+import { getFallDrop, placeFallPools, placeFalls } from "./falls";
 import { MAP_SQUARE_SIZE, TILE_BLOCKED, TileGrid } from "./format";
-import { LandformBounds, createRelief, getHillBoundaryRise, shapeCliffs } from "./landforms";
+import {
+    LandformBounds,
+    createRelief,
+    flattenLand,
+    getHillBoundaryRise,
+    shapeCliffs,
+} from "./landforms";
 import {
     Build,
     LOC_FLOOR_DECORATION,
@@ -27,8 +34,11 @@ import {
 import {
     blockSteepGround,
     cutPasses,
+    dressCliffs,
     finishHeights,
     getSnowLine,
+    keepOffLava,
+    levelLava,
     paintLava,
     paintRock,
     placeCaves,
@@ -37,11 +47,13 @@ import { createNoise, createRng, distanceTo } from "./noise";
 import { PathFinder, Point, addPathToField, smoothPath } from "./paths";
 import { PrefabKit } from "./prefabs";
 import { BuildContext, MapRecipe } from "./recipe";
+import { RESERVE_WALL } from "./reservations";
 import {
     MAX_BANK,
     createRivers,
     createWaterFields,
     createWaterLevels,
+    getWaterDrops,
     holdWater,
     placeWaterfalls,
     riverCentre,
@@ -56,21 +68,23 @@ import {
     ROAD_STEEPEST,
     RoadNetwork,
     RoadStart,
+    getMainRoadLine,
     layMainRoads,
     placeBridges,
 } from "./roads";
 import { DEFAULT_SETTINGS, GeneratorSettings, getSettingsError } from "./settings";
-import { PlacedBuilding, placeBuildings, placeRuins } from "./settlements";
+import { PlacedBuilding, PlacedFence, placeBuildings, placeRuins, planTowns } from "./settlements";
 import {
+    PAVING,
     PlacedPiece,
-    chooseWalledTowns,
-    getPaving,
     placeSetPieces,
-    placeTownWalls,
     placeWaterPieces,
     placeWaymarkers,
 } from "./structures";
-import { limitSlope } from "./terrain";
+import { limitFaces } from "./terrain";
+import { connectTown, createPace, createTownFade, getTownPaving } from "./townPlan";
+import { WalledTown, getPaving, placeTownWalls } from "./townWalls";
+import { placeVignettes } from "./vignettes";
 
 export * from "./settings";
 
@@ -106,7 +120,21 @@ const PROP_CHANCE = 0.006;
 
 const BIOME_FRAY = 0.16;
 
+// Dressing runs last, on a seed of its own, so that it moves nothing else
+const DRESS_SEED = 300;
+
+// Where hills meet the arena's edge: chances a tile gets a heap of rock, or a heap or a stone
+const HILL_RUBBLE = 0.14;
+
+const HILL_STONES = 0.34;
+
 export type { RoadLine };
+
+// A field of crops: level ground, unless a recipe says it's meant to slope
+export type PlacedField = TileRect & { slopes?: boolean };
+
+// A road that's shut on purpose, on these tiles, and what shows it in the world
+export type ClosedRoad = TileRect & { shownBy: "gate" | "rubble" | "broken end" };
 
 // A map, and what check-maps.ts needs to hold it to the rules
 export type GeneratedMap = {
@@ -125,6 +153,21 @@ export type GeneratedMap = {
     falls: Point[];
     // Rivers' own
     waterfalls: Point[];
+    // The tiles of water that drop at a fall, which are the only ones that can tilt
+    waterDrops?: TileRect[];
+    fields?: PlacedField[];
+    closedRoads?: ClosedRoad[];
+    // Towns' squares: paved, with things standing on them on purpose
+    squares?: TileRect[];
+    // Only the generator's towns: a hand-made map's own wall is its own business
+    walled?: WalledTown[];
+    // Fences that are part of a building's plot or a piece
+    fences?: PlacedFence[];
+    // Tiles of buildings a road wanted, which painting stopped it at
+    clippedRoads?: Uint8Array;
+    // Rectangles of tiles a recipe says are designed that way: check-maps.ts lets clashes on these
+    // go. Nothing generated has any.
+    designed?: TileRect[];
 };
 
 export function getGeneratedSize(settings: Pick<GeneratorSettings, "squaresX" | "squaresY">): {
@@ -229,8 +272,16 @@ function scatter(build: Build, water: Uint8Array): void {
     const clumpLine = lerp(0.5, 0.56, settings.treeClumping);
     const inClump = lerp(0.1, 0.4, settings.treeClumping);
     const outOfClump = lerp(0.1, 0, settings.treeClumping);
+    const townFade = createTownFade(build);
+    const paceAt = createPace(build);
     const place = (id: number, size: number, type: number, x: number, y: number) => {
-        ground.place({ id, type, rotation: Math.floor(rng() * 4), level: 0, x, y }, size, size);
+        // A list's size for a loc isn't always all of it
+        const { sizeX: across, sizeY: deep } = build.context.locs(id);
+        const whole = Math.max(size, across, deep);
+        const rotation = Math.floor(rng() * 4);
+        if (whole === size || ground.isClear(x, y, whole, whole)) {
+            ground.place({ id, type, rotation, level: 0, x, y }, whole, whole);
+        }
     };
     // Past the arena there's only anything to see on land, and then it goes on
     const reach = settings.boundary === "sea" ? 24 : MARGIN * MAP_SQUARE_SIZE;
@@ -280,16 +331,30 @@ function scatter(build: Build, water: Uint8Array): void {
                     continue;
                 }
             }
-            // Nothing grows on the snow
+            // Nothing grows on the snow, and trees take over from a town's buildings
             const bare = terrain.height[terrain.corner(x, y)] > snowLine ? 0 : 1 - rocky;
-            const treeChance = (inBelt ? 0.5 : settings.trees * density) * bare;
-            const rockChance = settings.rocks * (clump < 0.44 ? 0.025 : 0.006);
-            const propChance = settings.props * PROP_CHANCE * bare;
+            const fade = townFade(x, y);
+            const pace = inBelt ? 1 : paceAt(x, y);
+            const treeChance = (inBelt ? 0.5 : settings.trees * density * pace) * bare * fade;
+            const rockChance = settings.rocks * (clump < 0.44 ? 0.025 : 0.006) * fade * pace;
+            const propChance = settings.props * PROP_CHANCE * bare * fade * pace;
             if (stones && edge + hillWander(x / 14, y / 14) * 8 < 5 && edge > -6) {
-                // Boulders piled along the edge, where the ground gets too steep, in a line
+                // Rock heaped along the edge, where the ground gets too steep, in a line
                 // that wanders so that it doesn't show the arena's edge
-                if (roll < 0.34 && ground.isClear(x, y, 1, 1)) {
-                    place(pick(rng, biome.rock.boulders), 1, LOC_NORMAL, x, y);
+                if (roll < HILL_RUBBLE) {
+                    const [id, size] = pick(rng, biome.rock.rubble);
+                    if (ground.isClear(x, y, size, size)) {
+                        place(id, size, LOC_NORMAL, x, y);
+                    }
+                } else if (roll < HILL_STONES && ground.isClear(x, y, 1, 1)) {
+                    ground.grid.locs.push({
+                        id: pick(rng, biome.rock.stones),
+                        type: LOC_FLOOR_DECORATION,
+                        rotation: Math.floor(rng() * 4),
+                        level: 0,
+                        x,
+                        y,
+                    });
                 }
                 continue;
             }
@@ -325,7 +390,7 @@ function scatter(build: Build, water: Uint8Array): void {
                     });
                 }
             } else if (
-                rng() < settings.flowers * 0.4 * bare &&
+                rng() < settings.flowers * 0.4 * bare * pace &&
                 flowerPatches(x / 9, y / 9) > 0.55 &&
                 ground.isClear(x, y, 1, 1)
             ) {
@@ -411,7 +476,8 @@ function layFord(build: Build, path: number[], water: WaterPaint): void {
         }
     }
     ground.clearOverlay(water.tiles);
-    water.tiles = ground.paintField(water.field, getWaterOverlay(build, water.tiles), true);
+    const overlay = getWaterOverlay(build, water.tiles);
+    water.tiles = ground.paintField(water.field, overlay, true, water.dry);
     blockSteepGround(build);
     ground.grid.locs = ground.grid.locs.filter(
         (loc) =>
@@ -508,6 +574,7 @@ function createBuild(settings: GeneratorSettings, context: BuildContext): Build 
         terrain: relief.terrain,
         cliffs: new Uint8Array(sizeX * sizeY),
         heldCorners: new Uint8Array(corners.x * corners.y),
+        faces: new Uint8Array(sizeX * sizeY),
         heldForNow: [],
         mainland: new Uint8Array(sizeX * sizeY).fill(1),
         tileHeights: new Float32Array(sizeX * sizeY),
@@ -533,29 +600,46 @@ export function generateMapDetail(
     const toSea = distanceTo(seaTiles, sizeX, sizeY, 8);
     const toFresh = distanceTo(freshTiles, sizeX, sizeY, MAX_BANK);
     sinkSea(build, toSea);
-    const levels = createWaterLevels(build, rivers, fields.pools, fields.fresh, fields.flood);
-    sinkFresh(build, toFresh, levels);
+    const levels = createWaterLevels(
+        build,
+        rivers,
+        fields.pools,
+        fields.fresh,
+        fields.flood,
+        seaTiles,
+    );
+    sinkFresh(build, toFresh, levels, toSea);
 
     const waterField = fields.sea.map((value, i) => Math.max(value, fields.fresh[i]));
     const waterTiles = paintWater(build, waterField);
-    const water: WaterPaint = { field: waterField, tiles: waterTiles };
-    holdWater(build, seaTiles);
-    holdWater(build, freshTiles);
+    const dry = new Uint8Array(waterTiles.length);
+    const water: WaterPaint = { field: waterField, tiles: waterTiles, dry };
+    holdWater(build, waterTiles);
 
     if (hasRelief(settings)) {
         build.cliffs.set(shapeCliffs(terrain, settings.walkSlope));
     } else {
-        limitSlope(terrain.height, corners.x, corners.y, settings.walkSlope * 0.92);
+        const slope = settings.walkSlope * 0.92;
+        limitFaces(terrain.height, corners.x, corners.y, slope, build.heldCorners);
     }
     const passes = cutPasses(build);
     refreshTileHeights(build);
     paintFloors(build, toSea);
 
     const bridgeZone = new Uint8Array(waterTiles.length);
-    const roads = new RoadNetwork(build, waterTiles, bridgeZone);
+    const roads = new RoadNetwork(build, waterTiles, bridgeZone, dry);
+    keepOffLava(build, roads.avoid);
     // With no roads to meet them, rivers are crossed by fords
     const bridgeStarts =
-        settings.roads > 0 ? placeBridges(build, rivers, waterTiles, bridgeZone) : [];
+        settings.roads > 0
+            ? placeBridges(build, rivers, waterTiles, bridgeZone, dry, roads.avoid)
+            : [];
+    // The flow every place goes through: see the guide. Site, walls and gates, main streets and
+    // square, in planTowns. The roads between places come next, because gates are where they
+    // arrive. Then plots, lanes, set pieces, and at the end of all this foliage and details.
+    roads.plannedLine = getMainRoadLine(build);
+    roads.arrivalPoints.push(...bridgeStarts.map(({ from }) => from));
+    const plans = planTowns(build, roads, waterTiles);
     if (settings.roads > 0) {
         layMainRoads(build, roads, bridgeZone);
         const byDistance = (a: RoadStart, b: RoadStart) =>
@@ -564,45 +648,76 @@ export function generateMapDetail(
         for (const { from, lead, height } of bridgeStarts.sort(byDistance)) {
             roads.lay(from, lead, roads.findRoute(from, lead), BRIDGE_ROAD_HALF_WIDTH, height);
         }
+        plans.plans.forEach((plan) => connectTown(build, roads, plan));
+        roads.finishCuts();
     }
-    const buildings = placeBuildings(build, roads, waterTiles);
+    const buildings = placeBuildings(build, roads, waterTiles, plans);
+    placeVignettes(build, buildings);
     const landmarks = placeSetPieces(build, roads, waterTiles);
     placeRuins(build, roads, waterTiles);
     const falls = placeFallPools(build, water);
-    const walled = chooseWalledTowns(build, buildings, roads);
+    levelLava(build);
+    const walled = plans.plans.flatMap(({ wall }) => (wall ? [wall] : []));
     const steepest = settings.walkSlope * ROAD_STEEPEST;
     gradeRoads(terrain, [...roads.lines, ...passes], build.plots, ROAD_SHOULDER, steepest);
+    roads.pinTiles(passes);
     terrain.smoothPins(ROAD_SMOOTHING);
+    // After the roads are graded, so that they don't have levels to fight, and settling then
+    // brings the ground to them
+    flattenLand(terrain, build.cliffs, build.heldCorners, settings.flatness, settings.walkSlope);
     finishHeights(build);
+    roads.easeTiles(passes);
     blockSteepGround(build);
 
-    const paving = (x: number, y: number) => getPaving(walled, x, y);
+    const paving = (x: number, y: number) =>
+        getTownPaving(build, x, y) || getPaving(walled, x, y)
+            ? (biomeAt(x, y).paving ?? PAVING)
+            : undefined;
     const roadTiles = settings.roads > 0 ? roads.paint(paving) : new Uint8Array(waterTiles.length);
     const rockSkip = new Uint8Array(waterTiles.length);
     for (let i = 0; i < rockSkip.length; i++) {
         rockSkip[i] = waterTiles[i] | roadTiles[i] | ground.footprint[i] | bridgeZone[i];
     }
-    const caves = placeCaves(build, paintRock(build, rockSkip));
+    const rock = paintRock(build, rockSkip);
+    const caves = placeCaves(build, rock);
     paintLava(build);
     placeWaterfalls(build, rivers);
     placeFalls(build, falls);
+    dressCliffs(build, rock, rockSkip, falls);
     placeBoundary(build, roadTiles);
-    placeTownWalls(build, walled, roadTiles);
+    placeTownWalls(build, walled);
     placeWaymarkers(build, roads);
-    landmarks.push(...placeWaterPieces(build, waterTiles));
+    landmarks.push(...placeWaterPieces(build, waterTiles, bridgeZone));
     scatter(build, waterTiles);
     const fords = connectGround(build, water, roads.offLimits);
+    dressGround(ground, {
+        seed: settings.seed + DRESS_SEED,
+        density: settings.dressing,
+        biomeDecor: (x, y) => biomeAt(x, y).decor,
+    });
+    // What's meant to stand on a road: a gate's own parts, and what's in a square
+    roads.clearLocs(roadTiles, (x, y) => {
+        const onSquare = roads.squares.some(
+            (rect) => x >= rect.x0 && x <= rect.x1 && y >= rect.y0 && y <= rect.y1,
+        );
+        return onSquare || ground.claims.ranks[ground.tile(x, y)] === RESERVE_WALL;
+    });
     return {
         grid: ground.grid,
         footprint: ground.footprint,
         roadTiles,
         lines: [...roads.lines, ...fords],
+        squares: roads.squares,
         buildings,
         landmarks,
         passes,
         walkSlope: settings.walkSlope,
         caves,
         falls,
+        walled,
+        fences: build.fences,
+        clippedRoads: roads.clipped,
+        waterDrops: [...getWaterDrops(build, rivers), ...falls.map((fall) => getFallDrop(fall))],
         waterfalls: rivers.flatMap((river) =>
             river.drops.map(({ along }) => {
                 const across = riverCentre(river, along);

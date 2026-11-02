@@ -508,7 +508,11 @@ scripts/scaperune/find-prefabs.ts 50 50  a map square as text, to pick prefabs a
 scripts/scaperune/preview.ts out.png seed=7 biome=snow    a ScapeRune map from above, and its reachability
 scripts/scaperune/relief.ts out.png preset=Alpine        a generated map's height, in seconds, without the cache
 scripts/scaperune/check-maps.ts          generated maps: every open tile reaches the spawn, roads off bridges, slopes,
-                                         road grades, plots, what the camera can see (ONLY=regex for some of them)
+                                         road grades, plots, what the camera can see, banned locs, clashes with a
+                                         town's walls, gates, roads and fences, and how a map looks against the real
+                                         world's numbers (ONLY=regex for some of them)
+scripts/scaperune/grid-hash.ts halloween a hash of what a recipe writes, to prove a shipped map hasn't moved
+scripts/scaperune/research/              measures real places and made maps the same way
 scripts/scaperune/check-prefabs.ts       every prefab, in every rotation: its whole floor, a way out
 scripts/scaperune/check-palette.ts       the palette map reads all that generated maps read
 scripts/game/simulate-run.ts [character] [seeds]        a bot plays full runs, for balancing

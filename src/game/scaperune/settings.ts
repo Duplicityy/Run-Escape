@@ -1,4 +1,5 @@
 import { BIOMES, BiomeId } from "./biomes";
+import { CITY_WALL_IDS, CityWallId } from "./cityWalls";
 import type { Rng } from "./noise";
 
 // Everything the generator can be told, in one place: the map generator's screen,
@@ -57,11 +58,13 @@ export type GeneratorSettings = {
     warp: number;
     // 0 is an even climb; 1 is ledges with cliffs between
     terraces: number;
+    // How much of open ground lies flat on levels, with the height in short ramps between them
+    flatness: number;
     // How tall a ledge's cliff is, in height units
     terraceHeight: number;
     // The steepest ground you can walk on, in height units a tile. 16 is 45 degrees.
     walkSlope: number;
-    // How many boulders stand along the edges of cliffs
+    // How much of the rock on cliffs gets heaps and facets
     rockFaces: number;
     // Rock lying about on the mountains
     rubble: number;
@@ -102,6 +105,8 @@ export type GeneratorSettings = {
     rocks: number;
     rockMix: number;
     grass: number;
+    // How much of the small things real ground has on it, by floor, on all the land
+    dressing: number;
     flowers: number;
     // Big things that stand about: a biome's own boulders, plants and bones
     props: number;
@@ -116,9 +121,13 @@ export type GeneratorSettings = {
     // Settlements
     buildings: number;
     // How many places buildings gather; 0 spreads them all over
+    // How much a map gathers into places about 50 tiles apart, with quiet land between
+    sites: number;
     towns: number;
     // Tiles from a town's middle to its edge
     townSize: number;
+    // How close together a town's side streets run: 0 has none, and past 0.6 they've lanes too
+    sideStreets: number;
     houses: boolean;
     shops: boolean;
     churches: boolean;
@@ -131,6 +140,8 @@ export type GeneratorSettings = {
     landmarks: number;
     // Share of towns with a wall round them
     townWalls: number;
+    // Which real city's wall they have. On auto, one that suits a town's buildings or biome.
+    wallKit: "auto" | CityWallId;
     // Old stones along the roads: 1 is one every 16 tiles
     waymarkers: number;
 
@@ -209,6 +220,7 @@ export const SETTINGS: Record<SettingKey, SettingDef> = {
     boundaryDepth: number("Boundary depth", 2, 32, 1, { when: notSea }),
     shoreRoughness: share("Shore roughness"),
 
+    flatness: share("Flat land"),
     hills: share("Hills"),
     hillScale: number("Hill spacing", 10, 80, 2),
     waterLevel: share("Water level"),
@@ -224,7 +236,7 @@ export const SETTINGS: Record<SettingKey, SettingDef> = {
         when: (s) => hasMountains(s) && s.terraces > 0,
     }),
     walkSlope: number("Steepest walkable slope", 8, 16, 1),
-    rockFaces: share("Boulders on cliffs", { when: hasRock }),
+    rockFaces: share("Rock on cliffs", { when: hasRock }),
     rubble: share("Rubble", { when: hasRock }),
     snow: share("Snow", { when: hasRock }),
     passWidth: number("Pass width", 3, 12, 1, { when: hasRock }),
@@ -250,6 +262,7 @@ export const SETTINGS: Record<SettingKey, SettingDef> = {
     rocks: share("Rocks"),
     rockMix: share("Rock size", { when: (s) => s.rocks > 0 }),
     grass: share("Grass"),
+    dressing: share("Ground dressing"),
     flowers: share("Flowers"),
     props: share("Big scenery"),
 
@@ -259,6 +272,7 @@ export const SETTINGS: Record<SettingKey, SettingDef> = {
     roadCurviness: share("Road curviness", { when: hasRoads }),
 
     buildings: share("Buildings"),
+    sites: share("Gathered places"),
     towns: number("Towns", 0, 8, 1, { when: hasBuildings }),
     townSize: number("Town size", 10, 60, 2, { when: (s) => s.buildings > 0 && s.towns > 0 }),
     houses: flag("Houses", { when: hasBuildings }),
@@ -286,6 +300,11 @@ export const SETTINGS: Record<SettingKey, SettingDef> = {
     ]),
     enemyDensity: number("Enemy density", 0.25, 3, 0.25),
     brightness: number("Brightness", 0.5, 1.2, 0.05),
+    // Last, so that Randomize's rolls for the rest stay as they were. The screen goes by SECTIONS.
+    wallKit: choice("Wall from", ["auto", ...CITY_WALL_IDS], {
+        when: (s) => s.towns > 0 && s.buildings > 0 && s.townWalls > 0,
+    }),
+    sideStreets: share("Side streets", { when: (s) => s.towns > 0 && s.roads > 0 }),
 };
 
 // In the order the screen shows them
@@ -304,7 +323,10 @@ export const SETTING_SECTIONS: { name: string; keys: SettingKey[] }[] = [
             "shoreRoughness",
         ],
     },
-    { name: "Terrain", keys: ["hills", "hillScale", "waterLevel", "groundPatches", "walkSlope"] },
+    {
+        name: "Terrain",
+        keys: ["hills", "hillScale", "flatness", "waterLevel", "groundPatches", "walkSlope"],
+    },
     {
         name: "Mountains",
         keys: [
@@ -334,15 +356,27 @@ export const SETTING_SECTIONS: { name: string; keys: SettingKey[] }[] = [
     },
     {
         name: "Scenery",
-        keys: ["trees", "treeClumping", "treeMix", "rocks", "rockMix", "grass", "flowers", "props"],
+        keys: [
+            "trees",
+            "treeClumping",
+            "treeMix",
+            "rocks",
+            "rockMix",
+            "grass",
+            "dressing",
+            "flowers",
+            "props",
+        ],
     },
     { name: "Roads", keys: ["roads", "roadStyle", "roadWidth", "roadCurviness"] },
     {
         name: "Settlements",
         keys: [
             "buildings",
+            "sites",
             "towns",
             "townSize",
+            "sideStreets",
             "houses",
             "shops",
             "churches",
@@ -351,6 +385,7 @@ export const SETTING_SECTIONS: { name: string; keys: SettingKey[] }[] = [
             "ruins",
             "landmarks",
             "townWalls",
+            "wallKit",
             "waymarkers",
         ],
     },
@@ -378,7 +413,8 @@ export const DEFAULT_SETTINGS: Omit<GeneratorSettings, "seed"> = {
     ridgeScale: 44,
     ruggedness: 0.5,
     warp: 0.5,
-    terraces: 0.5,
+    terraces: 0.75,
+    flatness: 0.75,
     terraceHeight: 30,
     walkSlope: 12,
     rockFaces: 1,
@@ -407,6 +443,7 @@ export const DEFAULT_SETTINGS: Omit<GeneratorSettings, "seed"> = {
     rocks: 0.4,
     rockMix: 0.5,
     grass: 0.5,
+    dressing: 1,
     flowers: 0.2,
     props: 0.4,
 
@@ -416,8 +453,10 @@ export const DEFAULT_SETTINGS: Omit<GeneratorSettings, "seed"> = {
     roadCurviness: 0.4,
 
     buildings: 0.5,
+    sites: 1,
     towns: 0,
     townSize: 30,
+    sideStreets: 0.5,
     houses: true,
     shops: true,
     churches: true,
@@ -426,6 +465,7 @@ export const DEFAULT_SETTINGS: Omit<GeneratorSettings, "seed"> = {
     ruins: 0,
     landmarks: 0.3,
     townWalls: 0,
+    wallKit: "auto",
     waymarkers: 0,
 
     spawnX: 0.5,
@@ -564,6 +604,7 @@ export const SETTING_PRESETS: Record<string, Partial<GeneratorSettings>> = {
         buildings: 1,
         towns: 2,
         townSize: 34,
+        sideStreets: 0.8,
         townWalls: 1,
         waymarkers: 0.6,
         roads: 1,
@@ -581,6 +622,8 @@ export const SETTING_PRESETS: Record<string, Partial<GeneratorSettings>> = {
         towns: 1,
         townSize: 52,
         townWalls: 1,
+        wallKit: "falador",
+        sideStreets: 0.8,
         buildings: 0.8,
         roads: 1,
         waymarkers: 0.5,
@@ -734,6 +777,10 @@ export const SETTING_PRESETS: Record<string, Partial<GeneratorSettings>> = {
 // uploaded image, and how a run plays rather than how the map looks
 const KEPT_BY_RANDOM: readonly SettingKey[] = [
     "squaresX",
+    "dressing",
+    "flatness",
+    "sites",
+    "sideStreets",
     "squaresY",
     "heightmap",
     "spawnX",

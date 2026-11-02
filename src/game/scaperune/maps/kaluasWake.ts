@@ -1,7 +1,8 @@
 import { Ground } from "../Ground";
-import { BIOMES, BiomeDef, WATERFALL } from "../biomes";
+import { BIOMES, BiomeDef } from "../biomes";
 import { blockTile, findReachable, findStranded, getCollisionFlags } from "../collision";
-import { placeFallPools, placeFalls } from "../falls";
+import { dressGround } from "../dress";
+import { getFallDrop, placeFallPools, placeFalls } from "../falls";
 import { TILE_BLOCKED } from "../format";
 import { DEFAULT_SETTINGS, GeneratedMap, GeneratorSettings } from "../generator";
 import { Relief, shapeCliffs } from "../landforms";
@@ -21,7 +22,14 @@ import {
     refreshTileHeights,
     smoothstep,
 } from "../mapBuild";
-import { blockSteepGround, cutPasses, finishHeights, paintRock, placeCaves } from "../mountains";
+import {
+    blockSteepGround,
+    cutPasses,
+    dressCliffs,
+    finishHeights,
+    paintRock,
+    placeCaves,
+} from "../mountains";
 import { createNoise, createRng, distanceTo, smoothField } from "../noise";
 import { PathFinder, Point, smoothPath } from "../paths";
 import { PrefabDef, PrefabKit, isDoor, loadPrefab } from "../prefabs";
@@ -32,6 +40,7 @@ import {
     River,
     SEA_BED,
     createWaterLevels,
+    getWaterDrops,
     holdWater,
     riverCentre,
     riverHalfWidth,
@@ -81,7 +90,8 @@ const SETTINGS: GeneratorSettings = {
     boundary: "sea",
     // Says there's relief: the volcano's made here, not by the setting
     volcanoes: 1,
-    waterfalls: 0,
+    // Every fall the lava has comes down at a drop: it lies flat between them, as water does
+    waterfalls: 1,
     roadWidth: 2.4,
     roadCurviness: 0.15,
     rockFaces: 1,
@@ -126,7 +136,7 @@ const JUNGLE: BiomeDef = {
         [57569, 1],
     ],
     // The volcano's rock comes down through the jungle
-    rock: { ...BIOMES.jungle.rock, overlay: 32 },
+    rock: { ...BIOMES.jungle.rock, overlay: 99 },
 };
 
 const TROPICAL: BiomeDef = {
@@ -147,8 +157,8 @@ const SCORCHED: BiomeDef = {
         [20234, 2],
         [49388, 2],
         [20232, 1],
-        [60436, 1],
-        [60440, 2],
+        [14461, 2],
+        [11933, 2],
     ],
     rock: { ...BIOMES.ash.rock, ground: 155 },
 };
@@ -274,12 +284,14 @@ const DECK_THINGS: [number, number, number, number, number][] = [
 
 const BEACH_DECOR = [57982, 57983, 30797, 729, 3171, 51810, 51811];
 
-const SURF_SPACING = 4;
+const SURF_SPACING = 16;
+
+const SEAWEED = [30537, 30538, 30542];
 
 const MAX_STRANDED = 500;
 
 // Thick jungle, under the trees
-const UNDERGROWTH = [9010, 9015, 1204, 4825, 4829, 1398, 1390];
+const UNDERGROWTH = [9010, 9015, 1204, 4825, 1398, 1390];
 
 const CORAL = [12498, 12507, 12529, 12509, 12518, 12487];
 
@@ -520,6 +532,7 @@ function createBuild(context: BuildContext, shape: Shape): Build {
         terrain,
         cliffs: new Uint8Array(SIZE_X * SIZE_Y),
         heldCorners: new Uint8Array(corners.x * corners.y),
+        faces: new Uint8Array(SIZE_X * SIZE_Y),
         heldForNow: [],
         mainland: new Uint8Array(SIZE_X * SIZE_Y).fill(1),
         tileHeights: new Float32Array(SIZE_X * SIZE_Y),
@@ -1203,15 +1216,9 @@ function placeSea(build: Build, water: Uint8Array): PlacedPiece[] {
     return placed;
 }
 
-// Foam along the beaches, in lengths of 3 tiles where the shore runs straight enough
+// Seaweed washed up along the beaches, a tile at a time. Foam is for the foot of a fall.
 function placeSurf(build: Build, water: Uint8Array, shape: Shape, zone: Uint8Array): void {
     const { ground, biomeAt } = build;
-    // A length of foam blocks all its tiles, and one by a bridge could shut its deck
-    const isWater = (x: number, y: number) =>
-        water[ground.tile(x, y)] !== 0 && !zone[ground.tile(x, y)];
-    const addSurf = (rotation: number, x: number, y: number) => {
-        ground.grid.locs.push({ id: WATERFALL, type: LOC_NORMAL, rotation, level: 0, x, y });
-    };
     for (let y = CHART - 8; y < SIZE_Y - CHART + 8; y++) {
         for (let x = CHART - 8; x < SIZE_X - CHART + 8; x++) {
             const i = ground.tile(x, y);
@@ -1220,25 +1227,13 @@ function placeSurf(build: Build, water: Uint8Array, shape: Shape, zone: Uint8Arr
             }
             // Not in among the stilts
             const inBay = x - CHART < 60 && y - CHART > 22 && y - CHART < 74 && x - CHART > 20;
-            if (shape.toSea[i] !== 0 || inBay) {
+            if (shape.toSea[i] !== 0 || inBay || !water[i] || zone[i]) {
                 continue;
             }
-            const along = (dx: number, dy: number, from: number) =>
-                [0, 1, 2].every((at) =>
-                    from === 0
-                        ? isWater(x + dx * at, y + dy * at)
-                        : !isWater(x + dx * at + dy * from, y + dy * at + dx * from),
-                );
-            const wet = (dx: number, dy: number) => along(dx, dy, 0);
-            const spot = x * 5 + y * 3;
-            if (spot % SURF_SPACING === 0 && wet(1, 0) && (along(1, 0, 2) || along(1, 0, -2))) {
-                addSurf(0, x, y);
-            } else if (
-                spot % SURF_SPACING === 1 &&
-                wet(0, 1) &&
-                (along(0, 1, 2) || along(0, 1, -2))
-            ) {
-                addSurf(1, x, y);
+            if ((x * 5 + y * 3) % SURF_SPACING === 0) {
+                const id = SEAWEED[(x + y) % SEAWEED.length];
+                const rotation = (x * 3 + y) & 3;
+                ground.grid.locs.push({ id, type: LOC_NORMAL, rotation, level: 0, x, y });
             }
         }
     }
@@ -1336,7 +1331,9 @@ function paintThinRock(build: Build, rock: Uint8Array, skip: Uint8Array): void {
         }
     }
     const smooth = smoothField(field, corners.x, corners.y, 1);
-    ground.paintField(smooth, (x, y) => biomeAt(x, y).rock.overlay, false, skip);
+    // Only on rock's own tiles: the ground beside a cliff stays plain ground
+    const offRock = skip.map((skipped, i) => (skipped || !rock[i] ? 1 : 0));
+    ground.paintField(smooth, (x, y) => biomeAt(x, y).rock.overlay, false, offRock);
 }
 
 // Anything that can't be walked to is shut off, so nobody stands at it from the far side
@@ -1370,7 +1367,7 @@ function createLavaField(lava: River): { field: Float32Array; pools: Pool[] } {
         }
     }
     const pools: Pool[] = [
-        { x: KALUA.x, y: KALUA.y, radius: RIM_RADIUS - 6, level: 0 },
+        { x: KALUA.x, y: KALUA.y, radius: RIM_RADIUS - 6, level: 0, source: true },
         ...LAVA_PONDS.map(([x, y, radius]) => ({
             x: x + CHART,
             y: y + CHART,
@@ -1415,9 +1412,9 @@ function buildMap(context: BuildContext): GeneratedMap {
     shapeLand(build, shape);
 
     const flood = new Uint8Array(corners.x * corners.y);
-    const levels = createWaterLevels(build, [lava], pools, smoothFresh, flood);
+    const levels = createWaterLevels(build, [lava], pools, smoothFresh, flood, seaTiles);
     const freshTiles = getTouchedTiles(smoothFresh, SIZE_X, SIZE_Y);
-    sinkFresh(build, distanceTo(freshTiles, SIZE_X, SIZE_Y, MAX_BANK), levels);
+    sinkFresh(build, distanceTo(freshTiles, SIZE_X, SIZE_Y, MAX_BANK), levels, shape.toSea);
 
     const waterTiles = ground.paintField(sea, SEA_OVERLAY, true, notSea);
     ground.paintField(smoothFresh, LAVA_OVERLAY, true).forEach((tile, i) => {
@@ -1454,6 +1451,7 @@ function buildMap(context: BuildContext): GeneratedMap {
 
     const steepest = SETTINGS.walkSlope * ROAD_STEEPEST;
     gradeRoads(terrain, [...roads.lines, ...passes], build.plots, ROAD_SHOULDER, steepest);
+    roads.pinTiles(passes);
     terrain.smoothPins(ROAD_SMOOTHING);
     finishHeights(build);
     blockSteepGround(build);
@@ -1489,12 +1487,22 @@ function buildMap(context: BuildContext): GeneratedMap {
     landmarks.push(...placeSea(build, waterTiles));
     placeSurf(build, waterTiles, shape, bridgeZone);
     scatter(build, waterTiles, shape);
+    dressCliffs(build, rock, rockSkip, falls);
     shutOffStranded(build);
+    dressGround(ground, {
+        seed: SEED + 300,
+        density: SETTINGS.dressing,
+        biomeDecor: (x, y) => build.biomeAt(x, y).decor,
+    });
 
+    roads.clearLocs(roadTiles);
     return {
         grid: ground.grid,
         footprint: ground.footprint,
         roadTiles,
+        clippedRoads: roads.clipped,
+        // The road up from the landing clips the corner of this hut: a tile, and it reads as meant
+        designed: [{ x0: 192, y0: 137, x1: 192, y1: 137 }],
         lines: roads.lines,
         buildings,
         landmarks,
@@ -1502,7 +1510,8 @@ function buildMap(context: BuildContext): GeneratedMap {
         walkSlope: SETTINGS.walkSlope,
         caves,
         falls,
-        waterfalls: [],
+        waterDrops: [...getWaterDrops(build, [lava]), ...falls.map((fall) => getFallDrop(fall))],
+        waterfalls: lava.drops.map(({ along }) => ({ x: riverCentre(lava, along), y: along })),
     };
 }
 
