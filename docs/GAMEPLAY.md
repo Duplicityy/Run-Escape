@@ -236,7 +236,8 @@ version and how to run it.
   walking up to them sets off what they came for.
     - **Mysterious Old Man** (the likeliest): sells three power-ups, with the run paused while you
       choose. Prices go up by a tenth of the base price for each minute of the run, and with the
-      map's coins. Buying one doesn't delay the next drop.
+      map's coins. Buying one doesn't delay the next drop. In co-op, now and then one of the three
+      is an extra revive instead.
     - **Quiz Master**: three items that go together and one that doesn't, with the run paused. The
       odd one out wins a random power-up.
     - **Genie**: three quarters of a level's experience.
@@ -373,7 +374,8 @@ version and how to run it.
   brew heals a lot and toughens you but weakens your hits; a Zamorak brew is the other way
   round), antidotes (Antidote++ and Sanfew serum cure poison and boss drains and curses, and
   keep them off for a while), a Bonecrusher that pulls in every bone on the ground, chinchompas that blow up
-  everything around you, an Antique lamp worth a level. Copies stack.
+  everything around you, an Antique lamp worth a level. Copies stack. In co-op a rare casket can
+  hold a Prayer cape, an extra revive that's yours the moment you take it.
 - Coins and the odd cooked chicken drop too.
 - Enemies get tougher as the run goes on, gently at first and faster after the first few
   minutes.
@@ -451,11 +453,13 @@ version and how to run it.
       everyone's down.
     - A teammate can **revive** a downed player by standing over them for 5 seconds (the Prayer
       cape's emote, with a bar filling up over the fallen; stepping away starts over). Each
-      player can be revived three times a run, coming back with 75%, then 50%, then 25% of
-      their hitpoints, and after the third they're down for good. A revived player can't be
-      hurt for 5 minutes, and enemies leave them alone for a crowd-mate instead (unless
-      nobody else is up). Level ups the party had while they were down are theirs to choose
-      once they're back.
+      player can be revived once a run, plus once more for each **Prayer cape** they find: a
+      rare casket item, or now and then for sale from the Mysterious Old Man, both only in
+      co-op. They come back with 75% of their hitpoints, then 50%, then 25% for every revive
+      after, and with none left they're down for good. A revived player can't be hurt for 5
+      minutes, and enemies leave them alone for a teammate instead (unless nobody else is
+      up). Level ups the party had while they were down are theirs to choose once they're
+      back.
     - The pause menu doesn't stop a co-op run. Leaving it takes you out of the party; the host
       leaving ends it for everyone.
     - Teammates show with their names in green, an arrow at the edge of the screen when they're out

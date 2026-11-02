@@ -1835,6 +1835,12 @@ export class GameClient implements GameFrameHandler {
                         6000,
                     );
                     break;
+                case "extraRevive":
+                    this.store.toast(
+                        `A teammate can revive you once more (${describeRevives(sim.revivesLeftFor(sim.heroes[sim.focus]))}).`,
+                        6000,
+                    );
+                    break;
                 case "visitor":
                     if (event.message) {
                         this.store.toast(event.message);
@@ -1868,6 +1874,9 @@ export class GameClient implements GameFrameHandler {
                         ? `You revive ${name}!`
                         : `${sim.heroes[event.by].name} revives ${name}!`,
                 );
+                break;
+            case "extraRevive":
+                this.store.toast(`${name} can be revived once more.`);
                 break;
             case "heroLeft":
                 this.store.toast(`${name} left the game.`);
@@ -2197,6 +2206,11 @@ export class GameClient implements GameFrameHandler {
             }
         }
     }
+}
+
+// "2 revives left"
+function describeRevives(left: number): string {
+    return `${left} ${left === 1 ? "revive" : "revives"} left`;
 }
 
 // How far along a downed hero's revive is, 0 to 1

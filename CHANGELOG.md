@@ -8,8 +8,9 @@ the version in the corner).
 ### Added
 
 - Co-op revives: stand over a downed teammate for 5 seconds to bring them back. Each player can
-  be revived three times a run, with 75%, 50% and then 25% of their hitpoints, and comes back
-  untouchable for 5 minutes.
+  be revived once a run, with 75% of their hitpoints, and comes back untouchable for 5 minutes.
+- Extra co-op revives: a Prayer cape, rarely in a casket or for sale from the Mysterious Old Man,
+  lets a teammate revive you once more (with 50%, then 25% of your hitpoints).
 
 ## 0.23.0 - 2026-11-02
 

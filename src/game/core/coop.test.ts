@@ -3,7 +3,7 @@ import { getEnemy } from "../content/enemies";
 import { HARD_XP, getHardScale } from "../content/hard";
 import { getMap } from "../content/maps";
 import { getPowerUp } from "../content/powerups";
-import { getRandomEvent } from "../content/randomEvents";
+import { OLD_MAN_OFFERS, getRandomEvent } from "../content/randomEvents";
 import { emptyStats } from "../content/types";
 import { getWeapon } from "../content/weapons";
 import { Hero, HeroOptions, Sim, SimOptions, TICKS_PER_SECOND } from "./Sim";
@@ -231,9 +231,69 @@ describe("co-op", () => {
         expect(b.revive?.ticks).toBe(3 * TICKS_PER_SECOND);
     });
 
-    it("revives with 75%, 50% then 25% of their hitpoints, and three times at most", () => {
+    it("revives once a run, with 75% of their hitpoints", () => {
         const sim = createParty(["warrior", "wizard"]);
         const [a, b] = sim.heroes;
+        expect(sim.revivesLeftFor(b)).toBe(1);
+        down(sim, b);
+        standOver(a, b);
+        for (let i = 0; i < REVIVE_SECONDS * TICKS_PER_SECOND; i++) {
+            sim.step();
+        }
+        expect(b.down).toBe(false);
+        expect(b.player.hp).toBe(Math.round(b.player.maxHp * 0.75));
+        b.immuneEndTick = sim.tick;
+        down(sim, b);
+        expect(sim.canBeRevived(b)).toBe(false);
+        expect(sim.revivesLeftFor(b)).toBe(0);
+    });
+
+    it("gives extra revives from a Prayer cape in a casket, taken at once", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const b = sim.heroes[1];
+        const slots = b.inventory.filter((slot) => slot !== null).length;
+        sim.as(1, () => {
+            sim["applyChest"](
+                { uid: 1, tier: "master", itemId: "prayer_cape", coins: 0, upgrades: 0 },
+                "take",
+            );
+        });
+        expect(b.extraRevives).toBe(1);
+        expect(sim.revivesLeftFor(b)).toBe(2);
+        expect(b.inventory.filter((slot) => slot !== null).length).toBe(slots);
+        expect(sim.takeEvents()).toContainEqual({ type: "extraRevive", hero: 1 });
+    });
+
+    it("sells extra revives through the Mysterious Old Man, in co-op only", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const b = sim.heroes[1];
+        sim.coins = 1000;
+        const def = getRandomEvent("mysterious_old_man");
+        sim.as(1, () => sim["openOffer"](def, [{ kind: "revive", price: 300, sold: false }]));
+        expect(sim.as(1, () => sim.chooseEventOption(0))).toBe(true);
+        expect(sim.coins).toBe(700);
+        expect(b.extraRevives).toBe(1);
+        expect(sim.state).toBe("playing");
+        // He has one now and then for a party, never for a player on their own
+        const offered = (party: Sim) => {
+            let times = 0;
+            for (let i = 0; i < 200; i++) {
+                if (party["rollOldManOptions"]().some((o) => o.kind === "revive")) {
+                    times++;
+                }
+            }
+            return times;
+        };
+        expect(offered(sim)).toBeGreaterThan(0);
+        expect(offered(sim)).toBeLessThan(100);
+        expect(offered(createParty(["warrior"]))).toBe(0);
+        expect(sim["rollOldManOptions"]()).toHaveLength(OLD_MAN_OFFERS);
+    });
+
+    it("revives with 75%, 50% then 25% of their hitpoints with extra revives, then no more", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        b.extraRevives = 2;
         for (const fraction of [0.75, 0.5, 0.25]) {
             down(sim, b);
             expect(sim.canBeRevived(b)).toBe(true);

@@ -1,3 +1,4 @@
+import { EXTRA_REVIVE_ITEM } from "../content/coop";
 import { getGearStats, upgradedName } from "../content/endless";
 import { CASKETS, GEAR_SLOTS, GEAR_SLOT_BY_ID, getItem } from "../content/items";
 import { getPowerUp } from "../content/powerups";
@@ -107,7 +108,7 @@ export function getChestView(sim: Sim): ChestView | undefined {
         }
     } else {
         carried = sim.inventory.find((slot) => slot?.itemId === item.id)?.count ?? 0;
-        if (!sim.canStash(item.id)) {
+        if (!sim.canStash(item.id) || item.use.kind === "revive") {
             recommended = "use";
         }
     }
@@ -125,6 +126,7 @@ export function getChestView(sim: Sim): ChestView | undefined {
         replaces,
         changes,
         canStash: item.kind === "utility" && sim.canStash(item.id),
+        instant: item.kind === "utility" && item.use.kind === "revive",
         carried,
         alchCoins: sim.alchValue(item.id, chest.upgrades),
         recommended,
@@ -168,6 +170,17 @@ export function getEventView(sim: Sim): EventView | undefined {
             if (option.kind === "answer") {
                 const item = getItem(option.itemId);
                 return { title: item.name, iconObjId: item.objId, enabled: true };
+            }
+            if (option.kind === "revive") {
+                const item = getItem(EXTRA_REVIVE_ITEM);
+                return {
+                    title: "Extra revive",
+                    text: item.kind === "utility" ? item.description : "",
+                    iconObjId: item.objId,
+                    price: option.price,
+                    sold: option.sold,
+                    enabled: !option.sold && sim.coins >= option.price,
+                };
             }
             const powerUp = getPowerUp(option.powerUpId);
             return {

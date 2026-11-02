@@ -88,6 +88,8 @@ export type ChestView = {
     // Utility: whether it fits in the inventory, and how many are carried
     canStash: boolean;
     carried: number;
+    // Taken at once rather than kept (an extra co-op revive)
+    instant: boolean;
     alchCoins: number;
     // What Space does: equip/keep, unless that would be a step down
     recommended: ChestAction;

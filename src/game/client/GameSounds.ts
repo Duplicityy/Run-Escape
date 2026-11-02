@@ -28,6 +28,7 @@ const USE_SOUNDS: Record<ItemUse["kind"], number> = {
     bones: SOUNDS.bonecrusher,
     blast: SOUNDS.chinchompa,
     xp: SOUNDS.lamp,
+    revive: SOUNDS.revive,
 };
 
 // Every sound effect a run can play, to synthesize up front

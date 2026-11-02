@@ -623,9 +623,11 @@ export type Visitor = {
 };
 
 // What a visitor who opens a screen has on offer, with the run waiting: a
-// power-up for sale, or an answer to the Quiz Master's question
+// power-up for sale, an extra co-op revive for sale, or an answer to the Quiz
+// Master's question
 export type EventOption =
     | { kind: "powerUp"; powerUpId: string; price: number; sold: boolean }
+    | { kind: "revive"; price: number; sold: boolean }
     | { kind: "answer"; itemId: string; correct: boolean };
 
 export type EventOffer = {
@@ -862,4 +864,6 @@ type SimEventBody =
     // or was brought back by the teammate at index by
     | { type: "heroDown" }
     | { type: "heroLeft" }
-    | { type: "heroRevived"; by: number };
+    | { type: "heroRevived"; by: number }
+    // Co-op: a hero found or bought an extra revive
+    | { type: "extraRevive" };

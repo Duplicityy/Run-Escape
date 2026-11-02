@@ -137,6 +137,36 @@ describe("caskets", () => {
         expect(rolled(true).sort()).toEqual([...cures].sort());
     });
 
+    test("a Prayer cape (an extra revive) only turns up in co-op", () => {
+        const rng = new Rng(7);
+        const rolled = (party: boolean) => {
+            let times = 0;
+            for (let i = 0; i < 3000; i++) {
+                const found = rollCasketItem(
+                    rng,
+                    "master",
+                    0,
+                    {},
+                    false,
+                    undefined,
+                    undefined,
+                    undefined,
+                    undefined,
+                    undefined,
+                    party,
+                );
+                if (found === "prayer_cape") {
+                    times++;
+                }
+            }
+            return times;
+        };
+        expect(rolled(false)).toBe(0);
+        const times = rolled(true);
+        expect(times).toBeGreaterThan(0);
+        expect(times).toBeLessThan(300);
+    });
+
     test("locked items never drop, and do once unlocked", () => {
         const rng = new Rng(5);
         const shields = (unlocked: ReadonlySet<string>) => {

@@ -1,6 +1,8 @@
 import { ArmouryUpgrades, getUpgradedGear } from "../content/armoury";
 import { getCharacter } from "../content/characters";
 import {
+    EXTRA_REVIVE_PRICE,
+    OLD_MAN_REVIVE_CHANCE,
     PLAYER_GONE,
     PartyScale,
     REVIVES_PER_PLAYER,
@@ -428,6 +430,7 @@ const PERSONAL_EVENTS = new Set<SimEvent["type"]>([
     "heroDown",
     "heroLeft",
     "heroRevived",
+    "extraRevive",
     "playerCursed",
 ]);
 
@@ -593,8 +596,10 @@ export type Hero = {
     down: boolean;
     left: boolean;
     outTick: number;
-    // Co-op: how many times a teammate's brought them back this run
+    // Co-op: how many times a teammate's brought them back this run, and the
+    // revives found or bought on top of REVIVES_PER_PLAYER
     revived: number;
+    extraRevives: number;
     // Co-op: the teammate standing over them to bring them back, and how
     // many ticks they've stood there (REVIVE_TICKS brings them back)
     revive?: { hero: number; ticks: number };
@@ -1091,6 +1096,7 @@ export class Sim {
             left: false,
             outTick: -1,
             revived: 0,
+            extraRevives: 0,
             immuneEndTick: 0,
         };
     }
@@ -1128,12 +1134,18 @@ export class Sim {
 
     // Co-op: down, and a teammate can still bring them back
     canBeRevived(hero: Hero): boolean {
-        return hero.down && !hero.left && hero.revived < REVIVES_PER_PLAYER;
+        return hero.down && !hero.left && this.revivesLeftFor(hero) > 0;
     }
 
-    // Co-op: the revives a downed hero has left, for the UI
+    // Co-op: the times a hero can still be revived, for the UI
     revivesLeftFor(hero: Hero): number {
-        return Math.max(0, REVIVES_PER_PLAYER - hero.revived);
+        return Math.max(0, REVIVES_PER_PLAYER + hero.extraRevives - hero.revived);
+    }
+
+    // Co-op: a Prayer cape found or bought, so they can be revived once more
+    private gainRevive(): void {
+        this.hero.extraRevives++;
+        this.emit({ type: "extraRevive" });
     }
 
     // Whether enemies go after a hero: up, and not just revived. When
@@ -1717,7 +1729,8 @@ export class Sim {
             this.equip(item.id, chest.upgrades);
             return;
         }
-        if (action === "take" && this.stash(item.id)) {
+        // An extra revive is theirs at once, not kept
+        if (action === "take" && item.use.kind !== "revive" && this.stash(item.id)) {
             return;
         }
         this.useUtility(item);
@@ -1827,6 +1840,9 @@ export class Sim {
                 });
                 break;
             }
+            case "revive":
+                this.gainRevive();
+                break;
             case "xp":
                 this.xp += (this.xpForNextLevel - this.xpForThisLevel) * use.levels;
                 break;
@@ -8251,26 +8267,35 @@ export class Sim {
     }
 
     // A few different power-ups, the ones that drop less often being the ones
-    // on offer less often too
+    // on offer less often too. In co-op, now and then one of them is an extra
+    // revive instead.
     private rollOldManOptions(): EventOption[] {
         const left = POWER_UPS.filter((powerUp) => powerUp.weight > 0);
         const options: EventOption[] = [];
+        if (this.heroes.length > 1 && this.eventRng.chance(OLD_MAN_REVIVE_CHANCE)) {
+            options.push({
+                kind: "revive",
+                price: this.oldManPrice(EXTRA_REVIVE_PRICE),
+                sold: false,
+            });
+        }
         while (options.length < OLD_MAN_OFFERS && left.length > 0) {
             const index = this.eventRng.weightedIndex(left.map((p) => p.weight));
             const [powerUp] = left.splice(index, 1);
             options.push({
                 kind: "powerUp",
                 powerUpId: powerUp.id,
-                price: this.oldManPrice(powerUp),
+                price: this.oldManPrice(powerUp.price),
                 sold: false,
             });
         }
         return options;
     }
 
-    private oldManPrice(powerUp: PowerUpDef): number {
+    // What something at this price at the start of the run costs now
+    private oldManPrice(price: number): number {
         const inflation = 1 + (this.seconds / 60) * OLD_MAN_PRICE_PER_MINUTE;
-        return Math.max(1, Math.round(powerUp.price * inflation * this.coinScale));
+        return Math.max(1, Math.round(price * inflation * this.coinScale));
     }
 
     // Some of one group of things and the odd one out from another, anywhere
@@ -8300,16 +8325,20 @@ export class Sim {
         if (this.state !== "event" || !offer || !option || offer.hero !== this.hero.index) {
             return false;
         }
-        if (option.kind === "powerUp") {
+        if (option.kind === "powerUp" || option.kind === "revive") {
             if (option.sold || this.coins < option.price) {
                 return false;
             }
             this.coins -= option.price;
             option.sold = true;
             this.emit({ type: "visitor", message: "", sound: SOUNDS.buy }, true);
-            this.usePowerUp(getPowerUp(option.powerUpId));
+            if (option.kind === "revive") {
+                this.gainRevive();
+            } else {
+                this.usePowerUp(getPowerUp(option.powerUpId));
+            }
             // A bought nuke can finish off a final boss
-            if (this.runOver || offer.options.every((o) => o.kind === "powerUp" && o.sold)) {
+            if (this.runOver || offer.options.every((o) => o.kind !== "answer" && o.sold)) {
                 this.leaveEvent();
             }
             return true;
@@ -8382,6 +8411,7 @@ export class Sim {
             { offered: this.gearUpgradesFound, worn: this.gearUpgrades },
             this.armoury,
             this.declinedSets,
+            this.heroes.length > 1,
         );
         if (getItem(found).kind !== "gear") {
             return { itemId: found };

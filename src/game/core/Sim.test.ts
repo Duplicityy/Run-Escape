@@ -4891,7 +4891,7 @@ describe("random events", () => {
         });
 
         test("charges more later on, and less in endless runs where coins are worth less", () => {
-            const price = (sim: Sim) => sim["oldManPrice"](getPowerUp("magnet"));
+            const price = (sim: Sim) => sim["oldManPrice"](getPowerUp("magnet").price);
             const early = createSim();
             const late = createSim();
             late.tick = 10 * 60 * TICKS_PER_SECOND;
