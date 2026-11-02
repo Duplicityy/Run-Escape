@@ -69,8 +69,10 @@ and open http://localhost:5173.
 
 `npm run download-caches` fetches the game's cache (see [Cache version](#cache-version)) from the
 [OpenRS2 Archive](https://archive.openrs2.org/) into `caches/`; you can also copy a `caches/` folder
-over from another checkout. The first load copies the 227 MB cache into
-the browser's cache storage, so later loads are quick.
+over from another checkout. The download gives up when nothing has arrived for a minute; on a
+connection that drops out for longer, set `CACHE_DOWNLOAD_TIMEOUT_MS` to a longer wait in
+milliseconds. The first load copies the 227 MB cache into the browser's cache storage, so later
+loads are quick.
 
 ### Controls
 
@@ -110,6 +112,9 @@ examples. `npm run serve` serves the build with those headers from one Node proc
 packages, co-op's relay included (`npm run serve:singleplayer` leaves it out). The game only offers
 Multiplayer where a relay answers, so a plain static host serves it as a single-player game; see
 [Co-op relay](docs/DEVELOPMENT.md#co-op-relay).
+`npm run serve` and the relay also serve player and room counts for monitoring (Prometheus), on the
+server itself only, at `http://127.0.0.1:8788/coop/metrics`; `MULTIPLAYER_METRICS=off` turns them
+off. See [multiplayer metrics](docs/DEVELOPMENT.md#optional-multiplayer-metrics).
 
 ## Desktop
 

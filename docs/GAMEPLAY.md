@@ -18,7 +18,9 @@ version and how to run it.
   50, 100, 200 and 400, doubling each time.
 - When a run ends, the results screen shows its stats: damage, kills and damage a second for
   each weapon (and the utility items and power-ups that did damage), the biggest hit, damage
-  taken, hitpoints healed and when each boss went down.
+  taken, hitpoints healed and when each boss went down. In co-op it has a page for each player,
+  flipped through with the arrows or the arrow keys, and the party's shared totals under them. A
+  weapon's damage a second counts up to when its player went down or left.
 - You carry at most **4 weapons and 4 passives**, so a build is about what you leave out.
 - **Rarity**, in OSRS drop table terms: every weapon and passive is Common, Uncommon, Rare or
   Very rare, which sets how often it's offered. Every offer also rolls its own rarity: a Common
@@ -375,7 +377,8 @@ version and how to run it.
 - Coins and the odd cooked chicken drop too.
 - Enemies get tougher as the run goes on, gently at first and faster after the first few
   minutes.
-- At 15:00 the map's final boss comes. Kill it to win.
+- At 15:00 the map's final boss comes. Kill it to win, even if you fall in the same instant;
+  once it's won, nothing more can hurt you.
 - **Minimap**: the client's, north up, drawn from the map's own minimap images, with the
   client's yellow dots for enemies (orange for elites), a red one for bosses, and caskets and
   power-ups in their colours. Bosses, caskets and power-ups out of range sit on the rim.
@@ -448,6 +451,9 @@ version and how to run it.
       leaving ends it for everyone.
     - Teammates show with their names in green, an arrow at the edge of the screen when they're out
       of view, green dots on the minimap and their hitpoints down the left of the screen.
+    - **Movement prediction** (a trial, off by default, in Settings and the pause menu): a player who
+      joined a game sees their own character move as soon as they press, then correct to the host.
+      It only changes what they see: hits and pickups still follow the host.
 - **Quests** (on the title screen) pay banked coins: each is named for an OSRS quest and asks
   for kills (Goblin Diplomacy, 300 goblins), a boss (Vampyre Slayer, Count Draynor; Desert
   Treasure I, Fareed, Dessous and Damis) or caskets opened (Pirate's Treasure). They count over

@@ -44,8 +44,16 @@
     color: var(--ui-white);
 }
 
+/* Saving's stopped: over a run's HUD too (the quest tracker has a z-index on a
+   phone), but under the notice to turn a phone sideways */
+.ui-save-block {
+    z-index: 10;
+}
+
 .ui-notice-close {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
+    gap: 8px;
     margin-top: 12px;
 }

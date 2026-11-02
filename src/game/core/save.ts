@@ -34,6 +34,10 @@ const RETIRED_CHARACTERS = ["dwarf"];
 
 export type SaveData = {
     version: number;
+    // The version of the game that last wrote it, put on as it's written. An
+    // older game won't write over it: it would drop the maps, upgrades and
+    // items it doesn't know.
+    gameVersion?: string;
     coins: number;
     totalCoins: number;
     // Shop upgrade id -> ranks bought
@@ -525,46 +529,238 @@ export function buyArmouryUpgrade(save: SaveData, itemId: string): boolean {
     return true;
 }
 
-// A save as a file, to keep or to carry to another browser
-export function exportSave(save: SaveData): string {
-    return JSON.stringify(save, null, 2);
+// A save as a file, to keep or to carry to another browser, marked with the
+// game that made it
+export function exportSave(save: SaveData, gameVersion: string): string {
+    return JSON.stringify({ ...save, gameVersion }, null, 2);
+}
+
+// An exported save from a newer game than this one, which can't come in until
+// this one's updated
+export class NewerSaveError extends Error {
+    constructor(readonly gameVersion?: string) {
+        super("The save is from a newer version of the game");
+    }
 }
 
 // Reads an exported save, brought up to the current version. Throws if the
-// text isn't one.
-export function importSave(text: string): SaveData {
+// text isn't one, or it's from a newer game.
+export function importSave(text: string, gameVersion: string): SaveData {
     const raw: unknown = JSON.parse(text);
     if (!raw || typeof raw !== "object" || typeof (raw as SaveData).version !== "number") {
         throw new Error("Not a save");
     }
+    const newer = newerGame(raw, gameVersion);
+    if (newer) {
+        throw new NewerSaveError(newer.gameVersion);
+    }
     return migrateSave(raw);
 }
 
+// A save written by a newer game than this one: which (if it says), and
+// whether its format is newer too (a version above SAVE_VERSION), which this
+// game can't read, let alone write
+export type NewerSave = { gameVersion?: string; format?: boolean };
+
+// Whether a save was written by a newer game than this one, and how: a newer
+// format, or a later release, which can have ids this one doesn't know and
+// would drop. Saves from before they were marked count as older.
+export function newerGame(raw: object, gameVersion: string): NewerSave | undefined {
+    const data = raw as Partial<SaveData>;
+    const written = getGameVersion(raw);
+    if (typeof data.version === "number" && data.version > SAVE_VERSION) {
+        return { gameVersion: written, format: true };
+    }
+    if (written !== undefined && compareGameVersions(written, gameVersion) > 0) {
+        return { gameVersion: written };
+    }
+    return undefined;
+}
+
+function getGameVersion(raw: object): string | undefined {
+    const { gameVersion } = raw as Partial<SaveData>;
+    return typeof gameVersion === "string" ? gameVersion : undefined;
+}
+
+// Below 0 when a is older than b, above 0 when it's newer. Numeric, so 0.10.0
+// is after 0.9.0.
+export function compareGameVersions(a: string, b: string): number {
+    const [partsA, partsB] = [a, b].map((v) => v.split(".").map((part) => parseInt(part) || 0));
+    for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+        const diff = (partsA[i] ?? 0) - (partsB[i] ?? 0);
+        if (diff !== 0) {
+            return diff;
+        }
+    }
+    return 0;
+}
+
+// What loading the save found
+export type LoadedSave = {
+    save: SaveData;
+    // It couldn't be read, so this is a fresh one: the key its text is kept
+    // under
+    unreadable?: string;
+    // There was no room to keep a copy of it, so it stays where it is (that's
+    // the key above) and nothing's written over it
+    noRoom?: boolean;
+    // It's from a newer game than this one, so it isn't written over
+    newer?: NewerSave;
+};
+
+// A save that couldn't be read, kept so it can be got back
+export type UnreadableSave = { key: string; time: number };
+
 export interface SaveStore {
-    load(): SaveData;
+    // This game's version, marked on what it saves
+    readonly gameVersion: string;
+    load(): LoadedSave;
     save(data: SaveData): void;
+    // The save's text as it's stored, for exporting a newer game's as it is
+    read(): string | undefined;
+    // Writes over a newer game's save after all, as the player's chosen to
+    writeOver(): void;
+    // Newest first
+    getUnreadable(): UnreadableSave[];
+    readUnreadable(key: string): string | undefined;
+    deleteUnreadable(key: string): void;
 }
 
 // From the game's old name, Rune Survivors; kept as it is, as it's where
 // every player's save is
 const STORAGE_KEY = "rune-survivors-save";
+// Saves that couldn't be read, kept under this and when (Date.now())
+const UNREADABLE_KEY = `${STORAGE_KEY}-unreadable-`;
+// The one that went wrong, even if the fresh save after it goes wrong too
+const UNREADABLE_KEPT = 2;
 
 export class LocalSaveStore implements SaveStore {
-    load(): SaveData {
+    // What's stored mustn't be written over: it's from a newer game, or it
+    // couldn't be read and there wasn't room to keep a copy
+    private keep = false;
+
+    constructor(readonly gameVersion: string) {}
+
+    load(): LoadedSave {
+        this.keep = false;
+        let text: string | null = null;
         try {
-            const json = window.localStorage.getItem(STORAGE_KEY);
-            return migrateSave(json ? JSON.parse(json) : undefined);
+            text = window.localStorage.getItem(STORAGE_KEY);
         } catch (e) {
             console.error("Failed to load save", e);
-            return createSave();
+        }
+        if (!text) {
+            return { save: createSave() };
+        }
+        let newer: NewerSave | undefined;
+        try {
+            const raw: unknown = JSON.parse(text);
+            if (!raw || typeof raw !== "object") {
+                throw new Error("Not a save");
+            }
+            // Before it's migrated: a newer game's save might not migrate,
+            // and it mustn't be written over for that
+            newer = newerGame(raw, this.gameVersion);
+            const save = migrateSave(raw);
+            if (newer) {
+                this.keep = true;
+                return { save, newer };
+            }
+            return { save };
+        } catch (e) {
+            console.error("Failed to load save", e);
+            if (newer) {
+                this.keep = true;
+                return { save: createSave(), newer };
+            }
+            const key = this.keepUnreadable(text);
+            if (key === undefined) {
+                this.keep = true;
+                return { save: createSave(), unreadable: STORAGE_KEY, noRoom: true };
+            }
+            return { save: createSave(), unreadable: key };
         }
     }
 
     save(data: SaveData): void {
+        if (this.keep) {
+            return;
+        }
         try {
-            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            const marked: SaveData = { ...data, gameVersion: this.gameVersion };
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(marked));
         } catch (e) {
             console.error("Failed to save", e);
+        }
+    }
+
+    read(): string | undefined {
+        try {
+            return window.localStorage.getItem(STORAGE_KEY) ?? undefined;
+        } catch (e) {
+            return undefined;
+        }
+    }
+
+    writeOver(): void {
+        this.keep = false;
+    }
+
+    // Keeps a save that couldn't be read, before a fresh one's written over
+    // it, and returns where. The same text is only kept once (it's read again
+    // whenever the tab gets the save back). Nowhere with no room for a copy.
+    private keepUnreadable(text: string): string | undefined {
+        try {
+            const kept = this.getUnreadable();
+            const same = kept.find(({ key }) => window.localStorage.getItem(key) === text);
+            if (same) {
+                return same.key;
+            }
+            const key = UNREADABLE_KEY + Date.now();
+            window.localStorage.setItem(key, text);
+            for (const old of kept.slice(UNREADABLE_KEPT - 1)) {
+                window.localStorage.removeItem(old.key);
+            }
+            return key;
+        } catch (e) {
+            console.error("Failed to keep the save that couldn't be read", e);
+            return undefined;
+        }
+    }
+
+    getUnreadable(): UnreadableSave[] {
+        const kept: UnreadableSave[] = [];
+        try {
+            const storage = window.localStorage;
+            for (let i = 0; i < storage.length; i++) {
+                const key = storage.key(i);
+                if (key?.startsWith(UNREADABLE_KEY)) {
+                    kept.push({ key, time: Number(key.slice(UNREADABLE_KEY.length)) || 0 });
+                }
+            }
+        } catch (e) {
+            console.error("Failed to list the unreadable saves", e);
+        }
+        return kept.sort((a, b) => b.time - a.time);
+    }
+
+    readUnreadable(key: string): string | undefined {
+        try {
+            return window.localStorage.getItem(key) ?? undefined;
+        } catch (e) {
+            return undefined;
+        }
+    }
+
+    deleteUnreadable(key: string): void {
+        // Never the save itself
+        if (!key.startsWith(UNREADABLE_KEY)) {
+            return;
+        }
+        try {
+            window.localStorage.removeItem(key);
+        } catch (e) {
+            console.error("Failed to delete an unreadable save", e);
         }
     }
 }

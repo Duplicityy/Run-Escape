@@ -3,7 +3,7 @@ import { GearSlot } from "../content/types";
 import { WeaponStatLine } from "../content/weaponStats";
 import { ChestAction } from "../core/Loot";
 import { RunResult } from "../core/Sim";
-import { SaveData } from "../core/save";
+import { NewerSave, SaveData, UnreadableSave } from "../core/save";
 import { DisplaySettings } from "./DisplaySettings";
 import { AudioSettings } from "./GameAudio";
 import { CoopView, OFFLINE } from "./coop/CoopLobby";
@@ -183,6 +183,25 @@ export type BossView = {
 
 export type BossKillView = { name: string; seconds: number };
 
+// One player's own numbers for the results screen (a teammate who fell or
+// left too)
+export type PlayerResultView = {
+    name: string;
+    characterName: string;
+    isLocal: boolean;
+    down: boolean;
+    left: boolean;
+    kills: number;
+    damageDealt: number;
+    caskets: number;
+    highestHit: number;
+    damageTaken: number;
+    healed: number;
+    rerollsUsed: number;
+    skips: number;
+    damage: DamageView[];
+};
+
 // done / of: how far it's got, this run's kills and caskets included;
 // finished: this run finished it (it pays once the run is over)
 export type QuestTrackView = {
@@ -229,11 +248,26 @@ export type TeammateView = {
 
 export type Toast = { id: number; text: string; until: number };
 
+// Why nothing's being saved: the game's open in another tab, the save's from
+// a newer version of it (which this one would undo), or it couldn't be read
+// and there's no room to keep a copy
+export type SaveBlock =
+    | { kind: "otherTab" }
+    | ({ kind: "newerGame" } & NewerSave)
+    | { kind: "noRoom" };
+
 export type UiSnapshot = {
     screen: Screen;
     loadingText: string;
     loadingProgress: number;
     save: SaveData;
+    // Set while nothing's being saved, and closed to play on without saving
+    saveBlock?: SaveBlock;
+    saveBlockClosed: boolean;
+    // The save couldn't be read when it loaded: where it's kept, for the notice
+    unreadableSave?: string;
+    // Saves that couldn't be read, kept to be exported
+    unreadableSaves: UnreadableSave[];
     characterId: string;
     // The map the next run is on, and whether it's endless and on hard mode
     // (once the map's been beaten)
@@ -257,10 +291,9 @@ export type UiSnapshot = {
     // been beaten on hard mode; newGear: the names of the gear it found for
     // the first time, for the Armoury; quests: the quests it finished, and
     // what they paid
-    // damage / bossKills: the stats screen's rows
+    // players: everyone's own stats; bossKills: the party's boss times
     result?: RunResult & {
-        characterName: string;
-        damage: DamageView[];
+        players: PlayerResultView[];
         bossKills: BossKillView[];
         endlessRecord: boolean;
         firstHardWin: boolean;
@@ -294,6 +327,8 @@ export class GameStore {
             loadingText: "Loading Lumbridge",
             loadingProgress: 0,
             save,
+            saveBlockClosed: false,
+            unreadableSaves: [],
             characterId: save.unlockedCharacters[0] ?? "warrior",
             mapId: "lumbridge",
             endless: false,
@@ -306,7 +341,13 @@ export class GameStore {
             toasts: [],
             debug: false,
             audio: { muted: false, volume: 0.6, music: 0.6 },
-            display: { menuSpin: true, pauseOnBlur: true, questTracker: true, autoAlch: false },
+            display: {
+                menuSpin: true,
+                pauseOnBlur: true,
+                questTracker: true,
+                autoAlch: false,
+                movePrediction: false,
+            },
         };
     }
 

@@ -6,10 +6,13 @@ import { QUESTS, QUEST_BY_ID, describeQuest } from "../content/quests";
 import { LOCKABLE_ITEMS } from "../content/unlocks";
 import { RUN_LENGTH } from "../content/waves";
 import {
+    LocalSaveStore,
+    NewerSaveError,
     RunSummary,
     SAVE_VERSION,
     buyArmouryUpgrade,
     buyUpgrade,
+    compareGameVersions,
     createSave,
     exportSave,
     getArmouryStep,
@@ -27,6 +30,9 @@ import {
     recordRun,
     refundUpgrades,
 } from "./save";
+
+// The game's version, as far as these tests go
+const GAME = "0.22.1";
 
 function run(mapId: string, changes: Partial<RunSummary> = {}): RunSummary {
     return {
@@ -259,22 +265,39 @@ describe("save", () => {
         recordRun(save, run("lumbridge", { victory: true, seconds: 900, coins: 10000 }));
         recordRun(save, run("karamja", { bossesKilled: ["ket_zek"] }));
         expect(buyUpgrade(save, "strength")).toBe(true);
-        expect(importSave(exportSave(save))).toEqual(save);
-        expect([...importSave(exportSave(save)).unlockedItems].sort()).toEqual([
+        expect(importSave(exportSave(save, GAME), GAME)).toEqual(save);
+        expect([...importSave(exportSave(save, GAME), GAME).unlockedItems].sort()).toEqual([
             "obsidian_armour",
             "toktz_xil_ul",
         ]);
         // Older exports come in migrated
-        expect(importSave(JSON.stringify({ version: 1, victories: 1 })).mapVictories).toEqual({
-            lumbridge: 1,
-        });
+        const old = JSON.stringify({ version: 1, victories: 1 });
+        expect(importSave(old, GAME).mapVictories).toEqual({ lumbridge: 1 });
     });
 
     test("importing something that isn't a save throws", () => {
-        expect(() => importSave("not json")).toThrow();
-        expect(() => importSave("null")).toThrow();
-        expect(() => importSave("[]")).toThrow();
-        expect(() => importSave(JSON.stringify({ coins: 1e9 }))).toThrow();
+        expect(() => importSave("not json", GAME)).toThrow();
+        expect(() => importSave("null", GAME)).toThrow();
+        expect(() => importSave("[]", GAME)).toThrow();
+        expect(() => importSave(JSON.stringify({ coins: 1e9 }), GAME)).toThrow();
+    });
+
+    test("exports say which game made them, and a newer game's won't import", () => {
+        const text = exportSave(createSave(), "0.23.0");
+        expect(JSON.parse(text).gameVersion).toBe("0.23.0");
+        expect(() => importSave(text, GAME)).toThrow(NewerSaveError);
+        expect(importSave(text, "0.23.0")).toEqual(createSave());
+        expect(importSave(text, "0.100.0")).toEqual(createSave());
+        // A newer format, whatever it says
+        const format = JSON.stringify({ ...createSave(), version: SAVE_VERSION + 1 });
+        expect(() => importSave(format, GAME)).toThrow(NewerSaveError);
+    });
+
+    test("game versions compare by number", () => {
+        expect(compareGameVersions("0.10.0", "0.9.0")).toBeGreaterThan(0);
+        expect(compareGameVersions("0.22.1", "0.22.10")).toBeLessThan(0);
+        expect(compareGameVersions("1.0", "1.0.0")).toBe(0);
+        expect(compareGameVersions("0.22.1", "0.22.1")).toBe(0);
     });
 
     test("every adventurer's and item's task can be done", () => {
@@ -353,7 +376,7 @@ describe("hard mode", () => {
         const save = createSave();
         recordRun(save, hardWin("lumbridge"));
         recordRun(save, run("lumbridge", { endless: true, hard: true, round: 2, seconds: 1500 }));
-        const back = importSave(exportSave(save));
+        const back = importSave(exportSave(save, GAME), GAME);
         expect(back.hardVictories).toEqual({ lumbridge: 1 });
         expect(back.hardEndlessBest).toEqual({ lumbridge: { round: 2, seconds: 1500 } });
 
@@ -403,7 +426,7 @@ describe("endless", () => {
     test("records survive a round trip and broken ones are dropped", () => {
         const save = createSave();
         recordRun(save, run("lumbridge", { endless: true, round: 3, seconds: 2100 }));
-        expect(importSave(exportSave(save)).endlessBest).toEqual({
+        expect(importSave(exportSave(save, GAME), GAME).endlessBest).toEqual({
             lumbridge: { round: 3, seconds: 2100 },
         });
         const migrated = migrateSave({
@@ -481,7 +504,7 @@ describe("the Armoury", () => {
         save.coins = 100000;
         recordRun(save, run("lumbridge", { gearFound: ["coif", "rune_boots"] }));
         buyArmouryUpgrade(save, "coif");
-        const imported = importSave(exportSave(save));
+        const imported = importSave(exportSave(save, GAME), GAME);
         expect(imported.foundGear).toEqual(["coif", "rune_boots"]);
         expect(imported.armoury).toEqual({ coif: 1 });
         const migrated = migrateSave({
@@ -636,7 +659,7 @@ describe("quests", () => {
             save,
             run("lumbridge", { enemyKills: { count_draynor: 1, goblin: 7 }, caskets: 3 }),
         );
-        const imported = importSave(exportSave(save));
+        const imported = importSave(exportSave(save, GAME), GAME);
         expect(imported.enemyKills).toEqual({ count_draynor: 1, goblin: 7 });
         expect(imported.casketsOpened).toBe(3);
         expect(imported.questsDone).toEqual(["vampyre_slayer"]);
@@ -649,5 +672,158 @@ describe("quests", () => {
         expect(migrated.casketsOpened).toBe(0);
         expect(migrated.questsDone).toEqual(["imp_catcher"]);
         expect(migrateSave({ version: 5, coins: 5 }).questsDone).toEqual([]);
+    });
+});
+
+// localStorage, as far as the save store uses it
+function stubStorage(): Map<string, string> {
+    const stored = new Map<string, string>();
+    vi.stubGlobal("window", {
+        localStorage: {
+            get length() {
+                return stored.size;
+            },
+            key: (i: number) => [...stored.keys()][i] ?? null,
+            getItem: (key: string) => stored.get(key) ?? null,
+            setItem: (key: string, value: string) => void stored.set(key, value),
+            removeItem: (key: string) => void stored.delete(key),
+        },
+    });
+    return stored;
+}
+
+describe("the save in the browser", () => {
+    const KEY = "rune-survivors-save";
+
+    beforeEach(() => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+        vi.useRealTimers();
+    });
+
+    test("starts afresh with nothing saved", () => {
+        stubStorage();
+        expect(new LocalSaveStore(GAME).load()).toEqual({ save: createSave() });
+    });
+
+    test("is marked with the game that saved it", () => {
+        const stored = stubStorage();
+        const store = new LocalSaveStore(GAME);
+        const save = createSave();
+        save.coins = 500;
+        store.save(save);
+        expect(JSON.parse(stored.get(KEY)!).gameVersion).toBe(GAME);
+        expect(store.load()).toEqual({ save });
+        // Saves from older games, and from before they were marked, load as
+        // they always have
+        stored.set(KEY, JSON.stringify({ ...save, gameVersion: "0.9.0" }));
+        expect(store.load()).toEqual({ save });
+        stored.set(KEY, JSON.stringify({ ...save, gameVersion: undefined }));
+        expect(store.load()).toEqual({ save });
+    });
+
+    test("one from a newer game is played, but never written over", () => {
+        const stored = stubStorage();
+        const store = new LocalSaveStore(GAME);
+        const newer = { ...createSave(), coins: 70, gameVersion: "0.23.0" };
+        newer.mapVictories = { lumbridge: 1, some_future_map: 3 };
+        stored.set(KEY, JSON.stringify(newer));
+        const loaded = store.load();
+        expect(loaded.newer).toEqual({ gameVersion: "0.23.0" });
+        expect(loaded.save.coins).toBe(70);
+        // It doesn't know the future map...
+        expect(loaded.save.mapVictories).toEqual({ lumbridge: 1 });
+        // ...but doesn't take it away
+        store.save(loaded.save);
+        expect(JSON.parse(stored.get(KEY)!).mapVictories.some_future_map).toBe(3);
+        // What's stored can be had as it is, and written over once the player says so
+        expect(store.read()).toBe(JSON.stringify(newer));
+        store.writeOver();
+        store.save(loaded.save);
+        expect(JSON.parse(stored.get(KEY)!)).toMatchObject({ coins: 70, gameVersion: GAME });
+        expect(JSON.parse(stored.get(KEY)!).mapVictories.some_future_map).toBeUndefined();
+        // A newer format, whatever it says
+        stored.set(KEY, JSON.stringify({ ...createSave(), version: SAVE_VERSION + 1 }));
+        expect(store.load().newer).toEqual({ format: true });
+        // Updated, it saves again
+        const updated = new LocalSaveStore("0.23.0");
+        stored.set(KEY, JSON.stringify(newer));
+        updated.save(updated.load().save);
+        expect(JSON.parse(stored.get(KEY)!).gameVersion).toBe("0.23.0");
+    });
+
+    test("one that can't be read is kept before a fresh one goes in its place", () => {
+        const stored = stubStorage();
+        const store = new LocalSaveStore(GAME);
+        store.save({ ...createSave(), coins: 500 });
+        // Cut off partway through
+        const broken = stored.get(KEY)!.slice(0, -5);
+        stored.set(KEY, broken);
+        const loaded = store.load();
+        expect(loaded.save).toEqual(createSave());
+        expect(loaded.unreadable).toMatch(/^rune-survivors-save-unreadable-\d+$/);
+        const key = loaded.unreadable!;
+        expect(store.readUnreadable(key)).toBe(broken);
+        expect(store.getUnreadable()).toEqual([{ key, time: expect.any(Number) }]);
+        // Loading it again (the tab getting the save back) keeps it once
+        expect(store.load().unreadable).toBe(key);
+        expect(store.getUnreadable()).toHaveLength(1);
+        store.save(loaded.save);
+        expect(store.load()).toEqual({ save: createSave() });
+        expect(store.readUnreadable(key)).toBe(broken);
+        // Not a save at all counts too
+        stored.set(KEY, "null");
+        expect(store.load().unreadable).toMatch(/^rune-survivors-save-unreadable-/);
+    });
+
+    test("keeps the last two that couldn't be read, newest first", () => {
+        const stored = stubStorage();
+        const store = new LocalSaveStore(GAME);
+        vi.useFakeTimers();
+        const keys = ["{", "{{", "{{{"].map((text, i) => {
+            vi.setSystemTime(1000 * (i + 1));
+            stored.set(KEY, text);
+            return store.load().unreadable;
+        });
+        expect(store.getUnreadable()).toEqual([
+            { key: keys[2], time: 3000 },
+            { key: keys[1], time: 2000 },
+        ]);
+        expect(store.readUnreadable(keys[0]!)).toBeUndefined();
+    });
+
+    test("one that can't be read isn't written over when there's no room for a copy", () => {
+        const stored = new Map([[KEY, "{"]]);
+        vi.stubGlobal("window", {
+            localStorage: {
+                length: 0,
+                getItem: (key: string) => stored.get(key) ?? null,
+                setItem: () => {
+                    throw new Error("QuotaExceededError");
+                },
+            },
+        });
+        const store = new LocalSaveStore(GAME);
+        const loaded = store.load();
+        expect(loaded).toEqual({ save: createSave(), unreadable: KEY, noRoom: true });
+        store.save(loaded.save);
+        expect(stored.get(KEY)).toBe("{");
+        expect(store.readUnreadable(KEY)).toBe("{");
+        expect(store.read()).toBe("{");
+    });
+
+    test("deleting one that couldn't be read leaves the save alone", () => {
+        const stored = stubStorage();
+        const store = new LocalSaveStore(GAME);
+        stored.set(KEY, "{");
+        const key = store.load().unreadable!;
+        store.deleteUnreadable(KEY);
+        expect(stored.get(KEY)).toBe("{");
+        store.deleteUnreadable(key);
+        expect(store.getUnreadable()).toEqual([]);
     });
 });

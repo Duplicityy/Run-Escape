@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { emptyStats } from "../content/types";
 import { Sim } from "../core/Sim";
-import { createSave } from "../core/save";
+import { hasBadNumber } from "../core/lockstep";
+import { LoadedSave, SaveData, SaveStore, createSave } from "../core/save";
 import { makeGrid } from "../core/world/testGrid";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
-import { GameClient } from "./GameClient";
+import { GameClient, loadoutStats } from "./GameClient";
 import { GameStore } from "./GameStore";
 
 function createSim(): Sim {
@@ -33,7 +34,13 @@ function createClient(sim: Sim, autoAlch: boolean) {
         shownDps: 0,
         shownDpsTick: 0,
         lastHudUpdate: 0,
-        display: { menuSpin: false, pauseOnBlur: true, questTracker: true, autoAlch },
+        display: {
+            menuSpin: false,
+            pauseOnBlur: true,
+            questTracker: true,
+            autoAlch,
+            movePrediction: false,
+        },
         sounds: { onEvents() {}, levelUp() {}, playerDied() {} },
         view: { onEvents() {} },
         finishRun() {},
@@ -43,6 +50,38 @@ function createClient(sim: Sim, autoAlch: boolean) {
     };
     return { client, store, sync };
 }
+
+describe("movement prediction", () => {
+    test("is off unless it's been turned on, and is remembered", () => {
+        const stored = new Map<string, string>();
+        vi.stubGlobal("window", {
+            matchMedia: () => ({ matches: false }),
+            localStorage: {
+                getItem: (key: string) => stored.get(key) ?? null,
+                setItem: (key: string, value: string) => stored.set(key, value),
+            },
+        });
+        expect(loadDisplaySettings().movePrediction).toBe(false);
+        // Settings saved before there was such a thing
+        stored.set("rune-survivors-display", JSON.stringify({ menuSpin: false }));
+        expect(loadDisplaySettings().movePrediction).toBe(false);
+        saveDisplaySettings({ ...loadDisplaySettings(), movePrediction: true });
+        expect(loadDisplaySettings().movePrediction).toBe(true);
+        vi.unstubAllGlobals();
+    });
+
+    test("the toggle reaches a run that's going", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const { client } = createClient(createSim(), false);
+        const setPrediction = vi.fn();
+        Object.assign(client, { coopRun: { setPrediction } });
+        client.toggleMovePrediction();
+        expect(setPrediction).toHaveBeenLastCalledWith(true);
+        client.toggleMovePrediction();
+        expect(setPrediction).toHaveBeenLastCalledWith(false);
+        vi.unstubAllGlobals();
+    });
+});
 
 describe("auto alch", () => {
     test("is off unless it's been turned on, and is remembered", () => {
@@ -170,5 +209,172 @@ describe("auto alch", () => {
         expect(store.getSnapshot().overlay).toBe("dead");
         expect(sim.chests.length).toBe(1);
         expect(sim.coins).toBe(coins);
+    });
+});
+
+describe("saving", () => {
+    // The client and what it saves to, with a lock that's held or not
+    function createSaving(held: boolean) {
+        const save = createSave();
+        const store = new GameStore(save);
+        const saved: SaveData[] = [];
+        let next: LoadedSave = { save: createSave() };
+        const writeOver = vi.fn();
+        const saveStore: SaveStore = {
+            gameVersion: "0.22.1",
+            load: () => next,
+            save: (data) => void saved.push(structuredClone(data)),
+            read: () => "stored",
+            writeOver,
+            getUnreadable: () => [],
+            readUnreadable: () => undefined,
+            deleteUnreadable() {},
+        };
+        const saveLock = { held, listen: () => () => {}, takeOver() {} };
+        const client: GameClient = Object.create(GameClient.prototype);
+        Object.assign(client, { save, store, saveStore, saveLock, coop: { setMe() {} } });
+        // What's in storage, as another tab left it
+        const setStored = (loaded: LoadedSave) => {
+            next = loaded;
+        };
+        const lockChanged = (now: boolean) => {
+            saveLock.held = now;
+            (client as unknown as { onSaveLock(held: boolean): void }).onSaveLock(now);
+        };
+        return { client, store, saved, writeOver, setStored, lockChanged };
+    }
+
+    test("nothing's saved while another tab has the game", () => {
+        const { client, store, saved, lockChanged } = createSaving(true);
+        lockChanged(false);
+        expect(store.getSnapshot().saveBlock).toEqual({ kind: "otherTab" });
+        client.refundUpgrades();
+        expect(saved).toEqual([]);
+        // Played on without saving, the panel goes, and the button to open it
+        // again comes
+        client.playWithoutSaving();
+        expect(store.getSnapshot().saveBlockClosed).toBe(true);
+        client.showSaveBlock();
+        expect(store.getSnapshot().saveBlockClosed).toBe(false);
+    });
+
+    test("getting the game back reads the save as the other tab left it", () => {
+        const { client, store, saved, setStored, lockChanged } = createSaving(false);
+        lockChanged(false);
+        client.playWithoutSaving();
+        setStored({ save: { ...createSave(), coins: 300 } });
+        lockChanged(true);
+        expect(client.save.coins).toBe(300);
+        expect(store.getSnapshot().save.coins).toBe(300);
+        expect(store.getSnapshot().saveBlock).toBeUndefined();
+        client.refundUpgrades();
+        expect(saved.map((s) => s.coins)).toEqual([300]);
+        // Losing it again shows the panel again
+        lockChanged(false);
+        expect(store.getSnapshot().saveBlockClosed).toBe(false);
+    });
+
+    test("a save from a newer game is played but not saved", () => {
+        const { client, store, saved, setStored, lockChanged } = createSaving(false);
+        setStored({ save: { ...createSave(), coins: 70 }, newer: { gameVersion: "0.23.0" } });
+        lockChanged(true);
+        expect(store.getSnapshot().saveBlock).toEqual({ kind: "newerGame", gameVersion: "0.23.0" });
+        expect(client.save.coins).toBe(70);
+        client.refundUpgrades();
+        expect(saved).toEqual([]);
+    });
+
+    test("saving anyway writes over a newer game's save, but never a newer format", () => {
+        const { client, store, saved, writeOver, setStored, lockChanged } = createSaving(false);
+        setStored({ save: { ...createSave(), coins: 70 }, newer: { gameVersion: "0.23.0" } });
+        lockChanged(true);
+        client.saveOverNewer();
+        expect(writeOver).toHaveBeenCalledTimes(1);
+        expect(saved.map((s) => s.coins)).toEqual([70]);
+        expect(store.getSnapshot().saveBlock).toBeUndefined();
+        // A format this game can't read is never written
+        const format = { gameVersion: "0.24.0", format: true };
+        setStored({ save: createSave(), newer: format });
+        lockChanged(true);
+        client.saveOverNewer();
+        expect(writeOver).toHaveBeenCalledTimes(1);
+        expect(saved).toHaveLength(1);
+        expect(store.getSnapshot().saveBlock).toEqual({ kind: "newerGame", ...format });
+    });
+
+    test("exports a newer game's save as it's stored, not this game's copy of it", async () => {
+        const saveFile = await import("./saveFile");
+        const spy = vi.spyOn(saveFile, "saveFile").mockImplementation(() => {});
+        const { client, setStored, lockChanged } = createSaving(false);
+        setStored({ save: { ...createSave(), coins: 70 }, newer: { gameVersion: "0.23.0" } });
+        lockChanged(true);
+        client.exportSave();
+        expect(spy).toHaveBeenLastCalledWith("run-escape-save.json", "stored", "application/json");
+        // This game's own is marked with its version
+        setStored({ save: { ...createSave(), coins: 80 } });
+        lockChanged(true);
+        client.exportSave();
+        const text = spy.mock.lastCall![1];
+        expect(JSON.parse(text)).toMatchObject({ coins: 80, gameVersion: "0.22.1" });
+        spy.mockRestore();
+    });
+
+    test("another tab taking the save pauses a solo run, once, and not co-op's", () => {
+        const { client, lockChanged } = createSaving(true);
+        const pause = vi.fn();
+        Object.assign(client, { sim: {}, pause });
+        lockChanged(false);
+        expect(pause).toHaveBeenCalledTimes(1);
+        lockChanged(false);
+        expect(pause).toHaveBeenCalledTimes(1);
+        lockChanged(true);
+        Object.assign(client, { coopRun: {} });
+        lockChanged(false);
+        expect(pause).toHaveBeenCalledTimes(1);
+    });
+
+    test("a save that couldn't be read, with no room for a copy, is left as it is", () => {
+        const { client, store, saved, setStored, lockChanged } = createSaving(false);
+        setStored({ save: createSave(), unreadable: "rune-survivors-save", noRoom: true });
+        lockChanged(true);
+        expect(store.getSnapshot().saveBlock).toEqual({ kind: "noRoom" });
+        // The panel saying so is the notice
+        expect(store.getSnapshot().unreadableSave).toBeUndefined();
+        client.refundUpgrades();
+        expect(saved).toEqual([]);
+    });
+
+    test("a save that couldn't be read is kept, told about, and a fresh one saved", () => {
+        const { client, store, saved, setStored, lockChanged } = createSaving(false);
+        setStored({ save: createSave(), unreadable: "rune-survivors-save-unreadable-1" });
+        lockChanged(true);
+        expect(store.getSnapshot().unreadableSave).toBe("rune-survivors-save-unreadable-1");
+        expect(saved).toEqual([createSave()]);
+        client.closeUnreadableNotice();
+        expect(store.getSnapshot().unreadableSave).toBeUndefined();
+    });
+});
+
+describe("loadoutStats", () => {
+    test("takes the stats' own names only, each no more than the shop sells", () => {
+        const stats = loadoutStats({
+            metaStats: {
+                might: 1e9,
+                armor: -5,
+                regen: NaN,
+                constructor: 1,
+                toString: 2,
+                valueOf: 3,
+                nothing: 4,
+            },
+            unlockedItems: [],
+            armoury: {},
+        });
+        expect(Object.keys(stats)).toEqual(Object.keys(emptyStats()));
+        expect(hasBadNumber(stats)).toBe(false);
+        expect(stats.might).toBeGreaterThan(0);
+        expect(stats.might).toBeLessThan(1e9);
+        expect(stats.armor).toBe(0);
+        expect(stats.regen).toBe(0);
     });
 });

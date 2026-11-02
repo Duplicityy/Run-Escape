@@ -178,6 +178,47 @@ describe("co-op lockstep", () => {
         expect(sim.heroes[2].pendingLevelUps).toBe(pending - 1);
     });
 
+    it("answers each decision once, however often it's clicked before the frame comes", () => {
+        const clock = { now: 0 };
+        const { run } = hostRun(clock);
+        const sim = run.sim;
+        sim.xp = 100;
+        run.stepFrame();
+        expect(sim.state).toBe("levelUp");
+        sim.heroes[0].pendingLevelUps = 2;
+        // A double click, and a key straight after
+        expect(run.act({ kind: "choose", index: 0 })).toBe(true);
+        expect(run.act({ kind: "choose", index: 1 })).toBe(false);
+        expect(run.act({ kind: "reroll" })).toBe(false);
+        const events = run.stepFrame();
+        expect(events.filter((e) => e.hero === 0 && e.action)).toEqual([
+            expect.objectContaining({ action: { kind: "choose", index: 0 } }),
+        ]);
+        expect(sim.heroes[0].pendingLevelUps).toBe(1);
+        // The next level up is a new decision
+        expect(run.act({ kind: "choose", index: 0 })).toBe(true);
+    });
+
+    it("lets a guest answer again if the host never applied it", () => {
+        const clock = { now: 0 };
+        const ups: UpMessage[] = [];
+        const link: CoopLink = { sendUp: (m) => ups.push(m), sendDown: () => {} };
+        const heroes = new Map(IDS.map((id, i) => [id, i]));
+        const run = new CoopRun(createSim(1), false, link, heroes, "host", () => clock.now);
+        const sim = run.sim;
+        sim.state = "levelUp";
+        sim.choices = [];
+        expect(run.act({ kind: "skip" })).toBe(true);
+        clock.now += 2000;
+        expect(run.act({ kind: "skip" })).toBe(false);
+        clock.now += 1000;
+        expect(run.act({ kind: "skip" })).toBe(true);
+        expect(ups).toEqual([{ action: { kind: "skip" } }, { action: { kind: "skip" } }]);
+        // Moving isn't a decision, nor is using an item
+        expect(run.act({ kind: "item", index: 0 })).toBe(true);
+        expect(run.act({ kind: "item", index: 0 })).toBe(true);
+    });
+
     it("sends a move a touch stick keeps changing no more than about 15 times a second", () => {
         const clock = { now: 0 };
         const ups: UpMessage[] = [];
@@ -192,7 +233,47 @@ describe("co-op lockstep", () => {
         // Where it ended up gets there
         clock.now += 100;
         run.setMove(0.9, 0.5);
-        expect(ups.at(-1)).toEqual({ move: [114, 64] });
+        expect(ups.at(-1)).toMatchObject({ move: [114, 64], moveSeq: expect.any(Number) });
+    });
+
+    it("with prediction off, a guest sends moves as it always has", () => {
+        const clock = { now: 0 };
+        const ups: UpMessage[] = [];
+        const link: CoopLink = { sendUp: (m) => ups.push(m), sendDown: () => {} };
+        const heroes = new Map(IDS.map((id, i) => [id, i]));
+        const run = new CoopRun(createSim(1), false, link, heroes, "host", () => clock.now);
+        run.setPrediction(false);
+        expect(run.prediction).toBeUndefined();
+        // Held for a while: one message, with nothing to echo back
+        for (let i = 0; i < 100; i++) {
+            run.setMove(1, 0);
+            clock.now += 20;
+        }
+        expect(ups).toEqual([{ move: [127, 0] }]);
+    });
+
+    it("turning prediction back on starts it afresh, and only for a guest", () => {
+        const clock = { now: 0 };
+        const ups: UpMessage[] = [];
+        const link: CoopLink = { sendUp: (m) => ups.push(m), sendDown: () => {} };
+        const heroes = new Map(IDS.map((id, i) => [id, i]));
+        const run = new CoopRun(createSim(1), false, link, heroes, "host", () => clock.now);
+        const first = run.prediction;
+        run.setPrediction(true);
+        expect(run.prediction).toBe(first);
+        run.setMove(1, 0);
+        run.setPrediction(false);
+        clock.now += 100;
+        run.setPrediction(true);
+        expect(run.prediction).toBeDefined();
+        expect(run.prediction).not.toBe(first);
+        // Still pressing the same way: its new sequence still goes out
+        run.setMove(1, 0);
+        expect(ups.at(-1)).toEqual({ move: [127, 0], moveSeq: 1 });
+
+        const host = new CoopRun(createSim(0), true, link, heroes, "host", () => clock.now);
+        host.setPrediction(true);
+        expect(host.prediction).toBeUndefined();
     });
 
     it("takes nothing odd from the host", () => {

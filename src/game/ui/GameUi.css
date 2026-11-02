@@ -543,6 +543,12 @@
     opacity: 1;
 }
 
+/* Played on without saving: opens the panel saying why again */
+.ui-version.ui-save-off {
+    color: var(--ui-red);
+    opacity: 1;
+}
+
 /* Adventurer and map select: a panel down each side, so the adventurer picked
    stands in view between them, and a bar along the bottom. In each panel the
    list scrolls on its own if the window's too short for it, and the details
@@ -1582,6 +1588,62 @@
     display: flex;
     flex-wrap: wrap;
     gap: 18px;
+}
+
+.ui-result-player-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 10px 0 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--ui-divider);
+    flex-shrink: 0;
+}
+
+.ui-result-player {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+}
+
+.ui-result-player-name {
+    font-family: "OSRS Bold", sans-serif;
+    font-size: 20px;
+    color: var(--ui-yellow);
+    overflow-wrap: anywhere;
+}
+
+.ui-result-player-detail {
+    color: #b8aa8a;
+}
+
+.ui-result-arrow {
+    display: grid;
+    place-items: center;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+}
+
+.ui-result-arrow:focus-visible {
+    outline: 2px solid var(--ui-yellow);
+    outline-offset: 2px;
+}
+
+.ui-result-arrow-left,
+.ui-result-arrow-right {
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    filter: drop-shadow(1px 1px 0 #000);
+}
+
+.ui-result-arrow-left {
+    border-right: 10px solid currentColor;
+}
+
+.ui-result-arrow-right {
+    border-left: 10px solid currentColor;
 }
 
 .ui-result-column {

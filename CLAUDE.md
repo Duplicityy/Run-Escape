@@ -35,6 +35,7 @@ go stale. Add anything that cost you time to work out.
 | Caskets and the inventory                             | `src/game/core/Loot.ts`                  |
 | Random events: who turns up, what they do             | `src/game/content/randomEvents.ts`       |
 | Save data and migrations                              | `src/game/core/save.ts`                  |
+| One tab saving, newer saves, unreadable ones          | `docs/DEVELOPMENT.md`, Saves             |
 | Run flow, camera, input, the HUD's data               | `src/game/client/GameClient.ts`          |
 | 3D actors, swooshes, hitsplats                        | `src/game/client/GameView.ts`            |
 | Touch screens: the stick, its buttons, phone layouts  | `docs/DEVELOPMENT.md`, Touch screens     |
@@ -53,6 +54,14 @@ go stale. Add anything that cost you time to work out.
 
 `src/game/core/` has no DOM or rendering. The UI reads from `GameClient` and `GameStore`, and never
 changes the sim directly.
+
+Co-op guests can predict movement, only for display (`client/coop/MovementPrediction.ts` and
+`PlayerPose.ts`). It's a trial, off unless the player turns on `movePrediction` in
+`DisplaySettings`, so a guest's `CoopRun.prediction` is often undefined. Keep predicted positions
+out of `Sim` and its hashes. Movement sequence echoes are acknowledged when their host frame is
+applied; preserve them when coalescing queued moves. Movement rules shared by simulation and
+prediction live in `core/PlayerMovement.ts`. Keep the delayed-network tests in
+`MovementPrediction.test.ts` covering corrections, fallbacks and changes to movement.
 
 ## Commands
 
@@ -159,6 +168,8 @@ desktop build.
   console, takes a moment to show up.
 - Headless Chromium needs `--use-angle=swiftshader --enable-unsafe-swiftshader`, and a persistent
   profile, or the cache won't fit in its storage quota. The cache can take a while to load.
+- On Windows, keep that profile on a short path (a session's scratchpad is too long). Past 260
+  characters the Cache API fails with `UnknownError: Failed to execute 'open' on 'CacheStorage'`.
 - A small window isn't a phone: `Mobile.css` needs `(pointer: coarse)` too. Over DevTools,
   `Emulation.setTouchEmulationEnabled` only lasts as long as the session that set it, so keep that
   session open while you test.
@@ -185,7 +196,9 @@ desktop build.
 - **Content** is plain data with real cache ids. Look ids up with the scripts, not from memory. OSRS
   names should be spelled as the cache spells them.
 - **Saves**: if `SaveData` changes shape, raise `SAVE_VERSION` and add a step to `migrateSave`.
-  New shop upgrades, ids and optional fields don't need one.
+  New shop upgrades, ids and optional fields don't need one. Write the save only through
+  `GameClient.persist()`: it doesn't write while another tab has `SaveLock` or the save is from a
+  newer game. Never rename the lock, `run-escape-save`, any more than the keys.
 - **Determinism**: the sim only uses its seeded `Rng`, never `Math.random`. Co-op runs the same sim
   on every player's browser, so in `src/game/core/` trigonometry goes through `fm` (`fm.sin`,
   `fm.cos`, `fm.atan2`, `fm.hypot`, `fm.acos`, `fm.pow`) from `core/fmath.ts`, never `Math`'s.

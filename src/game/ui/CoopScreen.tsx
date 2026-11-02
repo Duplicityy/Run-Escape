@@ -146,35 +146,39 @@ function CoopMenu({ ui, client }: Props): JSX.Element {
                     </span>
                 </h3>
                 <div className="ui-coop-rooms">
-                    {rooms.map((listing) => (
-                        <div
-                            key={listing.code}
-                            className="ui-coop-room"
-                            title={`Hosted by ${listing.host}`}
-                        >
-                            <ItemIcon objId={getMap(listing.mapId).iconObjId} size={20} />
-                            <span className="ui-coop-room-name">
-                                <span className="ui-coop-room-host">{listing.name}</span>
-                                <span className="ui-coop-room-code">{listing.code}</span>
-                                <span className="ui-coop-room-map">
-                                    {getMap(listing.mapId).name}
-                                    {listing.hard && ", hard"}
-                                    {listing.endless && !getMap(listing.mapId).fun && ", endless"}
-                                </span>
-                            </span>
-                            <span className="ui-coop-room-count">
-                                {listing.players} / {listing.max}
-                            </span>
-                            <button
-                                className="ui-button ui-button-small"
-                                disabled={!online || !!missing(listing)}
-                                title={missing(listing)}
-                                onClick={() => client.joinRoom(listing.code)}
+                    {rooms.map((listing) => {
+                        const map = getMap(listing.mapId);
+                        const locked = missing(listing);
+                        return (
+                            <div
+                                key={listing.code}
+                                className="ui-coop-room"
+                                title={`Hosted by ${listing.host}`}
                             >
-                                {missing(listing) ? "Locked" : "Join"}
-                            </button>
-                        </div>
-                    ))}
+                                <ItemIcon objId={map.iconObjId} size={20} />
+                                <span className="ui-coop-room-name">
+                                    <span className="ui-coop-room-host">{listing.name}</span>
+                                    <span className="ui-coop-room-code">{listing.code}</span>
+                                    <span className="ui-coop-room-map">
+                                        {map.name}
+                                        {listing.hard && ", hard"}
+                                        {listing.endless && !map.fun && ", endless"}
+                                    </span>
+                                </span>
+                                <span className="ui-coop-room-count">
+                                    {listing.players} / {listing.max}
+                                </span>
+                                <button
+                                    className="ui-button ui-button-small"
+                                    disabled={!online || !!locked}
+                                    title={locked}
+                                    onClick={() => client.joinRoom(listing.code)}
+                                >
+                                    {locked ? "Locked" : "Join"}
+                                </button>
+                            </div>
+                        );
+                    })}
                     {online && coop.rooms.length === 0 && (
                         <div className="ui-coop-empty">No open rooms right now. Make one!</div>
                     )}
@@ -250,6 +254,9 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
               );
     // A map this game hasn't got (a newer host's) shows as the first
     const map = MAP_BY_ID.get(room.mapId) ?? MAPS[0];
+    // Who keeps the host from turning endless or hard mode on here
+    const withoutEndless = lacking(map.id, true);
+    const withoutHard = lacking(map.id, false, true);
     const [copied, setCopied] = useState(false);
     const copyInvite = () => {
         navigator.clipboard
@@ -435,10 +442,10 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
                         <span className="ui-endless-name">Endless</span>
                         {!isEndlessUnlocked(ui.save, map.id) ? (
                             <span className="ui-endless-hint">Beat the map</span>
-                        ) : !room.endless && lacking(map.id, true) ? (
+                        ) : !room.endless && withoutEndless ? (
                             // It can be turned off, but only on once everyone's beaten it
                             <span className="ui-endless-hint">
-                                {lacking(map.id, true)!.name} hasn't beaten it
+                                {withoutEndless.name} hasn't beaten it
                             </span>
                         ) : (
                             <Toggle
@@ -459,10 +466,10 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
                         <span className="ui-endless-name">Hard</span>
                         {!isHardUnlocked(ui.save, map.id) ? (
                             <span className="ui-endless-hint">Beat the map</span>
-                        ) : !room.hard && lacking(map.id, false, true) ? (
+                        ) : !room.hard && withoutHard ? (
                             // It can be turned off, but only on once everyone's beaten it
                             <span className="ui-endless-hint">
-                                {lacking(map.id, false, true)!.name} hasn't beaten it
+                                {withoutHard.name} hasn't beaten it
                             </span>
                         ) : (
                             <Toggle

@@ -3,11 +3,57 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
-## Unreleased
+## 0.23.0 - 2026-11-02
 
 ### Added
 
 - Hard mode in co-op: the host can turn it on once everyone in the room has it.
+- Co-op results, by trippy22: a page for each player's own kills, damage, weapons and caskets, with
+  arrows (or the arrow keys) to flip between them, and the party's totals underneath.
+- Co-op servers, by trippy22: player and room counts for monitoring (Prometheus), on the server
+  itself only, with `MULTIPLAYER_METRICS=off` to turn them off.
+
+### Changed
+
+- Co-op's server holds up better against anyone trying to flood it or take every room.
+- Desktop: the game can only reach its own files and the co-op server, nothing else.
+
+### Fixed
+
+- With the game open in two tabs, only one saves, so they no longer undo each other's runs, coins
+  and unlocks. The other offers to play there instead.
+- A tab left open over an update no longer wipes progress from the newer version when it saves. It
+  asks you to reload instead, or to save anyway and lose only what was new.
+- A save that can't be read is kept rather than lost. The game tells you, and you can export it
+  from Settings.
+- If the game stops saving mid-run, a solo run pauses while it tells you why, and the pause menu
+  says so afterwards.
+- Killing the final boss wins the run, even if a hit lands in the same instant: it no longer counts
+  as a death or uses up a ring of life.
+- Co-op: two players with the same orbit weapon, like Elemental runes, no longer wipe out each
+  other's circle.
+- Co-op: a downed player can't reroll or skip level ups any more, so they can't spend the party's
+  coins.
+- Co-op: one player's Evil Bob finishing no longer ends another's Evil Bob timer early.
+- Co-op: each player's Toktz-mej-tal burns ground of its own: another player's pulse no longer
+  takes over your fire or puts it out.
+- Durial321's task says what it takes: surviving 6:06 in Falador, not 6 minutes.
+- Co-op: a double click or a quick second key on a level up, casket or random event no longer
+  answers the next one too, unseen.
+- Pressing Enter or Space on a focused casket button no longer resolves the next casket as well.
+- Co-op: a tab left in the background no longer builds up effects to draw all at once when you come
+  back.
+- Item icons that failed to draw are tried again, rather than staying blank until the game's
+  reopened.
+- Endless: a run no longer holds on to every boss it's had, so very long ones use less memory.
+
+## 0.22.1 - 2026-11-02
+
+### Added
+
+- Movement prediction, a trial you can turn on in Settings or the pause menu: joining a co-op game,
+  you move as soon as you press, then correct to the host. Hits and pickups still follow the host.
+  Thanks to trippy22, who built it.
 
 ### Changed
 

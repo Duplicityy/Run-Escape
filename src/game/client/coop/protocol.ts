@@ -102,7 +102,10 @@ export type GoneReason = "left" | "kicked" | "disbanded" | "hostLeft" | "idle";
 
 // A guest to the host: a move, something they did, or that their copy of the
 // run is ready to go (the map's loaded)
-export type UpMessage = { move: [number, number] } | { action: CoopAction } | { loaded: true };
+export type UpMessage =
+    | { move: [number, number]; moveSeq?: number }
+    | { action: CoopAction }
+    | { loaded: true };
 
 // The host to everyone: the frames up to `upTo` are out, with what happened
 // at them, and now and then a check that everyone's run still agrees

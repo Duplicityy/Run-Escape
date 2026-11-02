@@ -147,6 +147,12 @@ export function ChestModal({ chest, rerolls, client }: Props): JSX.Element {
                 return;
             }
             const confirm = event.code === "Space" || event.code === "Enter";
+            // A focused button answers Enter and Space with its own click,
+            // so taking the recommended action too would answer twice (and
+            // the second would land on the next casket)
+            if (confirm && event.target instanceof HTMLButtonElement) {
+                return;
+            }
             if (phase !== "reveal") {
                 if (confirm) {
                     skip();
