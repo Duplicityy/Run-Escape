@@ -25,6 +25,12 @@ import {
 
 type ModelSource = (seqId: number, frame: number) => Model | undefined;
 
+// A skeletal animation has a pose for every client tick (20ms), and a fully
+// posed copy of the model for each one is what made Varlamore's bosses too
+// big for a phone: Sol Heredit alone was over 100MB. One pose in every three
+// (60ms) is as smooth as the keyframed animations, and a third of the memory.
+const SKELETAL_TICK_STEP = 3;
+
 function getModelBounds(model: Model): { height: number; radius: number } {
     let height = 0;
     let radius = 0;
@@ -66,11 +72,12 @@ function bakeAnim(
     const seqType = seqId !== -1 ? state.seqTypeLoader.load(seqId) : undefined;
 
     let frameCount = 1;
-    let skeletal = false;
+    // A skeletal animation's length in ticks; its frames are every few of them
+    let skeletalTicks = 0;
     if (seqType) {
         if (seqType.isSkeletalSeq()) {
-            frameCount = seqType.getSkeletalDuration();
-            skeletal = true;
+            skeletalTicks = seqType.getSkeletalDuration();
+            frameCount = Math.ceil(skeletalTicks / SKELETAL_TICK_STEP);
         } else if (seqType.frameIds) {
             frameCount = seqType.frameIds.length;
         }
@@ -83,7 +90,8 @@ function bakeAnim(
     let reach = 0;
 
     for (let i = 0; i < frameCount; i++) {
-        const model = seqType ? getModel(seqId, i) : getModel(-1, -1);
+        const tick = skeletalTicks > 0 ? i * SKELETAL_TICK_STEP : i;
+        const model = seqType ? getModel(seqId, tick) : getModel(-1, -1);
         if (model) {
             if (i === 0) {
                 firstFrame = model;
@@ -100,7 +108,9 @@ function bakeAnim(
             ranges[i * 4 + 3] = alpha[1];
         }
         let length = 1;
-        if (seqType && !skeletal && seqType.frameLengths) {
+        if (skeletalTicks > 0) {
+            length = Math.min(SKELETAL_TICK_STEP, skeletalTicks - tick);
+        } else if (seqType?.frameLengths) {
             length = seqType.frameLengths[i] || 1;
         }
         frameLengths[i] = length;

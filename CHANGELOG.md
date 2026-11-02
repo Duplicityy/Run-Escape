@@ -3,6 +3,13 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
+## Unreleased
+
+### Fixed
+
+- Varlamore on a phone: its bosses' animations took several times the memory of any other map's,
+  which could crash the game as the run loaded. They now take a third of it.
+
 ## 0.23.0 - 2026-11-02
 
 ### Added

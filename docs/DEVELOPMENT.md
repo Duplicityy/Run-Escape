@@ -484,6 +484,13 @@ the enemy ids it finds in the map's waves, events and bosses, and in those enemi
 an enemy to bring on another needs nothing added. An enemy that isn't baked anyway (the console's
 `spawnBoss`) gets baked when it's first drawn, and shows up a moment later.
 
+A baked animation is a posed copy of the model per frame, so what an enemy costs is its triangles
+times its frames. A skeletal animation (the Colosseum's bosses, the gryphon, the naguas) has a pose
+for every client tick, and baking each one made Varlamore's enemies several times any other map's,
+too much for a phone. `ActorBakeLoader` samples those every `SKELETAL_TICK_STEP` ticks instead.
+`render-stats.ts --bake` shows each map's total and the heaviest actors, so a new boss can be
+checked against the other maps before a phone finds it.
+
 `window.frameProbe` (dev only) counts what a frame sends to the GPU, at the GL calls:
 `await frameProbe.sample(60)` gives triangles, draws and CPU time, split into world and actors.
 
