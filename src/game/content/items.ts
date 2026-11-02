@@ -954,6 +954,15 @@ export const UTILITY: UtilityDef[] = [
         description: "+30% damage, +1.5 armour and +12% weapon speed for 60 seconds.",
         use: { kind: "buff", stats: { might: 0.3, armor: 1.5, cooldown: 0.12 }, seconds: 60 },
     },
+    {
+        kind: "utility",
+        id: "prayer_cape",
+        name: "Prayer cape",
+        objId: 9759,
+        rarity: "rare",
+        description: "Co-op: a teammate can revive you once more.",
+        use: { kind: "revive" },
+    },
 ];
 
 export const ITEMS: ItemDef[] = [...GEAR, ...UTILITY];

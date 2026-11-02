@@ -1074,7 +1074,10 @@ export type ItemUse =
     // Hurts everything around the player
     | { kind: "blast"; damage: number; radius: number; spotAnim: number }
     // Experience worth this many levels at the current level
-    | { kind: "xp"; levels: number };
+    | { kind: "xp"; levels: number }
+    // Co-op: a teammate can revive the player once more. Taken from the
+    // casket at once, never kept, and only found in co-op.
+    | { kind: "revive" };
 
 // Carried in the inventory and used when the player wants (1-4); copies of
 // the same item stack in one slot

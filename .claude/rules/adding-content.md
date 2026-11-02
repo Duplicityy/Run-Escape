@@ -71,6 +71,9 @@ refunds come from `getUpgradeCost` and the save code. New ones don't need a save
 
 `items.ts`: gear goes in `CASKET_GEAR`, and utility items in `UTILITY`. `armoury.ts` says what each
 piece upgrades into, and `sets.ts` has the set bonuses. Run `scripts/cache/check-items.ts` afterwards.
+A utility item with a new `ItemUse` kind needs a case in `Sim.useUtility`, a sound in
+`USE_SOUNDS` in `client/GameSounds.ts`, and if it's only for some runs (the Prayer cape's extra
+revive, co-op only), its weight in `itemWeight` in `core/Loot.ts`.
 
 ## Power-up
 

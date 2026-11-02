@@ -88,6 +88,8 @@ export type ChestView = {
     // Utility: whether it fits in the inventory, and how many are carried
     canStash: boolean;
     carried: number;
+    // Taken at once rather than kept (an extra co-op revive)
+    instant: boolean;
     alchCoins: number;
     // What Space does: equip/keep, unless that would be a step down
     recommended: ChestAction;
@@ -238,12 +240,28 @@ export type TeammateView = {
     characterId: string;
     hp: number;
     maxHp: number;
-    // Down with no revives left (out for the rest of the run), or gone from
-    // the game
+    // Down with no ring of life left (waiting for a revive, or out for the
+    // rest of the run once they've had their last), or gone from the game
     down: boolean;
     left: boolean;
+    // Down and a teammate can still bring them back
+    revivable: boolean;
+    // How far along a revive under way is (0 to 1)
+    reviveProgress: number;
+    // Just revived, so nothing can hurt them
+    immune: boolean;
     // Their player id in the room, for the host to kick them
     id?: string;
+};
+
+// Co-op: what the note in the middle of the screen says about a revive:
+// you're down and can be revived (with how many revives you have left, and
+// who's reviving you, if anyone), or you're reviving a teammate
+export type ReviveView = {
+    name?: string;
+    reviving: boolean;
+    progress: number;
+    revivesLeft: number;
 };
 
 export type Toast = { id: number; text: string; until: number };
@@ -281,6 +299,8 @@ export type UiSnapshot = {
     coop: CoopView;
     party: TeammateView[];
     waitingOn: string[];
+    // Co-op: a revive you're part of, as the one down or the one reviving
+    revive?: ReviveView;
     choices: ChoiceView[];
     chest?: ChestView;
     event?: EventView;

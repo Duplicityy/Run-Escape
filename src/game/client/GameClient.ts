@@ -7,7 +7,7 @@ import massacre from "../../media/music/massacre.ogg";
 import { CollisionFlag } from "../../rs/pathfinder/flag/CollisionFlag";
 import { isCoarsePointer } from "../../util/DeviceUtil";
 import { CHARACTERS, getCharacter } from "../content/characters";
-import { MAX_PARTY } from "../content/coop";
+import { MAX_PARTY, REVIVE_IMMUNITY_SECONDS, REVIVE_SECONDS } from "../content/coop";
 import { upgradedName } from "../content/endless";
 import { getEnemy } from "../content/enemies";
 import { CASKETS, getItem } from "../content/items";
@@ -33,7 +33,7 @@ import { LOCKABLE_ITEMS, describeUnlockTask, isAvailable } from "../content/unlo
 import { formatWeaponStat, weaponStats } from "../content/weaponStats";
 import { getWeapon } from "../content/weapons";
 import { ChestAction } from "../core/Loot";
-import { HeroOptions, Sim, TICKS_PER_SECOND } from "../core/Sim";
+import { Hero, HeroOptions, Sim, TICKS_PER_SECOND } from "../core/Sim";
 import { canEvolve, describeChoice, getEvolutionHint } from "../core/Upgrades";
 import { SimEvent, WeaponState } from "../core/entities";
 import { usePortableMath } from "../core/fmath";
@@ -75,6 +75,7 @@ import {
     GameStore,
     HudView,
     QuestTrackView,
+    ReviveView,
     SaveBlock,
     Screen,
     SlotView,
@@ -1135,6 +1136,7 @@ export class GameClient implements GameFrameHandler {
             toasts: [],
             party: [],
             waitingOn: [],
+            revive: undefined,
         });
         this.updateHud(true);
         if (this.coopRun?.isHost && this.coopRun.waitingForLoad) {
@@ -1370,6 +1372,7 @@ export class GameClient implements GameFrameHandler {
             result: undefined,
             party: [],
             waitingOn: [],
+            revive: undefined,
         });
     }
 
@@ -1819,7 +1822,24 @@ export class GameClient implements GameFrameHandler {
                     this.store.toast(event.message);
                     break;
                 case "heroDown":
-                    this.store.toast("You're down! Watch the rest of your party fight on.", 5000);
+                    this.store.toast(
+                        sim.canBeRevived(sim.heroes[sim.focus])
+                            ? "You're down! A teammate standing over you for a few seconds can revive you."
+                            : "You're down! Watch the rest of your party fight on.",
+                        5000,
+                    );
+                    break;
+                case "heroRevived":
+                    this.store.toast(
+                        `${sim.heroes[event.by].name} revives you! Nothing can hurt you for ${REVIVE_IMMUNITY_SECONDS / 60} minutes.`,
+                        6000,
+                    );
+                    break;
+                case "extraRevive":
+                    this.store.toast(
+                        `A teammate can revive you once more (${describeRevives(sim.revivesLeftFor(sim.heroes[sim.focus]))}).`,
+                        6000,
+                    );
                     break;
                 case "visitor":
                     if (event.message) {
@@ -1841,7 +1861,22 @@ export class GameClient implements GameFrameHandler {
     private teammateToast(sim: Sim, name: string, event: SimEvent): void {
         switch (event.type) {
             case "heroDown":
-                this.store.toast(`${name} is down!`, 5000);
+                this.store.toast(
+                    sim.canBeRevived(sim.heroes[event.hero!])
+                        ? `${name} is down! Stand over them to revive them.`
+                        : `${name} is down!`,
+                    5000,
+                );
+                break;
+            case "heroRevived":
+                this.store.toast(
+                    event.by === sim.focus
+                        ? `You revive ${name}!`
+                        : `${sim.heroes[event.by].name} revives ${name}!`,
+                );
+                break;
+            case "extraRevive":
+                this.store.toast(`${name} can be revived once more.`);
                 break;
             case "heroLeft":
                 this.store.toast(`${name} left the game.`);
@@ -2022,10 +2057,17 @@ export class GameClient implements GameFrameHandler {
                     maxHp: hero.player.maxHp,
                     down: hero.down,
                     left: hero.left,
+                    revivable: sim.canBeRevived(hero),
+                    reviveProgress: reviveProgress(hero),
+                    immune: sim.isImmune(hero),
                     id: this.coopPlayerIds[hero.index],
                 }));
             if (JSON.stringify(party) !== JSON.stringify(this.store.getSnapshot().party)) {
                 this.store.set({ party });
+            }
+            const revive = getReviveView(sim);
+            if (JSON.stringify(revive) !== JSON.stringify(this.store.getSnapshot().revive)) {
+                this.store.set({ revive });
             }
         }
     }
@@ -2164,4 +2206,42 @@ export class GameClient implements GameFrameHandler {
             }
         }
     }
+}
+
+// "2 revives left"
+function describeRevives(left: number): string {
+    return `${left} ${left === 1 ? "revive" : "revives"} left`;
+}
+
+// How far along a downed hero's revive is, 0 to 1
+function reviveProgress(hero: Hero): number {
+    return hero.revive ? Math.min(1, hero.revive.ticks / (REVIVE_SECONDS * TICKS_PER_SECOND)) : 0;
+}
+
+// The revive this player's part of, if any: down and waiting for one, or
+// reviving a teammate
+function getReviveView(sim: Sim): ReviveView | undefined {
+    const own = sim.heroes[sim.focus];
+    if (sim.runOver || sim.state !== "playing") {
+        return undefined;
+    }
+    if (sim.canBeRevived(own)) {
+        const reviver = own.revive && sim.heroes[own.revive.hero];
+        return {
+            name: reviver?.name,
+            reviving: false,
+            progress: reviveProgress(own),
+            revivesLeft: sim.revivesLeftFor(own),
+        };
+    }
+    const downed = sim.heroes.find((hero) => hero.revive?.hero === sim.focus);
+    if (downed) {
+        return {
+            name: downed.name,
+            reviving: true,
+            progress: reviveProgress(downed),
+            revivesLeft: sim.revivesLeftFor(downed),
+        };
+    }
+    return undefined;
 }

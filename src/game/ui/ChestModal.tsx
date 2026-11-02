@@ -63,6 +63,9 @@ function getActions(chest: ChestView): ActionButton[] {
     if (chest.isGear) {
         return [{ action: "take", label: "Equip" }, alch];
     }
+    if (chest.instant) {
+        return [{ action: "use", label: "Take" }, alch];
+    }
     return [
         {
             action: "take",
@@ -324,9 +327,11 @@ function ChestCard({
                 ))}
             {!chest.isGear && (
                 <div className="ui-chest-compare">
-                    {chest.carried > 0
-                        ? `You have ${chest.carried} already; they stack.`
-                        : "Kept items are used with 1-4."}
+                    {chest.instant
+                        ? "Yours the moment you take it."
+                        : chest.carried > 0
+                          ? `You have ${chest.carried} already; they stack.`
+                          : "Kept items are used with 1-4."}
                 </div>
             )}
             <div className="ui-chest-actions">

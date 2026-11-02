@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { GameClient } from "../client/GameClient";
-import { TeammateView, UiSnapshot } from "../client/GameStore";
+import { ReviveView, TeammateView, UiSnapshot } from "../client/GameStore";
 import { describeMissing, parseRoomCode } from "../client/coop/CoopLobby";
 import { RoomListing, RoomView } from "../client/coop/protocol";
 import { CHARACTERS, getCharacter } from "../content/characters";
@@ -516,7 +516,10 @@ export function PartyFrames({ party }: { party: TeammateView[] }): JSX.Element {
                     key={i}
                     className={
                         "ui-party-member rs-border rs-background" +
-                        (member.left || member.down ? " ui-party-left" : "")
+                        (member.left || (member.down && !member.revivable)
+                            ? " ui-party-left"
+                            : "") +
+                        (member.immune ? " ui-party-immune" : "")
                     }
                 >
                     <ItemIcon
@@ -527,8 +530,18 @@ export function PartyFrames({ party }: { party: TeammateView[] }): JSX.Element {
                         <div className="ui-party-name">{member.name}</div>
                         {member.left ? (
                             <div className="ui-party-note">Left the game</div>
+                        ) : member.down && member.reviveProgress > 0 ? (
+                            <div className="ui-party-bar ui-party-revive">
+                                <div
+                                    className="ui-party-fill"
+                                    style={{ width: `${member.reviveProgress * 100}%` }}
+                                />
+                                <span>Reviving...</span>
+                            </div>
                         ) : member.down ? (
-                            <div className="ui-party-note">Down</div>
+                            <div className="ui-party-note">
+                                {member.revivable ? "Down: stand over to revive" : "Down"}
+                            </div>
                         ) : (
                             <div className="ui-party-bar">
                                 <div
@@ -543,6 +556,30 @@ export function PartyFrames({ party }: { party: TeammateView[] }): JSX.Element {
                     </div>
                 </div>
             ))}
+        </div>
+    );
+}
+
+// Co-op: you're down and can be revived, someone's reviving you, or you're
+// reviving a teammate
+export function ReviveNote({ revive }: { revive: ReviveView }): JSX.Element {
+    const left = `${revive.revivesLeft} ${revive.revivesLeft === 1 ? "revive" : "revives"} left`;
+    let text: string;
+    if (revive.reviving) {
+        text = `Reviving ${revive.name}...`;
+    } else if (revive.name) {
+        text = `${revive.name} is reviving you...`;
+    } else {
+        text = `You're down. A teammate standing over you can revive you (${left}).`;
+    }
+    return (
+        <div className="ui-revive rs-border rs-background">
+            <div>{text}</div>
+            {revive.progress > 0 && (
+                <div className="ui-party-bar ui-party-revive ui-revive-bar">
+                    <div className="ui-party-fill" style={{ width: `${revive.progress * 100}%` }} />
+                </div>
+            )}
         </div>
     );
 }

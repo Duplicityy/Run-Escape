@@ -7,6 +7,10 @@ the version in the corner).
 
 ### Added
 
+- Co-op revives: stand over a downed teammate for 5 seconds to bring them back. Each player can
+  be revived once a run, with 75% of their hitpoints, and comes back untouchable for 5 minutes.
+- Extra co-op revives: a Prayer cape, rarely in a casket or for sale from the Mysterious Old Man,
+  lets a teammate revive you once more (with 50%, then 25% of your hitpoints).
 - Hard mode in co-op: the host can turn it on once everyone in the room has it.
 - Co-op results, by trippy22: a page for each player's own kills, damage, weapons and caskets, with
   arrows (or the arrow keys) to flip between them, and the party's totals underneath.

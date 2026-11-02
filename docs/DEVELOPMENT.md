@@ -632,7 +632,21 @@ When adding to the sim:
   `core/`.
 
 How much bigger the crowd gets for each player is in `content/coop.ts`, worked out again whenever
-one goes down or leaves, with each of those still counting as half a player (`PLAYER_GONE`).
+one goes down, is revived or leaves, with each of those down or gone still counting as half a
+player (`PLAYER_GONE`).
+
+Revives are in `content/coop.ts` too (how many a player gets, the hitpoints each brings back,
+how long a teammate stands over them, how long the immunity lasts, and the extra revive's item,
+price and how often the Mysterious Old Man has one) and `Sim.stepRevives`: a downed hero keeps
+who's standing over them and for how long in `Hero.revive`, `reviveHero` brings them back, and
+`Hero.immuneEndTick` is how long nothing can hurt them. An extra revive is a utility item whose
+use is `revive` (the Prayer cape): `rollCasketItem` only gives it a weight in a party, a casket's
+"take" grants it at once through `gainRevive` rather than stashing it, and the old man's offer
+carries it as an `EventOption` of kind `revive`. Each adds to `Hero.extraRevives`. The immunity holds
+`player.invulnerable` every tick, the way the sled does, and `nearestHero` and `useSpawnHero`
+skip an immune hero while anyone else is up. The reviver's emote (`REVIVE_SEQ`) is baked with
+every player look through `getPlayerAttackSeqs`, and its graphic (`REVIVE_SPOTANIM`) with the
+base bake.
 Bosses come as copies (`bossCopies` there), spawned together by `Sim.spawnBosses`: each by a
 different player, clear of the others, sharing one boss's hitpoints, experience and loot through
 their `Encounter`, so the first says so and the last to fall drops the loot. A boss with its own

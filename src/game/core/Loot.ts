@@ -29,6 +29,8 @@ export const MASTER_CASKET_CHANCE = 0.1;
 
 // Relative chance of a utility item next to a piece of gear for an open slot
 const UTILITY_WEIGHT = 1.2;
+// A Prayer cape (an extra co-op revive) among the rare items, in co-op only
+const REVIVE_CASKET_WEIGHT = 0.3;
 // Gear no better than what's already worn in its slot turns up less
 const SIDEGRADE_WEIGHT = 0.35;
 // Chance a casket's item is one of the missing pieces of a set the player has
@@ -219,12 +221,19 @@ function itemWeight(
     unlocked: ReadonlySet<string> | undefined,
     upgrades: GearUpgrades | undefined,
     armoury: ArmouryUpgrades | undefined,
+    party: boolean,
 ): number {
     if (!isAvailable(item, unlocked)) {
         return 0;
     }
     if (item.kind === "utility") {
-        return item.id === exclude || (item.use.kind === "cure" && !poison) ? 0 : UTILITY_WEIGHT;
+        if (item.id === exclude || (item.use.kind === "cure" && !poison)) {
+            return 0;
+        }
+        if (item.use.kind === "revive") {
+            return party ? REVIVE_CASKET_WEIGHT : 0;
+        }
+        return UTILITY_WEIGHT;
     }
     const piece = getItem(getUpgradedGear(item.id, armoury));
     if (piece.id === exclude) {
@@ -255,7 +264,8 @@ function itemWeight(
 // upgrades: what gear comes with and what's worn has (none when unset).
 // armoury: the pieces upgraded in the Armoury (none when unset).
 // declinedSets: sets the player has turned a piece of down this run (see
-// getStartedSet), which stop being brought (none when unset). Returns the item
+// getStartedSet), which stop being brought (none when unset).
+// party: a co-op run, the only place an extra revive turns up. Returns the item
 // as it's found, before the Armoury's upgrades (see getUpgradedGear).
 export function rollCasketItem(
     rng: Rng,
@@ -268,6 +278,7 @@ export function rollCasketItem(
     upgrades?: GearUpgrades,
     armoury?: ArmouryUpgrades,
     declinedSets?: ReadonlySet<string>,
+    party = false,
 ): string {
     const rarity = rollRarityFrom(CASKETS[tier].rarityWeights, () => rng.next(), luck);
     const index = RARITY_ORDER.indexOf(rarity);
@@ -292,7 +303,7 @@ export function rollCasketItem(
         const pool = CASKET_ITEMS.filter((item) => item.rarity === r);
         const pick = rng.weightedIndex(
             pool.map((item) =>
-                itemWeight(item, gear, poison, exclude, unlocked, upgrades, armoury),
+                itemWeight(item, gear, poison, exclude, unlocked, upgrades, armoury, party),
             ),
         );
         if (pick !== -1) {

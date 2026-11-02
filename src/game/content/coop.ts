@@ -62,3 +62,28 @@ export function getPartyScale(players: number): PartyScale {
         caskets: 1 + CASKETS_PER_PLAYER * extra,
     };
 }
+
+// A player who goes down can be brought back by a teammate standing over them
+// (within REVIVE_RANGE tiles) for REVIVE_SECONDS, REVIVES_PER_PLAYER times a
+// run plus any extra revives they've found (Hero.extraRevives), with less of
+// their hitpoints each time (REVIVE_HP, by how many times they've been
+// revived; the last for every time after). Back up, nothing can hurt them and
+// enemies leave them be for REVIVE_IMMUNITY_SECONDS.
+export const REVIVES_PER_PLAYER = 1;
+export const REVIVE_HP = [0.75, 0.5, 0.25];
+export const REVIVE_SECONDS = 5;
+export const REVIVE_RANGE = 1;
+export const REVIVE_IMMUNITY_SECONDS = 5 * 60;
+
+// The Prayer cape's skillcape emote, which a reviver performs over the fallen:
+// the player animation and the graphic that goes with it
+export const REVIVE_SEQ = 4979;
+export const REVIVE_SPOTANIM = 829;
+
+// An extra revive comes as a Prayer cape, only in co-op: now and then in a
+// casket (its rarity and REVIVE_CASKET_WEIGHT in Loot.ts say how rarely), or
+// for sale from the Mysterious Old Man, who has one in place of a power-up
+// this often, at this price before the run's inflation
+export const EXTRA_REVIVE_ITEM = "prayer_cape";
+export const OLD_MAN_REVIVE_CHANCE = 0.15;
+export const EXTRA_REVIVE_PRICE = 200;

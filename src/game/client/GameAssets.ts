@@ -18,6 +18,7 @@ import {
     getAppearanceKey,
 } from "../../rs/model/player/PlayerModelLoader";
 import { getCharacter } from "../content/characters";
+import { REVIVE_SEQ, REVIVE_SPOTANIM } from "../content/coop";
 import { ENEMIES } from "../content/enemies";
 import { CASKETS, GEAR_SLOT_BY_ID, getItem } from "../content/items";
 import { getPassive } from "../content/passives";
@@ -110,7 +111,8 @@ export const HITSPLAT_SPRITES = { damage: 1359, poison: 1360, block: 1358 } as c
 
 // Every spot animation the content uses, plus the fixed ones (cannonball,
 // level up fireworks, a frozen player's ice, the bot nuke's explosions, the
-// Amulet of blood fury's heal, a random event's visitor coming and going)
+// Amulet of blood fury's heal, a random event's visitor coming and going, a
+// co-op revive's emote)
 function getSpotAnimIds(): number[] {
     const ids = new Set<number>([
         53,
@@ -119,6 +121,7 @@ function getSpotAnimIds(): number[] {
         NUKE_SPOTANIM,
         BLOOD_FURY_SPOTANIM,
         VISITOR_SPOTANIM,
+        REVIVE_SPOTANIM,
     ]);
     const add = (...spotAnims: (number | undefined)[]) => {
         for (const id of spotAnims) {
@@ -178,9 +181,11 @@ function getThrownObjIds(): number[] {
     return [...ids];
 }
 
+// Every animation the player does with a weapon, and the emote a co-op
+// reviver performs
 export function getPlayerAttackSeqs(): number[] {
     const seqs = WEAPONS.flatMap((w) => [w.playerSeq, w.special?.playerSeq ?? -1]);
-    return [...new Set(seqs.filter((id) => id !== -1))];
+    return [...new Set([...seqs.filter((id) => id !== -1), REVIVE_SEQ])];
 }
 
 // The player's look in a run: the character's outfit, the held weapon tier,
