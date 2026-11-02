@@ -2109,10 +2109,9 @@ export class Sim {
             // All at once, each on its own spot; the next lot is due once
             // they're all dead
             this.useSpawnHero();
-            this.funBossGroup = fun.bosses.pool.flatMap((id) => {
-                const boss = this.spawnBoss(getEnemy(id), "boss", undefined);
-                return boss ? [boss] : [];
-            });
+            this.funBossGroup = fun.bosses.pool.flatMap((id) =>
+                this.spawnBosses(getEnemy(id), "boss", undefined),
+            );
             if (this.funBossGroup.length > 0) {
                 this.nextFunBossSeconds = Infinity;
             }
@@ -2121,7 +2120,7 @@ export class Sim {
             const choices = pool.length > 1 ? pool.filter((id) => id !== this.lastFunBoss) : pool;
             const id = choices[this.rng.int(choices.length)];
             this.useSpawnHero();
-            if (this.spawnBoss(getEnemy(id), "boss", undefined)) {
+            if (this.spawnBosses(getEnemy(id), "boss", undefined).length > 0) {
                 this.lastFunBoss = id;
                 this.nextFunBossSeconds = this.seconds + this.rng.range(...fun.bosses.every);
             }
@@ -2253,6 +2252,36 @@ export class Sim {
             this.isWalkableTile(tileX, tileY) &&
             isCircleFree(this.grid, x, y, Math.max(def.radius, PLAYER_RADIUS))
         );
+    }
+
+    // Reserve the whole encounter before spawning it, so a failed placement
+    // retries without leaving a partial group behind.
+    private bossSpawnPoints(
+        def: EnemyDef,
+        minDistance = BOSS_SPAWN_MIN_DISTANCE,
+        maxDistance = BOSS_SPAWN_MAX_DISTANCE,
+    ): { x: number; y: number }[] {
+        const count = this.heroes.length === 1 ? 1 : this.hard ? this.heroes.length : 2;
+        const points: { x: number; y: number }[] = [];
+        for (let i = 0; i < count; i++) {
+            const point = def.spawnAt
+                ? this.pickSpawnSpot(def)
+                : this.findSpawnPoint(def, minDistance, maxDistance);
+            if (!point) {
+                return [];
+            }
+            points.push(point);
+        }
+        return points;
+    }
+
+    // Scripted entrances (The Nightmare's group fight) still spawn one boss.
+    private spawnBosses(
+        def: EnemyDef,
+        type: "boss" | "finalBoss",
+        hp: number | undefined,
+    ): Enemy[] {
+        return this.bossSpawnPoints(def).map((at) => this.spawnBoss(def, type, hp, at)!);
     }
 
     private spawnBoss(
@@ -6812,27 +6841,29 @@ export class Sim {
         if (def.disguise && type === "boss") {
             return this.layDisguise(def, hp);
         }
-        return this.spawnBoss(def, type, hp) !== undefined;
+        return this.spawnBosses(def, type, hp).length > 0;
     }
 
     // Looks like any casket dropping, toast and all, close enough to tempt
     private layDisguise(def: EnemyDef, hp: number | undefined): boolean {
         const disguise = def.disguise!;
-        const pos = this.findSpawnPoint(def, DISGUISE_MIN_DISTANCE, DISGUISE_MAX_DISTANCE);
-        if (!pos) {
+        const points = this.bossSpawnPoints(def, DISGUISE_MIN_DISTANCE, DISGUISE_MAX_DISTANCE);
+        if (points.length === 0) {
             return false;
         }
-        const { x, y } = this.walkableSpot(pos.x, pos.y);
-        this.dropPickup("casket", x, y, 1, {
-            tier: disguise.casket,
-            disguise: {
-                enemyId: def.id,
-                hp,
-                shakeTick: this.tick + Math.round(disguise.seconds * TICKS_PER_SECOND),
-                openTick: -1,
-            },
-        });
-        this.emit({ type: "casketDropped", tier: disguise.casket, x, y });
+        for (const pos of points) {
+            const { x, y } = this.walkableSpot(pos.x, pos.y);
+            this.dropPickup("casket", x, y, 1, {
+                tier: disguise.casket,
+                disguise: {
+                    enemyId: def.id,
+                    hp,
+                    shakeTick: this.tick + Math.round(disguise.seconds * TICKS_PER_SECOND),
+                    openTick: -1,
+                },
+            });
+            this.emit({ type: "casketDropped", tier: disguise.casket, x, y });
+        }
         return true;
     }
 
@@ -7839,7 +7870,7 @@ export class Sim {
             // for when they turn up
             const enemy = getEnemy(effect.enemyId);
             const hp = enemy.hp * this.map.difficulty.hp * this.enemyHpScale();
-            if (!this.spawnBoss(enemy, "boss", hp)) {
+            if (this.spawnBosses(enemy, "boss", hp).length === 0) {
                 return false;
             }
             this.lastRandomEventId = def.id;

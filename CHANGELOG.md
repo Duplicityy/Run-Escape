@@ -55,6 +55,10 @@ the version in the corner).
   you move as soon as you press, then correct to the host. Hits and pickups still follow the host.
   Thanks to trippy22, who built it.
 
+### Changed
+
+- Multiplayer bosses spawn in pairs, or one per player in hard mode; Hallowed Night's final Nightmare fight stays a single boss.
+
 ## 0.22.0 - 2026-11-01
 
 ### Added

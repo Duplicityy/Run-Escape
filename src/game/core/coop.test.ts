@@ -6,7 +6,7 @@ import { getPowerUp } from "../content/powerups";
 import { getRandomEvent } from "../content/randomEvents";
 import { emptyStats } from "../content/types";
 import { getWeapon } from "../content/weapons";
-import { HeroOptions, Sim, TICKS_PER_SECOND } from "./Sim";
+import { HeroOptions, Sim, SimOptions, TICKS_PER_SECOND } from "./Sim";
 import { fm, usePortableMath } from "./fmath";
 import { applyFrameEvent, syncHash } from "./lockstep";
 import { makeGrid } from "./world/testGrid";
@@ -29,7 +29,13 @@ function hero(characterId: string, name = characterId): HeroOptions {
     return { name, characterId, metaStats: emptyStats() };
 }
 
-function createParty(characters: string[], seed = 1, focus = 0, hard = false): Sim {
+function createParty(
+    characters: string[],
+    seed = 1,
+    focus = 0,
+    hard = false,
+    options: Partial<SimOptions> = {},
+): Sim {
     return new Sim({
         grid: makeGrid(openField(), 1000, 1000),
         characterId: "",
@@ -40,6 +46,7 @@ function createParty(characters: string[], seed = 1, focus = 0, hard = false): S
         party: characters.map((id) => hero(id)),
         focus,
         hard,
+        ...options,
     });
 }
 
@@ -549,6 +556,139 @@ describe("co-op", () => {
         expect(duo.maxHp / alone.maxHp).toBeCloseTo(party.hp * scale.hp, 0);
         expect(duo.damageScale).toBeCloseTo(alone.damageScale * party.damage * scale.damage);
         expect(duo.xp).toBeCloseTo(alone.xp * party.xp * HARD_XP);
+    });
+});
+
+describe("co-op boss encounters", () => {
+    const characters = ["warrior", "wizard", "ranger", "warrior"];
+
+    function party(players: number, hard: boolean, options: Partial<SimOptions> = {}): Sim {
+        const sim = createParty(characters.slice(0, players), 1, 0, hard, options);
+        for (const hero of sim.heroes) {
+            hero.weapons = [];
+            hero.player.invulnerable = 1e6;
+        }
+        return sim;
+    }
+
+    function encounter(sim: Sim, enemyId: string): void {
+        const index = sim.map.events.findIndex((event) => event.enemyId === enemyId);
+        expect(index).toBeGreaterThanOrEqual(0);
+        sim["eventIndex"] = index;
+        sim.tick += Math.round((sim.map.events[index].at - sim.mapSeconds) * TICKS_PER_SECOND);
+        sim.step();
+    }
+
+    it.each([
+        [1, false, 1],
+        [1, true, 1],
+        [2, false, 2],
+        [3, false, 2],
+        [4, false, 2],
+        [2, true, 2],
+        [3, true, 3],
+        [4, true, 4],
+    ] as const)("spawns %i players' bosses with hard=%s as %i copies", (players, hard, count) => {
+        const sim = party(players, hard);
+        encounter(sim, "count_draynor");
+        expect(sim.enemies.filter((enemy) => enemy.def.id === "count_draynor")).toHaveLength(count);
+        encounter(sim, "wise_old_man");
+        const bosses = sim.enemies.filter((enemy) => enemy.finalBoss);
+        expect(bosses).toHaveLength(count);
+        for (const boss of bosses.slice(0, -1)) {
+            sim.damageEnemy(boss, 1e9, 0, sim.player.x, sim.player.y);
+            expect(sim.runOver).toBe(false);
+        }
+        sim.damageEnemy(bosses.at(-1)!, 1e9, 0, sim.player.x, sim.player.y);
+        expect(sim.state).toBe("victory");
+    });
+
+    it.each([false, true])("multiplies Hallowed Night's earlier bosses with hard=%s", (hard) => {
+        const sim = party(4, hard, { mapId: "halloween" });
+        const count = hard ? 4 : 2;
+        encounter(sim, "slash_bash");
+        expect(sim.enemies.filter((enemy) => enemy.def.id === "slash_bash")).toHaveLength(count);
+        encounter(sim, "the_mimic");
+        const caskets = sim.pickups.filter((pickup) => pickup.disguise);
+        expect(caskets).toHaveLength(count);
+        for (const casket of caskets) {
+            casket.disguise!.openTick = sim.tick;
+        }
+        sim.step();
+        expect(sim.enemies.filter((enemy) => enemy.def.id === "the_mimic")).toHaveLength(count);
+    });
+
+    it.each([false, true])("keeps The Nightmare a single group fight with hard=%s", (hard) => {
+        const arena = getMap("halloween").bossArena!;
+        const sim = party(4, hard, {
+            mapId: "halloween",
+            grid: makeGrid(openField(), arena.baseX - 10, arena.baseY - 10),
+            spawnX: arena.baseX + arena.size / 2,
+            spawnY: arena.baseY + arena.size / 2,
+        });
+        encounter(sim, "the_nightmare");
+        expect(sim.intro).toBeDefined();
+        sim.tick = sim.intro!.riseTick;
+        sim.step();
+        expect(sim.enemies.filter((enemy) => enemy.finalBoss)).toHaveLength(1);
+        expect(sim.intro!.boss!.def.id).toBe("the_nightmare");
+    });
+
+    it("retries a failed group placement without duplicating bosses", () => {
+        const sim = party(2, false);
+        const placement = vi.spyOn(
+            sim as unknown as { findSpawnPoint(): { x: number; y: number } | undefined },
+            "findSpawnPoint",
+        );
+        placement.mockReturnValueOnce({ x: 1052.5, y: 1036.5 }).mockReturnValueOnce(undefined);
+        encounter(sim, "count_draynor");
+        expect(sim.enemies.some((enemy) => enemy.boss)).toBe(false);
+        placement.mockRestore();
+        sim.step();
+        expect(sim.enemies.filter((enemy) => enemy.def.id === "count_draynor")).toHaveLength(2);
+    });
+
+    it.each([false, true])("multiplies recurring bosses and ambushes with hard=%s", (hard) => {
+        const sim = party(4, hard, { mapId: "grand_exchange" });
+        const count = hard ? 4 : 2;
+        sim.tick = sim.map.fun!.bosses.firstAt * TICKS_PER_SECOND;
+        sim.step();
+        expect(sim.enemies.filter((enemy) => enemy.boss)).toHaveLength(count);
+        expect(sim.startRandomEvent(getRandomEvent("highwayman"))).toBe(true);
+        expect(sim.enemies.filter((enemy) => enemy.def.id === "highwayman")).toHaveLength(count);
+    });
+
+    it.each([false, true])(
+        "waits for every final boss before the next endless round with hard=%s",
+        (hard) => {
+            const sim = party(4, hard, { endless: true });
+            encounter(sim, "wise_old_man");
+            const bosses = sim.enemies.filter((enemy) => enemy.finalBoss);
+            for (const boss of bosses.slice(0, -1)) {
+                sim.damageEnemy(boss, 1e9, 0, sim.player.x, sim.player.y);
+                expect(sim.round).toBe(1);
+            }
+            sim.damageEnemy(bosses.at(-1)!, 1e9, 0, sim.player.x, sim.player.y);
+            expect(sim.round).toBe(2);
+            encounter(sim, "wise_old_man");
+            expect(sim.enemies.filter((enemy) => enemy.finalBoss && !enemy.dead)).toHaveLength(
+                hard ? 4 : 2,
+            );
+        },
+    );
+
+    it("spawns the same hard-mode bosses on every player's copy", () => {
+        usePortableMath(true);
+        try {
+            const host = createParty(characters, 9, 0, true);
+            const guest = createParty(characters, 9, 3, true);
+            encounter(host, "wise_old_man");
+            encounter(guest, "wise_old_man");
+            expect(syncHash(guest)).toBe(syncHash(host));
+            expect(fingerprint(guest)).toBe(fingerprint(host));
+        } finally {
+            usePortableMath(false);
+        }
     });
 });
 
