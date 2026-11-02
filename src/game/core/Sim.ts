@@ -1,6 +1,6 @@
 import { ArmouryUpgrades, getUpgradedGear } from "../content/armoury";
 import { getCharacter } from "../content/characters";
-import { PLAYER_GONE, PartyScale, getPartyScale } from "../content/coop";
+import { PLAYER_GONE, PartyScale, bossCopies, getPartyScale } from "../content/coop";
 import {
     LATER_ROUND_START,
     LATE_CASKET_CHANCE,
@@ -127,6 +127,7 @@ import {
     Death,
     Debuff,
     Effect,
+    Encounter,
     Enemy,
     EnemyAbilities,
     EnemyLeaving,
@@ -216,6 +217,8 @@ const SPAWN_MAX_DISTANCE = 24;
 // Bosses turn up a little closer, so the fight starts soon
 const BOSS_SPAWN_MIN_DISTANCE = 12;
 const BOSS_SPAWN_MAX_DISTANCE = 16;
+// Co-op: how far apart a boss's copies turn up, at least
+const BOSS_COPY_GAP = 4;
 // A boss in disguise (EnemyDef.disguise): how far from the player it lies, how
 // close sets it off, and ticks between it opening and its first attack
 const DISGUISE_MIN_DISTANCE = 7;
@@ -707,6 +710,8 @@ export class Sim {
     // A pool that turns up together (FunMapDef.bosses.together): the ones out
     // now, until the last of them is killed
     private funBossGroup: Enemy[] = [];
+    // Co-op: the next boss encounter's id (Encounter)
+    private nextEncounter = 1;
     private nextChatTick = 0;
     private nextPlayerChatSeconds = Infinity;
     // The factions seen so far, in order, and where the first one comes from
@@ -2207,11 +2212,14 @@ export class Sim {
         return alive;
     }
 
+    // avoid: spots already taken, that this one keeps clear of (a boss's other
+    // copies)
     private findSpawnPoint(
         def: EnemyDef,
         minDistance: number,
         maxDistance: number,
         angle?: number,
+        avoid?: { x: number; y: number }[],
     ) {
         const player = this.player;
         for (let attempt = 0; attempt < 16; attempt++) {
@@ -2222,7 +2230,11 @@ export class Sim {
             const distance = this.rng.range(minDistance, maxDistance);
             const x = Math.floor(player.x + fm.cos(a) * distance) + 0.5;
             const y = Math.floor(player.y + fm.sin(a) * distance) + 0.5;
-            if (this.canTurnUpAt(def, x, y) && !this.besideATeammate(x, y, minDistance)) {
+            if (
+                this.canTurnUpAt(def, x, y) &&
+                !this.besideATeammate(x, y, minDistance) &&
+                !avoid?.some((taken) => fm.hypot(taken.x - x, taken.y - y) < BOSS_COPY_GAP)
+            ) {
                 return { x, y };
             }
         }
@@ -2254,43 +2266,96 @@ export class Sim {
         );
     }
 
-    // Reserve the whole encounter before spawning it, so a failed placement
-    // retries without leaving a partial group behind.
+    // Where a boss encounter's copies turn up, all reserved before any of them
+    // spawns, so that nowhere to put one retries the lot next tick rather than
+    // leaving a partial group behind. Each comes by a different player who's
+    // still up (the spawn hero's first), clear of the others. A boss with its
+    // own spots (spots, EnemyDef.spawnAt) takes a different one for each copy,
+    // and only as many as are free: Pest Control's portals have one each
     private bossSpawnPoints(
         def: EnemyDef,
-        minDistance = BOSS_SPAWN_MIN_DISTANCE,
-        maxDistance = BOSS_SPAWN_MAX_DISTANCE,
+        copies: number,
+        minDistance: number,
+        maxDistance: number,
+        spots: { x: number; y: number }[] | undefined,
     ): { x: number; y: number }[] {
-        const count = this.heroes.length === 1 ? 1 : this.hard ? this.heroes.length : 2;
         const points: { x: number; y: number }[] = [];
-        for (let i = 0; i < count; i++) {
-            const point = def.spawnAt
-                ? this.pickSpawnSpot(def)
-                : this.findSpawnPoint(def, minDistance, maxDistance);
+        if (spots) {
+            const free = this.freeSpawnSpots(def, spots);
+            for (let i = 0; i < copies && free.length > 0; i++) {
+                points.push(...free.splice(this.rng.int(free.length), 1));
+            }
+            return points;
+        }
+        const spawnHero = this.hero;
+        const by = this.heroes.filter((hero) => this.isUp(hero));
+        const first = Math.max(0, by.indexOf(spawnHero));
+        for (let i = 0; i < copies; i++) {
+            if (by.length > 0) {
+                this.use(by[(first + i) % by.length]);
+            }
+            const point = this.findSpawnPoint(def, minDistance, maxDistance, undefined, points);
             if (!point) {
-                return [];
+                points.length = 0;
+                break;
             }
             points.push(point);
         }
+        this.use(spawnHero);
         return points;
     }
 
-    // Scripted entrances (The Nightmare's group fight) still spawn one boss.
+    // A boss encounter: the boss, or in co-op its copies (content/coop.ts
+    // bossCopies), with one boss's hitpoints and experience shared between
+    // them and its loot with the last to fall. The first of them says so.
+    // Scripted entrances (The Nightmare's) go through spawnBoss, one boss.
     private spawnBosses(
         def: EnemyDef,
         type: "boss" | "finalBoss",
         hp: number | undefined,
     ): Enemy[] {
-        return this.bossSpawnPoints(def).map((at) => this.spawnBoss(def, type, hp, at)!);
+        const points = this.bossSpawnPoints(
+            def,
+            bossCopies(this.heroes.length, this.hard),
+            BOSS_SPAWN_MIN_DISTANCE,
+            BOSS_SPAWN_MAX_DISTANCE,
+            def.spawnAt,
+        );
+        const encounter = this.newEncounter(points.length);
+        return points.map((at, i) => this.spawnBoss(def, type, hp, at, encounter, i > 0)!);
     }
 
+    // What a boss's copies share; undefined for a boss on its own, which
+    // plays exactly as it did before co-op
+    private newEncounter(copies: number): Encounter | undefined {
+        return copies > 1 ? { id: this.nextEncounter++, copies } : undefined;
+    }
+
+    // Co-op: whether another of a boss's copies is still to be beaten, one of
+    // their caskets still to open too
+    private encounterLeft(enemy: Enemy): boolean {
+        const id = enemy.encounter;
+        return (
+            id !== undefined &&
+            (this.enemies.some(
+                (other) => other !== enemy && other.encounter === id && !other.dead,
+            ) ||
+                this.pickups.some(
+                    (pickup) => pickup.value !== -1 && pickup.disguise?.encounter?.id === id,
+                ))
+        );
+    }
+
+    // quiet: one of an encounter's copies after the first, which said so
     private spawnBoss(
         def: EnemyDef,
         type: "boss" | "finalBoss",
         hp: number | undefined,
         at?: { x: number; y: number },
+        encounter?: Encounter,
+        quiet = false,
     ): Enemy | undefined {
-        const boss = this.spawnEnemy(def, type, at, hp);
+        const boss = this.spawnEnemy(def, type, at, hp, encounter);
         if (boss) {
             const finalBoss = type === "finalBoss";
             if (finalBoss) {
@@ -2299,25 +2364,30 @@ export class Sim {
             if (def.spawnSpotAnim !== undefined) {
                 this.addEffect(def.spawnSpotAnim, boss.x, boss.y, 0, 60);
             }
-            this.emit({
-                type: "bossSpawned",
-                enemyId: def.id,
-                name: def.name,
-                message: def.spawnMessage ?? `${def.name} has appeared!`,
-                finalBoss,
-                x: boss.x,
-                y: boss.y,
-            });
+            if (!quiet) {
+                this.emit({
+                    type: "bossSpawned",
+                    enemyId: def.id,
+                    name: def.name,
+                    message: def.spawnMessage ?? `${def.name} has appeared!`,
+                    finalBoss,
+                    x: boss.x,
+                    y: boss.y,
+                });
+            }
         }
         return boss;
     }
 
-    // bossHp: a boss's hitpoints when they're not its own times the map's
+    // bossHp: a boss's hitpoints when they're not its own times the map's.
+    // encounter: co-op, one of a boss's copies, with its share of the
+    // hitpoints and experience
     spawnEnemy(
         def: EnemyDef,
         type: "normal" | "elite" | "boss" | "finalBoss",
         at?: { x: number; y: number },
         bossHp?: number,
+        encounter?: Encounter,
     ): Enemy | undefined {
         const boss = type === "boss" || type === "finalBoss";
         let pos = at;
@@ -2363,6 +2433,10 @@ export class Sim {
             scale *= 1.6;
             tint = ELITE_TINT;
             xp *= 5;
+        }
+        if (encounter) {
+            hp /= encounter.copies;
+            xp /= encounter.copies;
         }
         const enemy: Enemy = {
             uid: this.nextUid++,
@@ -2420,6 +2494,7 @@ export class Sim {
             nextFoeLook: this.tick + (this.nextUid % FOE_LOOK_TICKS),
             foeWait: 0,
             aggro: false,
+            ...(encounter && { encounter: encounter.id }),
             noDrops: false,
             bonesOnly: false,
             abilities: getAbilities(def, this.tick, this.rng),
@@ -2458,14 +2533,22 @@ export class Sim {
     // One of the spots an enemy turns up at (EnemyDef.spawnAt) with room for
     // it, undefined if none has
     private pickSpawnSpot(def: EnemyDef): { x: number; y: number } | undefined {
-        const free = def.spawnAt!.filter(({ x, y }) =>
+        const free = this.freeSpawnSpots(def, def.spawnAt!);
+        return free.length > 0 ? free[this.rng.int(free.length)] : undefined;
+    }
+
+    // Which of an enemy's own spots (EnemyDef.spawnAt) it could turn up on now
+    private freeSpawnSpots(
+        def: EnemyDef,
+        spots: { x: number; y: number }[],
+    ): { x: number; y: number }[] {
+        return spots.filter(({ x, y }) =>
             // What never moves can stand on its own spot, solid or not (a
             // portal's is in the map's collision)
             def.stationary
                 ? this.grid.contains(Math.floor(x), Math.floor(y))
                 : this.canTurnUpAt(def, x, y),
         );
-        return free.length > 0 ? free[this.rng.int(free.length)] : undefined;
     }
 
     // Enemies get tougher faster as the run (or round) goes on: gently for the
@@ -5370,6 +5453,10 @@ export class Sim {
     // Bones, and now and then a casket, coins, food or a power-up
     private dropLoot(enemy: Enemy): void {
         this.dropPickup("bones", enemy.x, enemy.y, enemy.xp);
+        // Co-op: one of a boss's copies, whose loot comes with the last to fall
+        if (this.encounterLeft(enemy)) {
+            return;
+        }
         this.rollBossTrophies(enemy);
         if (enemy.bonesOnly) {
             return;
@@ -6847,10 +6934,18 @@ export class Sim {
     // Looks like any casket dropping, toast and all, close enough to tempt
     private layDisguise(def: EnemyDef, hp: number | undefined): boolean {
         const disguise = def.disguise!;
-        const points = this.bossSpawnPoints(def, DISGUISE_MIN_DISTANCE, DISGUISE_MAX_DISTANCE);
+        // Its copies in co-op lie in wait one each, near the players
+        const points = this.bossSpawnPoints(
+            def,
+            bossCopies(this.heroes.length, this.hard),
+            DISGUISE_MIN_DISTANCE,
+            DISGUISE_MAX_DISTANCE,
+            undefined,
+        );
         if (points.length === 0) {
             return false;
         }
+        const encounter = this.newEncounter(points.length);
         for (const pos of points) {
             const { x, y } = this.walkableSpot(pos.x, pos.y);
             this.dropPickup("casket", x, y, 1, {
@@ -6860,6 +6955,7 @@ export class Sim {
                     hp,
                     shakeTick: this.tick + Math.round(disguise.seconds * TICKS_PER_SECOND),
                     openTick: -1,
+                    ...(encounter && { encounter }),
                 },
             });
             this.emit({ type: "casketDropped", tier: disguise.casket, x, y });
@@ -6904,12 +7000,12 @@ export class Sim {
     }
 
     private revealBoss(pickup: Pickup, def: EnemyDef): void {
-        const boss = this.spawnEnemy(
-            def,
-            "boss",
-            { x: pickup.x, y: pickup.y },
-            pickup.disguise!.hp,
-        );
+        const { hp, encounter } = pickup.disguise!;
+        // Of several caskets, the first to open says so
+        const quiet =
+            encounter !== undefined &&
+            this.enemies.some((enemy) => enemy.encounter === encounter.id);
+        const boss = this.spawnEnemy(def, "boss", { x: pickup.x, y: pickup.y }, hp, encounter);
         if (!boss) {
             return;
         }
@@ -6924,15 +7020,17 @@ export class Sim {
         if (def.spawnSpotAnim !== undefined) {
             this.addEffect(def.spawnSpotAnim, boss.x, boss.y, 0, 60);
         }
-        this.emit({
-            type: "bossSpawned",
-            enemyId: def.id,
-            name: def.name,
-            message: def.spawnMessage ?? `${def.name} has appeared!`,
-            finalBoss: false,
-            x: boss.x,
-            y: boss.y,
-        });
+        if (!quiet) {
+            this.emit({
+                type: "bossSpawned",
+                enemyId: def.id,
+                name: def.name,
+                message: def.spawnMessage ?? `${def.name} has appeared!`,
+                finalBoss: false,
+                x: boss.x,
+                y: boss.y,
+            });
+        }
     }
 
     // Standing under a boss that stomps (BossDef.stomp)

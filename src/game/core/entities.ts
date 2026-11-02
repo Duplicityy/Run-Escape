@@ -304,6 +304,9 @@ export type Enemy = {
     blockedTick: number;
     // The enemy that called it in (EnemyDef.spawns), 0 for none
     spawnedBy: number;
+    // Co-op: the boss encounter it's one copy of (Encounter.id), with the
+    // others; their loot comes with the last of them to fall
+    encounter?: number;
     // Brought back by a reviver: it drops nothing when it dies again
     noDrops: boolean;
     // An enemy of another faction it's gone to fight (EnemyDef.faction)
@@ -457,10 +460,16 @@ export type Pickup = {
     disguise?: DisguisedBoss;
 };
 
+// Co-op: a boss's copies (content/coop.ts bossCopies), with one boss's
+// hitpoints, experience and loot shared between them
+export type Encounter = { id: number; copies: number };
+
 export type DisguisedBoss = {
     enemyId: string;
     // Its hitpoints on this map, when they're not its own
     hp?: number;
+    // Co-op: one of several caskets, each hiding one of the boss's copies
+    encounter?: Encounter;
     // When it starts shaking if it's left alone
     shakeTick: number;
     // When it opens, -1 until it's shaking

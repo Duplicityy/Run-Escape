@@ -590,8 +590,18 @@ describe("co-op boss encounters", () => {
         [4, true, 4],
     ] as const)("spawns %i players' bosses with hard=%s as %i copies", (players, hard, count) => {
         const sim = party(players, hard);
+        sim.takeEvents();
         encounter(sim, "count_draynor");
-        expect(sim.enemies.filter((enemy) => enemy.def.id === "count_draynor")).toHaveLength(count);
+        const copies = sim.enemies.filter((enemy) => enemy.def.id === "count_draynor");
+        expect(copies).toHaveLength(count);
+        // Between them, one boss's hitpoints and experience, and one banner
+        const one = sim.spawnEnemy(getEnemy("count_draynor"), "boss")!;
+        for (const copy of copies) {
+            expect(Math.abs(copy.maxHp - one.maxHp / count)).toBeLessThanOrEqual(1);
+            expect(copy.xp).toBeCloseTo(one.xp / count);
+            expect(copy.encounter === undefined).toBe(count === 1);
+        }
+        expect(sim.takeEvents().filter((event) => event.type === "bossSpawned")).toHaveLength(1);
         encounter(sim, "wise_old_man");
         const bosses = sim.enemies.filter((enemy) => enemy.finalBoss);
         expect(bosses).toHaveLength(count);
@@ -614,8 +624,65 @@ describe("co-op boss encounters", () => {
         for (const casket of caskets) {
             casket.disguise!.openTick = sim.tick;
         }
+        sim.takeEvents();
         sim.step();
-        expect(sim.enemies.filter((enemy) => enemy.def.id === "the_mimic")).toHaveLength(count);
+        const mimics = sim.enemies.filter((enemy) => enemy.def.id === "the_mimic");
+        expect(mimics).toHaveLength(count);
+        // One Mimic's hitpoints between them, and the first to open says so
+        const hp = sim.map.events.find((event) => event.enemyId === "the_mimic")!.hp;
+        const one = sim.spawnEnemy(getEnemy("the_mimic"), "boss", undefined, hp)!;
+        for (const mimic of mimics) {
+            expect(Math.abs(mimic.maxHp - one.maxHp / count)).toBeLessThanOrEqual(1);
+        }
+        expect(sim.takeEvents().filter((event) => event.type === "bossSpawned")).toHaveLength(1);
+    });
+
+    it("spawns each copy by a different player, clear of the others", () => {
+        const sim = party(4, true);
+        const corners = [
+            [1020, 1020],
+            [1052, 1020],
+            [1020, 1052],
+            [1052, 1052],
+        ];
+        sim.heroes.forEach((hero, i) => {
+            hero.player.x = corners[i][0] + 0.5;
+            hero.player.y = corners[i][1] + 0.5;
+        });
+        encounter(sim, "count_draynor");
+        const copies = sim.enemies.filter((enemy) => enemy.def.id === "count_draynor");
+        expect(copies).toHaveLength(4);
+        for (const hero of sim.heroes) {
+            const near = copies.filter(
+                (copy) => Math.hypot(copy.x - hero.player.x, copy.y - hero.player.y) <= 17,
+            );
+            expect(near).toHaveLength(1);
+        }
+        for (const a of copies) {
+            for (const b of copies) {
+                if (a !== b) {
+                    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual(4);
+                }
+            }
+        }
+    });
+
+    it.each([false, true])("keeps Pest Control's portals one to a spot with hard=%s", (hard) => {
+        const sim = party(4, hard, {
+            mapId: "pest_control",
+            grid: makeGrid(openField(), 2610, 2550),
+            spawnX: 2656.5,
+            spawnY: 2580.5,
+        });
+        sim.tick = sim.map.fun!.bosses.firstAt * TICKS_PER_SECOND;
+        sim.step();
+        const portals = sim.enemies.filter((enemy) => enemy.boss);
+        expect(portals).toHaveLength(4);
+        expect(new Set(portals.map((portal) => portal.def.id)).size).toBe(4);
+        // Each with its full hitpoints
+        const one = sim.spawnEnemy(portals[0].def, "boss", { x: 2640.5, y: 2580.5 })!;
+        expect(portals[0].maxHp).toBe(one.maxHp);
+        expect(portals[0].encounter).toBeUndefined();
     });
 
     it.each([false, true])("keeps The Nightmare a single group fight with hard=%s", (hard) => {
@@ -664,12 +731,16 @@ describe("co-op boss encounters", () => {
             const sim = party(4, hard, { endless: true });
             encounter(sim, "wise_old_man");
             const bosses = sim.enemies.filter((enemy) => enemy.finalBoss);
+            const caskets = () => sim.pickups.filter((pickup) => pickup.kind === "casket");
             for (const boss of bosses.slice(0, -1)) {
                 sim.damageEnemy(boss, 1e9, 0, sim.player.x, sim.player.y);
                 expect(sim.round).toBe(1);
+                // Their loot comes with the last of them
+                expect(caskets()).toHaveLength(0);
             }
             sim.damageEnemy(bosses.at(-1)!, 1e9, 0, sim.player.x, sim.player.y);
             expect(sim.round).toBe(2);
+            expect(caskets().map((casket) => casket.tier)).toEqual(["master"]);
             encounter(sim, "wise_old_man");
             expect(sim.enemies.filter((enemy) => enemy.finalBoss && !enemy.dead)).toHaveLength(
                 hard ? 4 : 2,

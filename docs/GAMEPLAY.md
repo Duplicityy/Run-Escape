@@ -420,10 +420,12 @@ version and how to run it.
       them and gets what they bring. The Mysterious Old Man's and the Quiz Master's offers are
       theirs to choose from while the run waits, paid for from the shared coins. Ignore the
       Sandwich lady and everyone still standing gets the baguette.
-    - With two or more players, each **boss spawn** brings two copies on normal mode, or one per
-      starting party member on hard mode. This includes Slash Bash and The Mimic in Hallowed Night;
-      its final Nightmare encounter stays a single group fight. Every final boss must fall to win
-      or advance an endless round. Each copy keeps the usual party health and damage scaling.
+    - A **boss** comes as a pair, or on hard mode one for each player, each turning up by a
+      different player. Between them the copies have one boss's hitpoints and experience, and its
+      loot drops with the last to fall, so a party fights more bosses rather than bigger ones.
+      Every copy of a final boss must fall to win, or to move an endless run on. Slash Bash and
+      The Mimic's caskets come this way too; Hallowed Night's final fight and Pest Control's
+      portals stay as they are.
     - A **boss's attacks** land on whoever they reach: The Nightmare's bullets, marks, quarters and
       charge, Slash Bash's pools and The Mimic's stomp hurt each player caught in them, and the blast
       once her Sleepwalkers reach her hits everyone. A curse,

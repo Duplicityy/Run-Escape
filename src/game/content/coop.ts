@@ -38,6 +38,19 @@ const DAMAGE_PER_PLAYER = 0.1;
 const XP_PER_PLAYER = -0.12;
 const CASKETS_PER_PLAYER = 0.2;
 
+// Bosses come as copies in co-op: a pair on normal mode, one for each player
+// on hard. Between them the copies have one boss's hitpoints and experience,
+// and its loot drops with the last to fall (Sim.spawnBosses), so a party
+// fights more bosses rather than bigger ones. A boss with its own spots
+// (EnemyDef.spawnAt) gets no more than it has free: Pest Control's portals
+// have one each, so they stay single.
+export function bossCopies(players: number, hard: boolean): number {
+    if (players <= 1) {
+        return 1;
+    }
+    return hard ? Math.min(players, MAX_PARTY) : 2;
+}
+
 export function getPartyScale(players: number): PartyScale {
     const extra = Math.max(0, Math.min(players, MAX_PARTY) - 1);
     return {

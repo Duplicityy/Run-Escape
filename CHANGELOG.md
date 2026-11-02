@@ -16,6 +16,8 @@ the version in the corner).
 ### Changed
 
 - Co-op's server holds up better against anyone trying to flood it or take every room.
+- Co-op bosses come as a pair, or one for each player on hard mode, by trippy22. Between them
+  they have one boss's hitpoints and loot, so a party fights more bosses rather than bigger ones.
 - Desktop: the game can only reach its own files and the co-op server, nothing else.
 
 ### Fixed

@@ -629,6 +629,11 @@ When adding to the sim:
 
 How much bigger the crowd gets for each player is in `content/coop.ts`, worked out again whenever
 one goes down or leaves, with each of those still counting as half a player (`PLAYER_GONE`).
+Bosses come as copies (`bossCopies` there), spawned together by `Sim.spawnBosses`: each by a
+different player, clear of the others, sharing one boss's hitpoints, experience and loot through
+their `Encounter`, so the first says so and the last to fall drops the loot. A boss with its own
+spots (`spawnAt`) gets no more copies than it has free spots, which keeps Pest Control's portals
+single, and a scripted entrance (`startIntro`) stays one boss.
 
 Rooms only take players who've unlocked their map (and its endless or hard mode, for a room on
 them), and the host can only pick what everyone in the room has, so nobody skips ahead: someone

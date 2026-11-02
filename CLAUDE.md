@@ -32,6 +32,7 @@ go stale. Add anything that cost you time to work out.
 | Level up choices, and when a weapon can evolve        | `src/game/core/Upgrades.ts`              |
 | Evolution recipes, for the UI                         | `src/game/content/evolutions.ts`         |
 | Hard mode's numbers (each map's are on its `MapDef`)  | `src/game/content/hard.ts`               |
+| Co-op's numbers: the party's scaling, boss copies     | `src/game/content/coop.ts`               |
 | Caskets and the inventory                             | `src/game/core/Loot.ts`                  |
 | Random events: who turns up, what they do             | `src/game/content/randomEvents.ts`       |
 | Save data and migrations                              | `src/game/core/save.ts`                  |
