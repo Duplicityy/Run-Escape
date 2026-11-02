@@ -5,6 +5,10 @@ the version in the corner).
 
 ## 0.23.0 - 2026-11-02
 
+### Added
+
+- Hard mode in co-op: the host can turn it on once everyone in the room has it.
+
 ### Changed
 
 - Co-op's server holds up better against anyone trying to flood it or take every room.

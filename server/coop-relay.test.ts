@@ -481,7 +481,7 @@ describe("co-op relay", () => {
             me: { unlocks: { maps: ["lumbridge"], endless: [] } },
         });
         const refused = await newcomer.next("error");
-        expect(refused.need).toEqual({ mapId: "barrows", endless: false });
+        expect(refused.need).toEqual({ mapId: "barrows", endless: false, hard: false });
         // The host can't move the room to a map someone in it hasn't got
         const veteran = await connect();
         veteran.send({ t: "join", code: room.code, me: { unlocks: has } });
@@ -490,8 +490,67 @@ describe("co-op relay", () => {
         expect((await host.next("error")).need).toEqual({
             mapId: "barrows",
             endless: true,
+            hard: false,
             who: veteran.name,
         });
+    });
+
+    it("only goes on hard mode with everyone in the room having it", async () => {
+        await restart({ anyMap: false });
+        const beaten = { maps: ["barrows"], endless: ["barrows"], hard: ["barrows"] };
+        const notBeaten = { maps: ["barrows"], endless: [], hard: [] };
+
+        // Not for a host who hasn't got it
+        const newHost = await connect();
+        newHost.send({ t: "create", mapId: "barrows", hard: true, me: { unlocks: notBeaten } });
+        expect((await newHost.next("error")).need).toEqual({
+            mapId: "barrows",
+            endless: false,
+            hard: true,
+        });
+
+        const host = await connect();
+        host.send({ t: "create", open: true, mapId: "barrows", me: { unlocks: beaten } });
+        const { room } = await host.room();
+        expect(room.hard).toBe(false);
+
+        // Not while someone in the room hasn't got it
+        const guest = await connect();
+        guest.send({ t: "join", code: room.code, me: { unlocks: notBeaten } });
+        await guest.room();
+        await host.room();
+        host.send({ t: "settings", hard: true });
+        expect((await host.next("error")).need).toEqual({
+            mapId: "barrows",
+            endless: false,
+            hard: true,
+            who: guest.name,
+        });
+        expect((await host.room()).room.hard).toBe(false);
+
+        // Once they've gone it can, and it shows on the list
+        guest.send({ t: "leave" });
+        await host.room();
+        host.send({ t: "settings", hard: true });
+        expect((await host.room()).room.hard).toBe(true);
+        guest.send({ t: "list" });
+        const { rooms } = await guest.next("rooms");
+        expect(rooms.find((r: { code: string }) => r.code === room.code).hard).toBe(true);
+
+        // Nobody without it can join, and whoever has it sees the room's on it
+        guest.send({ t: "join", code: room.code, me: { unlocks: notBeaten } });
+        expect((await guest.next("error")).need).toEqual({
+            mapId: "barrows",
+            endless: false,
+            hard: true,
+        });
+        const veteran = await connect();
+        veteran.send({ t: "join", code: room.code, me: { unlocks: beaten } });
+        expect((await veteran.room()).room.hard).toBe(true);
+
+        // Moving the map keeps hard mode, so everyone needs it there too
+        host.send({ t: "settings", mapId: "lumbridge" });
+        expect((await host.next("error")).need.hard).toBe(true);
     });
 
     describe("against what no browser sends", () => {

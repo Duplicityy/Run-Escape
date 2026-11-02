@@ -338,10 +338,12 @@ describe("co-op lockstep", () => {
             seed: 1,
             mapId: "lumbridge",
             endless: false,
+            hard: true,
             heroes: [{ id: "p1", name: "A", characterId: "warrior", loadout: {} }],
         };
         expect(isGameStart(good, 4)).toBe(true);
         expect(isGameStart(undefined, 4)).toBe(false);
+        expect(isGameStart({ ...good, hard: "yes" }, 4)).toBe(false);
         expect(isGameStart({ ...good, heroes: Array(5).fill(good.heroes[0]) }, 4)).toBe(false);
         expect(isGameStart({ ...good, heroes: [{ ...good.heroes[0], name: 5 }] }, 4)).toBe(false);
     });

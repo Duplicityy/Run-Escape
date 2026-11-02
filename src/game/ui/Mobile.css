@@ -811,4 +811,26 @@
     .ui-coop-code-value {
         font-size: 17px;
     }
+
+    /* The host's six controls have to share one line on a small phone */
+    .ui-coop-bar {
+        gap: 6px;
+        padding-inline: 8px;
+    }
+
+    .ui-coop-bar .ui-button {
+        padding-inline: 8px;
+    }
+
+    .ui-coop-bar .ui-select-go {
+        flex: 0 1 auto;
+        min-width: 0;
+        padding-inline: 8px;
+        font-size: 15px;
+    }
+
+    .ui-coop-bar .ui-endless {
+        min-width: 0;
+        gap: 4px;
+    }
 }

@@ -179,9 +179,8 @@ version and how to run it.
   Knight's island and its pests, and its bosses are the four portals, which open together behind
   shields that drop one by one.
 - **Hard mode**: the switch beside Endless, open once you've beaten the map (from the start on fun
-  maps), on your own for now rather than in co-op. Enemies have more hitpoints and hit harder, more
-  of them come at once, every elite is two, and bosses enrage at 65% of their hitpoints and attack
-  15% faster. How much tougher depends on the map: the early ones gain the most, as a player who's
+  maps). Enemies have more hitpoints and hit harder, more of them come at once, every elite is two,
+  and bosses enrage at 65% of their hitpoints and attack 15% faster. How much tougher depends on the map: the early ones gain the most, as a player who's
   bought everything walks through them, and the late ones the least. Experience from bones is 10%
   lower, as the bigger crowd drops more, and coins are worth 25% more. It can be endless too, with
   records of its own. A win counts as a win on the map, and turns its tick gold.
@@ -403,13 +402,13 @@ version and how to run it.
 - **Co-op** (Multiplayer, on the title screen) is a run with up to three friends. Make a room, invite only
   (friends join with its eight-letter code or the invite link) or open to anyone browsing the
   rooms list, or join one. Everyone picks their own adventurer and brings their own skills,
-  Armoury and unlocked items; the host picks the map and endless, and starts once everyone (the
-  host too) is ready, which can be a party of one. The host can open or close the room, kick a
+  Armoury and unlocked items; the host picks the map, endless and hard mode, and starts once
+  everyone (the host too) is ready, which can be a party of one. The host can open or close the room, kick a
   player and disband it. A pasted invite link in the code box leaves just its code. Everyone
   gets a readable name to play under, like "Plucky Chinchompa", and rooms get one too, like "Moonlit
   Crossing". **New name** picks another, any time but during a run.
-    - You can only join a room on a map you've unlocked yourself (and its endless, for an endless
-      room), and the host can only pick maps everyone in the room has, so nobody skips ahead. A
+    - You can only join a room on a map you've unlocked yourself (and its endless or hard mode, for
+      a room on them), and the host can only pick what everyone in the room has, so nobody skips ahead. A
       server can let anyone in instead (`MULTIPLAYER_ANY_MAP`); then a win opens the map it was
       on for a player who hadn't got that far (along with the next), but not the maps before it.
     - The run's **level is shared**: every level up gives each player their own three choices, and

@@ -1,5 +1,7 @@
 import { getPartyScale } from "../content/coop";
 import { getEnemy } from "../content/enemies";
+import { HARD_XP, getHardScale } from "../content/hard";
+import { getMap } from "../content/maps";
 import { getPowerUp } from "../content/powerups";
 import { getRandomEvent } from "../content/randomEvents";
 import { emptyStats } from "../content/types";
@@ -27,7 +29,7 @@ function hero(characterId: string, name = characterId): HeroOptions {
     return { name, characterId, metaStats: emptyStats() };
 }
 
-function createParty(characters: string[], seed = 1, focus = 0): Sim {
+function createParty(characters: string[], seed = 1, focus = 0, hard = false): Sim {
     return new Sim({
         grid: makeGrid(openField(), 1000, 1000),
         characterId: "",
@@ -37,6 +39,7 @@ function createParty(characters: string[], seed = 1, focus = 0): Sim {
         spawnY: 1036.5,
         party: characters.map((id) => hero(id)),
         focus,
+        hard,
     });
 }
 
@@ -507,6 +510,39 @@ describe("co-op", () => {
         expect(host.kills).toBeGreaterThan(0);
         expect(fingerprint(guest)).toBe(fingerprint(host));
     }, 30000);
+
+    it("plays out the same on every player's copy on hard mode too", () => {
+        usePortableMath(true);
+        const host = createParty(["warrior", "wizard", "ranger"], 9, 0, true);
+        const guest = createParty(["warrior", "wizard", "ranger"], 9, 2, true);
+        play(host, 90 * TICKS_PER_SECOND);
+        play(guest, 90 * TICKS_PER_SECOND);
+        expect(host.hard).toBe(true);
+        expect(host.kills).toBeGreaterThan(0);
+        expect(fingerprint(guest)).toBe(fingerprint(host));
+        // And it's not the same run as one that isn't on hard mode
+        const normal = createParty(["warrior", "wizard", "ranger"], 9, 0);
+        play(normal, 90 * TICKS_PER_SECOND);
+        expect(fingerprint(normal)).not.toBe(fingerprint(host));
+    }, 30000);
+
+    it("puts hard mode's numbers on top of the party's", () => {
+        const party = getPartyScale(2);
+        const scale = getHardScale(getMap("lumbridge"));
+        const goblin = getEnemy("goblin");
+        const spot = { x: 1040.5, y: 1036.5 };
+        const spawn = (characters: string[], hard: boolean) => {
+            const sim = createParty(characters, 1, 0, hard);
+            // Long enough for the party's experience to be worked out from the crowd
+            sim.step();
+            return sim.spawnEnemy(goblin, "normal", spot)!;
+        };
+        const alone = spawn(["warrior"], false);
+        const duo = spawn(["warrior", "wizard"], true);
+        expect(duo.maxHp / alone.maxHp).toBeCloseTo(party.hp * scale.hp, 0);
+        expect(duo.damageScale).toBeCloseTo(alone.damageScale * party.damage * scale.damage);
+        expect(duo.xp).toBeCloseTo(alone.xp * party.xp * HARD_XP);
+    });
 });
 
 describe("portable math", () => {

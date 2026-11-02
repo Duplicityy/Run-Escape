@@ -9,9 +9,9 @@ export type Loadout = {
     armoury: Record<string, number>;
 };
 
-// The maps a player has unlocked, and has endless for, which rooms go by
-// unless the relay takes anyone (MULTIPLAYER_ANY_MAP)
-export type Unlocks = { maps: string[]; endless: string[] };
+// The maps a player has unlocked, and has endless and hard mode for, which
+// rooms go by unless the relay takes anyone (MULTIPLAYER_ANY_MAP)
+export type Unlocks = { maps: string[]; endless: string[]; hard: string[] };
 
 export type MemberView = {
     id: string;
@@ -29,9 +29,9 @@ export type MemberView = {
 // which the relay gives
 export type Member = Omit<MemberView, "id" | "name">;
 
-// What a player's missing to play on a room's map: the map (its endless too,
-// for an endless room), and who, when it's someone else
-export type MissingMap = { mapId: string; endless: boolean; who?: string };
+// What a player's missing to play on a room's map: the map (its endless or
+// hard mode too, for a room that's on them), and who, when it's someone else
+export type MissingMap = { mapId: string; endless: boolean; hard: boolean; who?: string };
 
 export type RoomView = {
     code: string;
@@ -42,6 +42,7 @@ export type RoomView = {
     hostId: string;
     mapId: string;
     endless: boolean;
+    hard: boolean;
     // A run is under way
     started: boolean;
     members: MemberView[];
@@ -56,6 +57,7 @@ export type RoomListing = {
     max: number;
     mapId: string;
     endless: boolean;
+    hard: boolean;
 };
 
 // Everything a player's copy of the run needs, from the host, in the order
@@ -64,6 +66,7 @@ export type GameStart = {
     seed: number;
     mapId: string;
     endless: boolean;
+    hard: boolean;
     heroes: { id: string; name: string; characterId: string; loadout: Loadout }[];
 };
 
@@ -77,6 +80,7 @@ export function isGameStart(value: unknown, maxParty: number): value is GameStar
         Number.isSafeInteger(game.seed) &&
         typeof game.mapId === "string" &&
         typeof game.endless === "boolean" &&
+        typeof game.hard === "boolean" &&
         Array.isArray(game.heroes) &&
         game.heroes.length > 0 &&
         game.heroes.length <= maxParty &&
@@ -120,6 +124,7 @@ export type ClientMessage =
           open: boolean;
           mapId: string;
           endless: boolean;
+          hard: boolean;
           me: Partial<Member>;
       }
     | { t: "join"; code: string; me: Partial<Member> }
@@ -127,7 +132,7 @@ export type ClientMessage =
     | ({ t: "me" } & Partial<Member>)
     // A new name, from the relay (not during a run)
     | { t: "rename" }
-    | { t: "settings"; open?: boolean; mapId?: string; endless?: boolean }
+    | { t: "settings"; open?: boolean; mapId?: string; endless?: boolean; hard?: boolean }
     | { t: "kick"; id: string }
     | { t: "disband" }
     | { t: "start"; game: GameStart }
