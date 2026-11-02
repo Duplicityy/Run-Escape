@@ -115,6 +115,9 @@ export type BossState = {
     walkers?: BossWalkers;
     // An attack still to be used again straight after (BossAttackDef.chain)
     chain?: { attack: BossAttackDef; left: number };
+    // An attack to begin at this tick, after the one it follows
+    // (BossAttackDef.follow)
+    follow?: { attack: BossAttackDef; atTick: number };
     // It stands still until this tick, as its volleys go out
     channelEnd: number;
     // BossDef.stomp: hits since the player stepped under it, and the next one
@@ -191,6 +194,9 @@ export type BulletEmitter = {
     nextTick: number;
     volleysLeft: number;
     angle: number;
+    // Towards where the player stood as it began: what a mirrored volley's
+    // mirrored about (BulletPatternDef.mirror)
+    aim: number;
     damage: number;
 };
 
@@ -323,6 +329,8 @@ export type Enemy = {
     // Called in by a spawner that says so (EnemySpawnsDef.bonesOnly): it
     // drops its bones and nothing else
     bonesOnly: boolean;
+    // Hatches at this tick if it's still alive (EnemyDef.hatches); 0 for never
+    hatchTick: number;
     abilities?: EnemyAbilities;
 };
 

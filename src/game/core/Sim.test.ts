@@ -2941,6 +2941,7 @@ describe("maps", () => {
         for (const enemy of ENEMIES) {
             const ids = [
                 enemy.splits?.into,
+                enemy.hatches?.into,
                 ...(enemy.spawns?.enemies.map((e) => e.id) ?? []),
                 ...(enemy.heals?.targets ?? []),
                 enemy.boss?.rises?.into,

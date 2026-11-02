@@ -334,7 +334,10 @@ export class GameAssets {
             );
         }
         const requests: BakeRequest[] = [
-            { kind: "npc", key: "npc:" + enemy.id, npcId: enemy.npcId, seqIds },
+            // An item's model stands still, under the same key the view asks for
+            enemy.objId !== undefined
+                ? { kind: "obj", key: "npc:" + enemy.id, objId: enemy.objId, count: 1 }
+                : { kind: "npc", key: "npc:" + enemy.id, npcId: enemy.npcId, seqIds },
         ];
         const shielded = enemy.shield?.look;
         if (shielded) {
