@@ -42,6 +42,7 @@ import {
     getShieldedModelKey,
 } from "./GameAssets";
 import { Overlay, ScreenPoint } from "./Overlay";
+import { PlayerPose, getPlayerPose } from "./PlayerPose";
 
 const FROZEN_TINT = 0xa8d8ff;
 // Co-op teammates' names and arrows, like a friend's name in the client, and
@@ -188,6 +189,7 @@ function lerp(a: number, b: number, t: number): number {
 // Draws a run: everything in the sim as 3D actors, and hitsplats, health bars
 // and weapon swooshes on the 2D overlay.
 export class GameView {
+    localPlayerPose?: PlayerPose;
     private hitsplats: Hitsplat[] = [];
     private slashes: SlashFx[] = [];
     auras: AuraFx[] = [];
@@ -209,6 +211,7 @@ export class GameView {
     }
 
     reset(): void {
+        this.localPlayerPose = undefined;
         this.fight.reset();
         this.hitsplats = [];
         this.slashes = [];
@@ -688,6 +691,7 @@ export class GameView {
     }
 
     private drawPlayer(actors: ActorRenderer, sim: Sim, hero: number, alpha: number): void {
+        const pose = getPlayerPose(sim, hero, alpha, this.localPlayerPose);
         // A power-up's look replaces the player's usual model and everything it does
         const powerUp = sim.as(hero, () => sim.wornPowerUp);
         const look = powerUp?.look;
@@ -702,8 +706,8 @@ export class GameView {
         let frame: number;
         const attack = player.attackSeq !== -1 ? model.getAnim(player.attackSeq) : undefined;
         if (look && lookModel) {
-            anim = model.getAnim(player.moving ? look.moveSeq : look.idleSeq);
-            frame = anim.getFrame(tick - player.moveStart);
+            anim = model.getAnim(pose.moving ? look.moveSeq : look.idleSeq);
+            frame = anim.getFrame(pose.moveTicks);
         } else if (player.deathTick !== -1) {
             // The death animation holds its last frame (lying down)
             anim = model.getAnim(PLAYER_SEQS.death);
@@ -711,18 +715,17 @@ export class GameView {
         } else if (
             attack &&
             attack.seqId === player.attackSeq &&
-            !player.moving &&
+            !pose.moving &&
             tick - player.attackStart < attack.totalTicks
         ) {
             anim = attack;
             frame = anim.getFrame(tick - player.attackStart, false);
         } else {
             const stance = this.assets.getPlayerStance(hero);
-            anim = model.getAnim(player.moving ? stance.run : stance.idle);
-            frame = anim.getFrame(tick - player.moveStart);
+            anim = model.getAnim(pose.moving ? stance.run : stance.idle);
+            frame = anim.getFrame(pose.moveTicks);
         }
-        const x = lerp(player.prevX, player.x, alpha);
-        const y = lerp(player.prevY, player.y, alpha);
+        const { x, y } = pose;
         let tint = NO_TINT;
         let flash = 0;
         if (player.flash > 0) {
@@ -734,7 +737,7 @@ export class GameView {
         if (player.invulnerable > 30 && Math.floor(tick / 5) % 2 === 0) {
             flash = 0.5;
         }
-        actors.draw(model, anim, frame, x, this.ground(sim, x, y), y, player.yaw, {
+        actors.draw(model, anim, frame, x, this.ground(sim, x, y), y, pose.yaw, {
             silhouette: true,
             tint,
             flash,
@@ -829,12 +832,12 @@ export class GameView {
         this.drawLootBeams(overlay, sim, alpha, now, scale);
         this.drawBossWindups(overlay, sim, alpha);
         this.fight.drawGround(overlay, sim, alpha, now, scale);
-        this.drawAuras(overlay, sim, now);
+        this.drawAuras(overlay, sim, alpha, now);
         this.drawBlasts(overlay, sim, now, scale);
         this.drawRockTargets(overlay, sim, now, scale);
         this.drawRingReach(overlay, sim, now, scale);
         this.drawSwings(overlay, sim, now, scale);
-        this.drawSlashes(overlay, sim, now, scale);
+        this.drawSlashes(overlay, sim, alpha, now, scale);
         this.drawEnemyProjectileGlows(overlay, sim, alpha, scale);
 
         // Health bars over hurt elites; with hundreds of enemies bars on all of
@@ -920,8 +923,7 @@ export class GameView {
                 if (!player) {
                     continue;
                 }
-                x = lerp(player.prevX, player.x, alpha);
-                y = lerp(player.prevY, player.y, alpha);
+                ({ x, y } = getPlayerPose(sim, hero, alpha, this.localPlayerPose));
                 height = this.assets.getPlayer(hero)?.height ?? 200;
             } else {
                 const enemy = this.enemiesByUid.get(shout.enemyUid);
@@ -970,8 +972,9 @@ export class GameView {
             const enemy = this.enemiesByUid.get(hitsplat.enemyUid);
             const player = sim.heroes[hitsplat.hero]?.player;
             if (player) {
-                hitsplat.x = lerp(player.prevX, player.x, alpha);
-                hitsplat.y = lerp(player.prevY, player.y, alpha);
+                const pose = getPlayerPose(sim, hitsplat.hero, alpha, this.localPlayerPose);
+                hitsplat.x = pose.x;
+                hitsplat.y = pose.y;
             } else if (enemy) {
                 hitsplat.x = enemy.x;
                 hitsplat.y = enemy.y;
@@ -1166,15 +1169,19 @@ export class GameView {
         }
     }
 
-    private drawSlashes(overlay: Overlay, sim: Sim, now: number, scale: number): void {
+    private drawSlashes(
+        overlay: Overlay,
+        sim: Sim,
+        alpha: number,
+        now: number,
+        scale: number,
+    ): void {
         const ctx = overlay.ctx;
         this.slashes = this.slashes.filter((s) => now - s.start < SLASH_MS);
         for (const slash of this.slashes) {
             const t = (now - slash.start) / SLASH_MS;
             // Follows the player, like the weapon does
-            const player = sim.heroes[slash.hero]?.player ?? sim.player;
-            const cx = player.x;
-            const cy = player.y;
+            const { x: cx, y: cy } = getPlayerPose(sim, slash.hero, alpha, this.localPlayerPose);
             const base = Math.atan2(slash.dirY, slash.dirX);
             const sweep = slash.arc;
             // Enough points for a wide sweep to stay round
@@ -1226,14 +1233,14 @@ export class GameView {
         ctx.closePath();
     }
 
-    private drawAuras(overlay: Overlay, sim: Sim, now: number): void {
+    private drawAuras(overlay: Overlay, sim: Sim, alpha: number, now: number): void {
         const ctx = overlay.ctx;
         this.auras = this.auras.filter((a) => now - a.start < AURA_MS);
         for (const aura of this.auras) {
             const t = (now - aura.start) / AURA_MS;
             const radius = aura.radius * (0.5 + t * 0.5);
-            const player = sim.heroes[aura.hero]?.player ?? sim.player;
-            this.traceGroundCircle(overlay, sim, player.x, player.y, radius);
+            const pose = getPlayerPose(sim, aura.hero, alpha, this.localPlayerPose);
+            this.traceGroundCircle(overlay, sim, pose.x, pose.y, radius);
             ctx.fillStyle = `rgba(150, 210, 255, ${0.18 * (1 - t)})`;
             ctx.fill();
             ctx.lineWidth = 3;
@@ -1399,9 +1406,7 @@ export class GameView {
         scale: number,
     ): number {
         const ctx = overlay.ctx;
-        const player = sim.heroes[this.viewHero]?.player ?? sim.player;
-        const px = lerp(player.prevX, player.x, alpha);
-        const py = lerp(player.prevY, player.y, alpha);
+        const { x: px, y: py } = getPlayerPose(sim, this.viewHero, alpha, this.localPlayerPose);
         const dx = target.x - px;
         const dy = target.y - py;
         const distance = Math.hypot(dx, dy);
@@ -1493,8 +1498,7 @@ export class GameView {
         }
         const ctx = overlay.ctx;
         const model = this.assets.getPlayer(hero.index);
-        const px = lerp(player.prevX, player.x, alpha);
-        const py = lerp(player.prevY, player.y, alpha);
+        const { x: px, y: py } = getPlayerPose(sim, hero.index, alpha, this.localPlayerPose);
         // Lying down, the bar goes lower
         const height = hero.down ? 0.8 : (model?.height ?? 200) / 128;
         const top = this.ground(sim, px, py) - height - HEALTH_BAR_GAP;
@@ -1534,9 +1538,7 @@ export class GameView {
             if (hero.left || hero.down || hero.index === this.viewHero) {
                 continue;
             }
-            const player = hero.player;
-            const x = lerp(player.prevX, player.x, alpha);
-            const y = lerp(player.prevY, player.y, alpha);
+            const { x, y } = getPlayerPose(sim, hero.index, alpha, this.localPlayerPose);
             const p = overlay.project(x, this.ground(sim, x, y), y, this.screen);
             const margin = 20 * scale;
             if (

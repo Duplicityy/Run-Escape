@@ -192,7 +192,47 @@ describe("co-op lockstep", () => {
         // Where it ended up gets there
         clock.now += 100;
         run.setMove(0.9, 0.5);
-        expect(ups.at(-1)).toEqual({ move: [114, 64] });
+        expect(ups.at(-1)).toMatchObject({ move: [114, 64], moveSeq: expect.any(Number) });
+    });
+
+    it("with prediction off, a guest sends moves as it always has", () => {
+        const clock = { now: 0 };
+        const ups: UpMessage[] = [];
+        const link: CoopLink = { sendUp: (m) => ups.push(m), sendDown: () => {} };
+        const heroes = new Map(IDS.map((id, i) => [id, i]));
+        const run = new CoopRun(createSim(1), false, link, heroes, "host", () => clock.now);
+        run.setPrediction(false);
+        expect(run.prediction).toBeUndefined();
+        // Held for a while: one message, with nothing to echo back
+        for (let i = 0; i < 100; i++) {
+            run.setMove(1, 0);
+            clock.now += 20;
+        }
+        expect(ups).toEqual([{ move: [127, 0] }]);
+    });
+
+    it("turning prediction back on starts it afresh, and only for a guest", () => {
+        const clock = { now: 0 };
+        const ups: UpMessage[] = [];
+        const link: CoopLink = { sendUp: (m) => ups.push(m), sendDown: () => {} };
+        const heroes = new Map(IDS.map((id, i) => [id, i]));
+        const run = new CoopRun(createSim(1), false, link, heroes, "host", () => clock.now);
+        const first = run.prediction;
+        run.setPrediction(true);
+        expect(run.prediction).toBe(first);
+        run.setMove(1, 0);
+        run.setPrediction(false);
+        clock.now += 100;
+        run.setPrediction(true);
+        expect(run.prediction).toBeDefined();
+        expect(run.prediction).not.toBe(first);
+        // Still pressing the same way: its new sequence still goes out
+        run.setMove(1, 0);
+        expect(ups.at(-1)).toEqual({ move: [127, 0], moveSeq: 1 });
+
+        const host = new CoopRun(createSim(0), true, link, heroes, "host", () => clock.now);
+        host.setPrediction(true);
+        expect(host.prediction).toBeUndefined();
     });
 
     it("takes nothing odd from the host", () => {

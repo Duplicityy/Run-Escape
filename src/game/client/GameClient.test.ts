@@ -33,7 +33,13 @@ function createClient(sim: Sim, autoAlch: boolean) {
         shownDps: 0,
         shownDpsTick: 0,
         lastHudUpdate: 0,
-        display: { menuSpin: false, pauseOnBlur: true, questTracker: true, autoAlch },
+        display: {
+            menuSpin: false,
+            pauseOnBlur: true,
+            questTracker: true,
+            autoAlch,
+            movePrediction: false,
+        },
         sounds: { onEvents() {}, levelUp() {}, playerDied() {} },
         view: { onEvents() {} },
         finishRun() {},
@@ -43,6 +49,38 @@ function createClient(sim: Sim, autoAlch: boolean) {
     };
     return { client, store, sync };
 }
+
+describe("movement prediction", () => {
+    test("is off unless it's been turned on, and is remembered", () => {
+        const stored = new Map<string, string>();
+        vi.stubGlobal("window", {
+            matchMedia: () => ({ matches: false }),
+            localStorage: {
+                getItem: (key: string) => stored.get(key) ?? null,
+                setItem: (key: string, value: string) => stored.set(key, value),
+            },
+        });
+        expect(loadDisplaySettings().movePrediction).toBe(false);
+        // Settings saved before there was such a thing
+        stored.set("rune-survivors-display", JSON.stringify({ menuSpin: false }));
+        expect(loadDisplaySettings().movePrediction).toBe(false);
+        saveDisplaySettings({ ...loadDisplaySettings(), movePrediction: true });
+        expect(loadDisplaySettings().movePrediction).toBe(true);
+        vi.unstubAllGlobals();
+    });
+
+    test("the toggle reaches a run that's going", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const { client } = createClient(createSim(), false);
+        const setPrediction = vi.fn();
+        Object.assign(client, { coopRun: { setPrediction } });
+        client.toggleMovePrediction();
+        expect(setPrediction).toHaveBeenLastCalledWith(true);
+        client.toggleMovePrediction();
+        expect(setPrediction).toHaveBeenLastCalledWith(false);
+        vi.unstubAllGlobals();
+    });
+});
 
 describe("auto alch", () => {
     test("is off unless it's been turned on, and is remembered", () => {

@@ -9,6 +9,9 @@ export type DisplaySettings = {
     questTracker: boolean;
     // Caskets are high alched as they're opened, with no casket screen
     autoAlch: boolean;
+    // Joining a co-op game, your own movement shows before the host confirms
+    // it. A trial for now, so it's off until a player turns it on.
+    movePrediction: boolean;
 };
 
 const SETTINGS_KEY = "rune-survivors-display";
@@ -19,7 +22,13 @@ function getDefaults(): DisplaySettings {
     try {
         reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     } catch (e) {}
-    return { menuSpin: !reducedMotion, pauseOnBlur: true, questTracker: true, autoAlch: false };
+    return {
+        menuSpin: !reducedMotion,
+        pauseOnBlur: true,
+        questTracker: true,
+        autoAlch: false,
+        movePrediction: false,
+    };
 }
 
 export function loadDisplaySettings(): DisplaySettings {
@@ -39,6 +48,9 @@ export function loadDisplaySettings(): DisplaySettings {
             }
             if (typeof data.autoAlch === "boolean") {
                 settings.autoAlch = data.autoAlch;
+            }
+            if (typeof data.movePrediction === "boolean") {
+                settings.movePrediction = data.movePrediction;
             }
         }
     } catch (e) {}

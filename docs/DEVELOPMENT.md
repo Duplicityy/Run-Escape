@@ -441,6 +441,33 @@ about 15 times a second at most. The host checks what a guest sends (`cleanMove`
 `cleanAction` in `core/lockstep.ts`) before it goes in, since every copy applies it. Nothing
 waits on a slow guest; they see the run a little behind, and catch up at 8 ms a frame at most.
 
+Guests can predict their own **displayed** movement in `client/coop/MovementPrediction.ts`. It's
+a trial for now: the `movePrediction` display setting (Settings and the pause menu) is off by
+default, and `CoopRun.setPrediction` applies it, mid-run too. Off, a guest has no prediction,
+sends no `moveSeq` and shows only what the host confirms; turned back on, it starts afresh. A local
+input sequence (`moveSeq`) rides on movement messages and is echoed in the host's frame event,
+including when queued moves are coalesced. The guest acknowledges it only after stepping that
+frame, then replays a bounded local input history from the confirmed position. A change that
+returns to the last sent direction inside the throttle still sends its new sequence, so a brief
+predicted tap can't remain unacknowledged forever.
+
+Prediction covers the character's position, facing and movement animation, camera, minimap,
+health bar, attached text, slashes and auras. `PlayerPose` is presentation state: never write it
+into `Sim`. Combat, pickups, world-space attack effects and all hashes still use confirmed
+positions. `core/PlayerMovement.ts` shares terrain collision, speed, sleds, curses, facing and
+boss arena limits with `Sim.stepPlayer`. Small errors ease toward the confirmed path; a wall
+blocking correction snaps the picture to its valid target instead of trapping it. Large
+confirmed displacements reset prediction. Death, known freezes, decisions and stale connections
+ease back to confirmed presentation, including the camera.
+
+`PREDICTION_MS` and `MAX_INPUT_HISTORY` bound replay work for one player. When the lead exceeds
+that window, replay uses the newest inputs so a stop or turn still takes effect. Long render
+frames retain their elapsed animation time and replay movement up to the same safety limit.
+Held movement refreshes its sequence at `MOVE_REFRESH_MS` (still subject to the network send
+throttle), bounding accumulated timing drift when the host loses simulation time. Prediction
+never steps a second full simulation or rolls back combat. Extreme latency remains visible,
+and a hit can still arrive after the local picture appears to have moved clear.
+
 - **Loading**: the host waits up to 20 seconds for everyone's map. Anything that comes for the run
   while a player's map is still loading is kept and handed over once their copy's made
   (`toCoopRun` in `GameClient`), so a guest who loads first, slowly, or leaves meanwhile isn't

@@ -26,6 +26,8 @@ export type FrameEvent = {
     frame: number;
     hero: number;
     move?: [number, number];
+    // Echoed for the sender's visual prediction. Never used by the sim.
+    moveSeq?: number;
     action?: CoopAction;
     auto?: true;
     leave?: true;
@@ -79,7 +81,7 @@ export function cleanFrameEvent(value: unknown, heroCount: number): FrameEvent |
     if (!value || typeof value !== "object") {
         return undefined;
     }
-    const { frame, hero, move, action, auto, leave } = value as Record<string, unknown>;
+    const { frame, hero, move, moveSeq, action, auto, leave } = value as Record<string, unknown>;
     if (
         !Number.isSafeInteger(frame) ||
         !Number.isInteger(hero) ||
@@ -97,10 +99,15 @@ export function cleanFrameEvent(value: unknown, heroCount: number): FrameEvent |
         frame: frame as number,
         hero: hero as number,
         ...(cleanedMove && { move: cleanedMove }),
+        ...(cleanedMove && cleanMoveSeq(moveSeq) !== undefined && { moveSeq: moveSeq as number }),
         ...(cleanedAction && { action: cleanedAction }),
         ...(auto === true && { auto }),
         ...(leave === true && { leave }),
     };
+}
+
+export function cleanMoveSeq(value: unknown): number | undefined {
+    return Number.isSafeInteger(value) && (value as number) > 0 ? (value as number) : undefined;
 }
 
 // Whether a run's result has a number that isn't one, which a save can't hold

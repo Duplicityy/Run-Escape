@@ -5,6 +5,7 @@ import { POWER_UP_COLOR, getPowerUp } from "../content/powerups";
 import { VISITOR_COLOR } from "../content/randomEvents";
 import { MapDef } from "../content/types";
 import { Sim } from "../core/Sim";
+import { PlayerPose, getPlayerPose } from "./PlayerPose";
 
 const MAP_SQUARE_SIZE = 64;
 // The client's minimap images have this many pixels a tile
@@ -186,8 +187,14 @@ export class Minimap {
     }
 
     // Centred on this hero (the camera's)
-    draw(canvas: HTMLCanvasElement, sim: Sim, alpha: number, viewHero = sim.focus): void {
-        const viewed = sim.heroes[viewHero]?.player ?? sim.player;
+    draw(
+        canvas: HTMLCanvasElement,
+        sim: Sim,
+        alpha: number,
+        viewHero = sim.focus,
+        predicted?: PlayerPose,
+    ): void {
+        const viewed = getPlayerPose(sim, viewHero, alpha, predicted);
         this.playerMapX = Math.floor(viewed.x / MAP_SQUARE_SIZE);
         this.playerMapY = Math.floor(viewed.y / MAP_SQUARE_SIZE);
         this.loadImages();
@@ -205,9 +212,7 @@ export class Minimap {
         const ctx = canvas.getContext("2d")!;
         const half = size / 2;
         const scale = TILE_PIXELS * pixel;
-        const player = sim.heroes[viewHero]?.player ?? sim.player;
-        const px = lerp(player.prevX, player.x, alpha);
-        const py = lerp(player.prevY, player.y, alpha);
+        const { x: px, y: py } = viewed;
         // World tiles to minimap pixels
         const toX = (x: number) => half + (x - px) * scale;
         const toY = (y: number) => half - (y - py) * scale;

@@ -306,7 +306,13 @@ export class GameStore {
             toasts: [],
             debug: false,
             audio: { muted: false, volume: 0.6, music: 0.6 },
-            display: { menuSpin: true, pauseOnBlur: true, questTracker: true, autoAlch: false },
+            display: {
+                menuSpin: true,
+                pauseOnBlur: true,
+                questTracker: true,
+                autoAlch: false,
+                movePrediction: false,
+            },
         };
     }
 

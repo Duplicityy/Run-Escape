@@ -282,6 +282,21 @@ function AutoAlchSetting({ ui, client }: ScreenProps): JSX.Element {
     );
 }
 
+function MovePredictionSetting({ ui, client }: ScreenProps): JSX.Element {
+    return (
+        <Setting
+            name="Movement prediction (trial)"
+            text="Joining a co-op game, you move as soon as you press, then correct to the host"
+        >
+            <Toggle
+                on={ui.display.movePrediction}
+                label="Movement prediction"
+                onToggle={() => client.toggleMovePrediction()}
+            />
+        </Setting>
+    );
+}
+
 // The community server's invite
 const DISCORD_INVITE = "https://discord.gg/82gBtKz2Xx";
 const GITHUB_REPOSITORY = "https://github.com/Dynrothe/Run-Escape";
@@ -411,6 +426,7 @@ function SettingsPanel({
                     </Setting>
                     <AutoPauseSetting ui={ui} client={client} />
                     <AutoAlchSetting ui={ui} client={client} />
+                    <MovePredictionSetting ui={ui} client={client} />
                 </section>
                 <section className="ui-settings-section">
                     <h3>Save</h3>
@@ -1678,6 +1694,7 @@ function PauseModal({
                         />
                         <AutoPauseSetting ui={ui} client={client} />
                         <AutoAlchSetting ui={ui} client={client} />
+                        <MovePredictionSetting ui={ui} client={client} />
                     </div>
                 </div>
                 <div className="ui-row">

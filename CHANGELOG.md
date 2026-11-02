@@ -9,6 +9,14 @@ the version in the corner).
 
 - Hard mode in co-op: the host can turn it on once everyone in the room has it.
 
+## 0.22.1 - 2026-11-02
+
+### Added
+
+- Movement prediction, a trial you can turn on in Settings or the pause menu: joining a co-op game,
+  you move as soon as you press, then correct to the host. Hits and pickups still follow the host.
+  Thanks to trippy22, who built it.
+
 ## 0.22.0 - 2026-11-01
 
 ### Added

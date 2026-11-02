@@ -6,9 +6,11 @@ import {
     cleanAction,
     cleanFrameEvent,
     cleanMove,
+    cleanMoveSeq,
     quantizeMove,
     syncHash,
 } from "../../core/lockstep";
+import { MovementPrediction } from "./MovementPrediction";
 import { DownMessage, UpMessage } from "./protocol";
 
 // How often the host sends a check of its run, in frames
@@ -42,6 +44,8 @@ export type CoopLink = {
 // it likes and says what happened at each frame; a guest steps only as far as
 // the host has said, sending what its player does to the host to go in.
 export class CoopRun {
+    // A guest's, while it's turned on (setPrediction)
+    prediction?: MovementPrediction;
     // Frames stepped
     frame = 0;
     // The frames that are out (for a guest, what the host has sent so far)
@@ -58,6 +62,7 @@ export class CoopRun {
     private hashes = new Map<number, number>();
     private lastMove: [number, number] = [0, 0];
     private moveSentAt = -Infinity;
+    private moveSeqSent = 0;
     // The host's: since when the run's been waiting on each hero
     private readonly waitingSince = new Map<number, number>();
     // The copies have gone apart (it's said once)
@@ -78,6 +83,19 @@ export class CoopRun {
     ) {
         this.loading = new Set(isHost ? [...heroes.keys()].filter((id) => id !== hostId) : []);
         this.loadStart = now();
+        if (!isHost) {
+            this.prediction = new MovementPrediction(sim, now);
+        }
+    }
+
+    // A guest's: whether its own movement is predicted on screen. Off, it sends
+    // and shows only what the host confirms. Back on, it starts afresh.
+    setPrediction(on: boolean): void {
+        if (this.isHost || on === (this.prediction !== undefined)) {
+            return;
+        }
+        this.prediction = on ? new MovementPrediction(this.sim, this.now) : undefined;
+        this.moveSeqSent = 0;
     }
 
     // The host's: this hero's move or action for the next frame, with the
@@ -87,6 +105,7 @@ export class CoopRun {
             const waiting = this.next.find((e) => e.hero === event.hero && e.move);
             if (waiting) {
                 waiting.move = event.move;
+                waiting.moveSeq = event.moveSeq;
                 return;
             }
         } else if (
@@ -108,19 +127,23 @@ export class CoopRun {
     // What the local player's pressing, sent on when it changes
     setMove(x: number, y: number): void {
         const move = quantizeMove(x, y);
+        const moveSeq = this.prediction?.sample(move);
         const now = this.now();
         if (
-            (move[0] === this.lastMove[0] && move[1] === this.lastMove[1]) ||
+            (move[0] === this.lastMove[0] &&
+                move[1] === this.lastMove[1] &&
+                (moveSeq === undefined || moveSeq === this.moveSeqSent)) ||
             now - this.moveSentAt < MOVE_INTERVAL_MS
         ) {
             return;
         }
         this.lastMove = move;
         this.moveSentAt = now;
+        this.moveSeqSent = moveSeq ?? 0;
         if (this.isHost) {
             this.queue({ frame: 0, hero: this.sim.focus, move });
         } else {
-            this.link.sendUp({ move });
+            this.link.sendUp({ move, ...(moveSeq && { moveSeq }) });
         }
     }
 
@@ -145,7 +168,8 @@ export class CoopRun {
         if ("loaded" in message) {
             this.loading.delete(from);
         } else if (move) {
-            this.queue({ frame: 0, hero, move });
+            const moveSeq = "moveSeq" in message ? cleanMoveSeq(message.moveSeq) : undefined;
+            this.queue({ frame: 0, hero, move, ...(moveSeq !== undefined && { moveSeq }) });
         } else if (action) {
             this.queue({ frame: 0, hero, action });
         }
@@ -243,6 +267,7 @@ export class CoopRun {
             applyFrameEvent(this.sim, event);
         }
         this.sim.step();
+        this.prediction?.confirm(events);
         this.frame = frame;
         if (this.isHost) {
             this.upTo = frame;
