@@ -454,7 +454,8 @@ A boss's fight is in its `BossDef` and `BossAttackDef`, with no boss named in `S
 - `MapDef.fight` makes a map one fight (Phosani's Nightmare, `content/phosani.ts`): no waves, its
   final boss event at 0, and the adventurer's starting weapon at `weaponLevel` from the first tick,
   with nothing in the fight dropping experience. Phosani's is built from her data alone: her sweep
-  is a one-bullet `spread` that `turn`s each volley.
+  is a one-bullet `spread` that `turn`s each volley, and her husks are a `scatter` summon of
+  enemies with `holds`, which pin the player once they arrive (`holdPlayer`).
 
 The curse is applied to the input in `stepPlayer`, so keys and the touch stick go the same way.
 

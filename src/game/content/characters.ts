@@ -546,10 +546,10 @@ export const CHARACTERS: CharacterDef[] = [
         name: "Inquisitor",
         description:
             "Made for Phosani's Nightmare, and everyone plays them there: starts with the " +
-            "Inquisitor's mace, moves 15% faster, has 20% more hitpoints and hits bosses 25% " +
+            "Armadyl crossbow, moves 15% faster, has 20% more hitpoints and hits bosses 25% " +
             "harder.",
-        style: "melee",
-        startingWeapon: "inquisitors_mace",
+        style: "ranged",
+        startingWeapon: "armadyl_crossbow",
         // The Inquisitor's armour, her own drop, with Barrows gloves and climbing boots
         equipment: {
             [EquipSlot.HEAD]: 24419,

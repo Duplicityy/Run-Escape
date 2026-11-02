@@ -272,7 +272,7 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
     };
     return (
         <div className="ui-fill ui-select">
-            <AdventurerPanel ui={ui} client={client} />
+            <AdventurerPanel ui={ui} client={client} fixed={getMapCharacter(map)} />
             <div className="ui-panel rs-border rs-background ui-select-panel ui-select-maps ui-coop-party">
                 <h2 className="ui-select-heading">
                     {room.name || "Party"}

@@ -332,7 +332,7 @@ export const MAPS: MapDef[] = [
         description:
             "The Nightmare's hard mode, on its own: the Inquisitor's Field beneath Slepe, where " +
             "the Sisterhood's hunters made their last stand. No waves, no picks and no items: " +
-            "the Inquisitor's mace, and her. She rises as you arrive, quicker than before and " +
+            "the Armadyl crossbow, and her. She rises as you arrive, quicker than before and " +
             "with more at once, and every hit of hers is shown before it lands. Her totems' " +
             "blasts are the only rest, and each heals you.",
         // The Inquisitor's great helm
@@ -344,7 +344,7 @@ export const MAPS: MapDef[] = [
             y: INQUISITORS_BOSS_ARENA.baseY + INQUISITORS_BOSS_ARENA.size / 2,
         },
         // Her hitpoints come from the event: a run here has the Inquisitor's
-        // mace and nothing more, not fifteen minutes of levels. Her hits are
+        // crossbow and nothing more, not fifteen minutes of levels. Her hits are
         // tuned to the Inquisitor's hitpoints too: a big one takes about half,
         // as hers do on Hallowed Night with a whole run's behind you
         difficulty: { hp: 1, damage: 0.9 },

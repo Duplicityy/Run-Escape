@@ -34,6 +34,7 @@ import {
     MAPS,
     SEASONAL_MAPS,
     getMap,
+    getMapCharacter,
 } from "../content/maps";
 import { RARITIES } from "../content/rarity";
 import { SHOP_UPGRADES } from "../content/shop";
@@ -727,7 +728,7 @@ export function getStartingWeaponIcon(character: CharacterDef): number {
 function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
     return (
         <div className="ui-fill ui-select">
-            <AdventurerPanel ui={ui} client={client} />
+            <AdventurerPanel ui={ui} client={client} fixed={getMapCharacter(getMap(ui.mapId))} />
             <MapPanel ui={ui} client={client} />
             <div className="ui-panel rs-border rs-background ui-select-bar">
                 <button className="ui-button" onClick={() => client.showScreen("title")}>
@@ -827,13 +828,22 @@ function stopPeeking(setPeek: (id: undefined) => void): (() => void) | undefined
 // pointed at (or tapped, so a locked one can say what it takes) until the
 // pointer leaves the panel, then the one picked. Only moving the pointer
 // changes it: the list scrolling under a still pointer doesn't.
-export function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
+// fixed: the adventurer the map picked makes everyone play (Falador's Durial321,
+// Phosani's Inquisitor), with the choice blurred out under them
+export function AdventurerPanel({
+    ui,
+    client,
+    fixed,
+}: ScreenProps & { fixed?: string }): JSX.Element {
     const unlocked = ui.save.unlockedCharacters;
     const [peek, setPeek] = useState<string>();
     const opened = CHARACTERS.filter((c) => unlocked.includes(c.id)).length;
     return (
         <div
-            className="ui-panel rs-border rs-background ui-select-panel ui-select-adventurers"
+            className={
+                "ui-panel rs-border rs-background ui-select-panel ui-select-adventurers" +
+                (fixed ? " ui-select-fixed" : "")
+            }
             onMouseLeave={stopPeeking(setPeek)}
         >
             <h2 className="ui-select-heading">
@@ -842,7 +852,13 @@ export function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
                     {opened} / {CHARACTERS.length}
                 </span>
             </h2>
-            <div className="ui-select-scroll">
+            {fixed && (
+                <div className="ui-select-fixed-note">
+                    <ItemIcon objId={getStartingWeaponIcon(getCharacter(fixed))} size={28} />
+                    Everyone plays the {getCharacter(fixed).name} here.
+                </div>
+            )}
+            <div className="ui-select-scroll" aria-hidden={fixed !== undefined}>
                 {STYLES.map((style) => {
                     const treasure = getClassTreasure(style);
                     return (
@@ -902,7 +918,10 @@ export function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
                     );
                 })}
             </div>
-            <AdventurerDetails save={ui.save} character={getCharacter(peek ?? ui.characterId)} />
+            <AdventurerDetails
+                save={ui.save}
+                character={getCharacter(fixed ?? peek ?? ui.characterId)}
+            />
         </div>
     );
 }

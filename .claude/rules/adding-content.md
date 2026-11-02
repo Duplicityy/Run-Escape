@@ -115,6 +115,9 @@ a map, or an enemy on that map, mentions it), so that needs nothing added.
 - `ghost` goes through everything, and is only for what's really a spirit. Anything with wings gets
   `flies`: over fences, walls, trees and water, and round terrain (`world/FlightGrid.ts`).
 - A `blinks.surface` seq is baked like `blinks.seq`, and needs to be one the NPC's model can play.
+- `holds` has an enemy pin the player where they stand once it reaches them (Phosani's husks), and
+  a boss's `summon.scatter` brings its summons on wherever a wave's enemy would, so there's time to
+  kill them on the way.
 - In co-op a boss event spawns copies (`bossCopies` in `content/coop.ts`) that share one boss's
   hitpoints, experience and loot. One with `spawnAt` gets no more copies than it has free spots.
 
@@ -148,7 +151,8 @@ Add it to `MAPS` in `maps.ts` (fun maps go in `fun/maps.ts`), with its waves in 
   experience, so that kit is the whole run, and the boss's hitpoints (the event's `hp`) are tuned
   to it. The spawn is the middle of the boss square, where the entrance puts the player anyway.
   The bot keeps away from bosses, so with nothing but melee it walks up to a shielded one and
-  takes her swings: its numbers say how long the kit takes, not how a player fares. It's listed under Boss fights on the map screen, and can't be endless. Sim it with
+  takes her swings: its numbers say how long the kit takes, not how a player fares. It's listed
+  under Boss fights on the map screen, and can't be endless. Sim it with
   `FLAT=1 MAP=phosani DODGE=1`, which needs no cache, and go by how long the bot lasts and what
   hits it: it can't dodge as a person does.
 - Check it in the browser: the minimap, the spawn, and that enemies can reach you. The sim's bot

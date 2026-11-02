@@ -195,6 +195,8 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
 
 const PHASE_ONE_ATTACKS: BossAttackDef[] = [
     {
+        // Hers come for you from wherever they turn up, and hold you once they
+        // arrive: there's time to shoot them down first
         name: "Husks",
         windupSound: 4341,
         kind: "summon",
@@ -205,13 +207,12 @@ const PHASE_ONE_ATTACKS: BossAttackDef[] = [
         weight: 3,
         seq: SUMMON_SEQ,
         phases: [1],
-        message: "Husks hold you in place! Kill them!",
+        message: "Husks come for you! Kill them before they hold you!",
         summon: {
             enemyId: "phosani_husk_magic",
             count: 1,
             alsoId: "phosani_husk_ranged",
-            beside: true,
-            holds: 5,
+            scatter: true,
         },
     },
     {
@@ -458,12 +459,16 @@ export const PHOSANI_ENEMIES: EnemyDef[] = [
             },
         },
     },
+    // Up and walking, unlike hers, with the hold on arriving instead of at once
     {
         ...HUSK,
         id: "phosani_husk_magic",
         name: "Husk",
         npcId: 9454,
-        hp: 700,
+        hp: 400,
+        speed: 2,
+        stationary: false,
+        holds: 5,
         shot: { range: 8, interval: 1.8, speed: 7, spotAnim: 1776, sound: 4302 },
     },
     {
@@ -471,7 +476,10 @@ export const PHOSANI_ENEMIES: EnemyDef[] = [
         id: "phosani_husk_ranged",
         name: "Husk",
         npcId: 9455,
-        hp: 700,
+        hp: 400,
+        speed: 2,
+        stationary: false,
+        holds: 5,
         shot: { range: 8, interval: 1.8, speed: 9, spotAnim: 1771, sound: 4264 },
     },
     {

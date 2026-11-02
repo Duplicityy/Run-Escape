@@ -3122,11 +3122,29 @@ export class Sim {
         enemy.attackCooldown = ENEMY_ATTACK_COOLDOWN;
         enemy.anim = "attack";
         enemy.animStart = this.tick;
+        if (enemy.def.holds !== undefined) {
+            this.holdPlayer(enemy, enemy.def.holds);
+        }
         if (this.player.invulnerable > 0) {
             return;
         }
         this.damagePlayer(enemy.damage, enemy.def.id, enemy.elite);
         this.recoil(enemy);
+    }
+
+    // Held where they stand by what's reached them (EnemyDef.holds), for
+    // seconds or until it's dead; one more joins a hold that's on
+    private holdPlayer(enemy: Enemy, seconds: number): void {
+        const endTick = this.tick + secondsToTicks(seconds);
+        const hold = this.hold;
+        if (hold && hold.endTick > this.tick) {
+            if (!hold.enemies.includes(enemy)) {
+                hold.enemies.push(enemy);
+            }
+            hold.endTick = Math.max(hold.endTick, endTick);
+            return;
+        }
+        this.hold = { enemies: [enemy], endTick };
     }
 
     // A ranger's or mage's shot: a projectile at where the player is now, for
@@ -4942,7 +4960,11 @@ export class Sim {
         const also = summon.alsoId !== undefined ? getEnemy(summon.alsoId) : undefined;
         const total = count + (also ? 1 : 0);
         for (let i = 0; i < total; i++) {
-            const one = this.spawnNear(around, i < count ? def : also!, radius, i, total, attempts);
+            const which = i < count ? def : also!;
+            // Scattered: anywhere a wave's enemy would turn up, from the player
+            const one = summon.scatter
+                ? this.spawnEnemy(which, "normal")
+                : this.spawnNear(around, which, radius, i, total, attempts);
             if (one) {
                 spawned.push(one);
             }

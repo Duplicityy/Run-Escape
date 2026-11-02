@@ -13,8 +13,9 @@ the version in the corner).
   charge from the start, a sweep of petals to step against, and in her last phase a claw on the
   tile you stand on. Her totems' blasts heal you. It has a hard mode once it's beaten, a quest,
   and it can't be endless. Everyone plays the Inquisitor there, an adventurer made for the fight:
-  the Inquisitor's mace at its best, quicker on their feet, more hitpoints and harder on bosses.
-  Beating her brings them to every other map.
+  the Armadyl crossbow at its best, quicker on their feet, more hitpoints and harder on bosses.
+  Beating her brings them to every other map, and the adventurer choice is blurred out while the
+  map's picked.
 
 ## 0.23.0 - 2026-11-02
 

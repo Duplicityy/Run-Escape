@@ -108,7 +108,7 @@ version and how to run it.
     | LMS sweat           | Magic       | Ice Burst              | Weapons 10% faster, 10% more area                     | Killing the AGS specer in Last Man Standing             |
     | Castle Wars veteran | Melee       | Bronze 2h sword        | Bandages heal, 10% more hitpoints                     | Killing the Flag carrier in Castle Wars                 |
     | Void knight         | Melee       | Bronze scimitar        | Hits 10% harder                                       | Destroying the purple portal in Pest Control            |
-    | Inquisitor          | Melee       | Inquisitor's mace      | 15% faster, 20% more hitpoints, bosses hit 25% harder | Killing Phosani's Nightmare (everyone plays them there) |
+    | Inquisitor          | Ranged      | Armadyl crossbow       | 15% faster, 20% more hitpoints, bosses hit 25% harder | Killing Phosani's Nightmare (everyone plays them there) |
 
 - **Class weapons**: every adventurer fights with Melee, Ranged or Magic, and only they can be
   offered their class's weapons. Each class has
@@ -304,7 +304,7 @@ version and how to run it.
     - **Phosani's Nightmare** (a boss fight, open once Hallowed Night's beaten): nothing but her.
       The run's one fight on the Inquisitor's Field, a cavern under Slepe where the Sisterhood's
       hunters fell. There are no waves, no picks and no items: you play the Inquisitor with the
-      Inquisitor's mace at its best and nothing more, start in the middle of the field, and she
+      Armadyl crossbow at its best and nothing more, start in the middle of the field, and she
       rises at once. Each of her totems' blasts heals you. It can't be endless; it has a hard mode
       once it's beaten.
 - **Bosses** turn up during a run, each fighting the way it does in OSRS, and always drop an
@@ -373,7 +373,8 @@ version and how to run it.
       At 15:00, **The Nightmare**.
     - **Phosani's Nightmare**: The Nightmare's hard mode, from the start. Everything of hers, quicker
       and with more of it at once: her charge from the first phase, a wider fan of shots, a six-armed
-      spiral, farther-reaching Grasping Claws, tougher husks and parasites, more sleepwalkers, and
+      spiral, farther-reaching Grasping Claws, husks that come for you from wherever they turn up
+      and hold you once they arrive (shoot them down first), tougher parasites, more sleepwalkers, and
       two of her own: a **Sweep**, one arm of petals aimed at you and then swept round widdershins
       for three seconds (step against the turn), and in her last phase a claw on the tile you stand
       on with barely a second to get clear. Every hit is shown before it lands, and nothing heals

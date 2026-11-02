@@ -37,14 +37,14 @@ function createSim(seed = 1, characterId = "inquisitor"): Sim {
     return sim;
 }
 
-function run(sim: Sim, seconds: number): void {
+function run(sim: Sim, seconds: number, moveX = 0, moveY = 0): void {
     const ticks = Math.round(seconds * TICKS_PER_SECOND);
     for (let i = 0; i < ticks && !sim.runOver; i++) {
         if (sim.state === "levelUp") {
             sim.choose(0);
             continue;
         }
-        sim.step(0, 0);
+        sim.step(moveX, moveY);
     }
 }
 
@@ -96,18 +96,19 @@ describe("the map", () => {
         expect(sim.passives).toEqual([]);
     });
 
-    test("everyone plays the Inquisitor there, with the mace she drops at its best", () => {
+    test("everyone plays the Inquisitor there, with their crossbow at its best", () => {
         const map = getMap("phosani");
         expect(map.fight?.character).toBe("inquisitor");
         const inquisitor = getCharacter("inquisitor");
-        expect(inquisitor.startingWeapon).toBe("inquisitors_mace");
+        expect(inquisitor.style).toBe("ranged");
+        expect(inquisitor.startingWeapon).toBe("armadyl_crossbow");
         expect(inquisitor.unlock).toEqual({
             kind: "killBoss",
             mapId: "phosani",
             enemyId: "phosanis_nightmare",
         });
         const sim = createSim();
-        expect(sim.weapons.map((w) => [w.def.id, w.level])).toEqual([["inquisitors_mace", 5]]);
+        expect(sim.weapons.map((w) => [w.def.id, w.level])).toEqual([["armadyl_crossbow", 5]]);
         expect(sim.weapons[0].def.levels.length).toBe(5);
         expect(sim.stats.moveSpeed).toBeGreaterThan(0);
         expect(sim.stats.bossMight).toBeGreaterThan(0);
@@ -222,6 +223,43 @@ describe("her fight", () => {
             }
         }
         expect(north).toBeGreaterThan(0);
+    });
+
+    test("her husks turn up away from the player, walking, and hold once they arrive", () => {
+        const sim = createSim();
+        const boss = startFight(sim);
+        const attack = phosani().boss!.attacks.find((a) => a.name === "Husks")!;
+        expect(attack.summon?.scatter).toBe(true);
+        sim["startBossAttack"](boss, attack);
+        boss.attackCooldown = 1e9;
+        run(sim, attack.windup + 0.1);
+        const husks = sim.enemies.filter((e) => e.def.id.startsWith("phosani_husk"));
+        expect(husks.length).toBe(2);
+        for (const husk of husks) {
+            expect(husk.def.stationary).toBeFalsy();
+            expect(husk.speed).toBeGreaterThan(0);
+            expect(Math.hypot(husk.x - sim.player.x, husk.y - sim.player.y)).toBeGreaterThan(5);
+        }
+        // Not held until one gets there
+        expect(sim.hold).toBeUndefined();
+        const [husk] = husks;
+        husk.x = husk.prevX = sim.player.x + 0.6;
+        husk.y = husk.prevY = sim.player.y;
+        husk.attackCooldown = 0;
+        sim.player.invulnerable = 0;
+        run(sim, 0.2);
+        expect(sim.hold?.enemies).toContain(husk);
+        const { x, y } = sim.player;
+        run(sim, 1, 1, 0);
+        expect([sim.player.x, sim.player.y]).toEqual([x, y]);
+        // Killing it lets go
+        for (const one of husks) {
+            sim.damageEnemy(one, 1e6, 0, one.x, one.y, 0);
+        }
+        run(sim, 0.2);
+        expect(sim.hold).toBeUndefined();
+        run(sim, 1, 1, 0);
+        expect(sim.player.x).toBeGreaterThan(x);
     });
 
     test("her parasites heal her and no one else", () => {

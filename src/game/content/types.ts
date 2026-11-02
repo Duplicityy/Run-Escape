@@ -176,6 +176,10 @@ export type EnemyDef = {
     // at them, and doesn't come closer than twice that (Castle Wars' flag
     // carrier, off home with the flag)
     flees?: { range: number };
+    // Holds the player where they stand for this many seconds once it reaches
+    // them, or until it's dead (Phosani's husks): the boss holds off meanwhile,
+    // as it does for a summon that holds
+    holds?: number;
     // Bosses: turns up as a reward casket of this tier instead, lying near the
     // player with its beam like any other (the Mimic). Walking onto it, or
     // leaving it for seconds, sets it shaking, and shake seconds later it opens
@@ -461,12 +465,15 @@ export type BossAttackDef = {
     // it. Those that get there are absorbed: when the last is dead or
     // absorbed, a blast no one can dodge hits for damage, plus perAbsorbed
     // for each one. (The Nightmare's Sleepwalkers.)
+    // scatter: they turn up at random, as far off as a wave's enemies do, and
+    // come for the player (Phosani's husks, which hold once they arrive).
     summon?: {
         enemyId: string;
         count: number;
         // Comes with them, one of it (a Husk of each kind)
         alsoId?: string;
         beside?: boolean;
+        scatter?: boolean;
         holds?: number;
         walkTo?: { distance: number; perAbsorbed: number };
     };
