@@ -14,9 +14,9 @@ the version in the corner).
 - Hard mode in co-op: the host can turn it on once everyone in the room has it.
 - Co-op results, by trippy22: a page for each player's own kills, damage, weapons and caskets, with
   arrows (or the arrow keys) to flip between them, and the party's totals underneath.
-- Each weapon's damage during a run: press Tab, or click or tap the DPS under the minimap, to see
-  what each weapon is doing a second right now (the best first), its share, and its total. It stays
-  open or shut as you left it.
+- Each weapon's damage during a run, by Xiodrade: press Tab, or click or tap the DPS under the
+  minimap, to see what each weapon is doing a second right now (the best first), its share, and
+  its total. It stays open or shut as you left it.
 
 ### Changed
 
@@ -48,10 +48,11 @@ the version in the corner).
   takes over your fire or puts it out.
 - Durial321's task says what it takes: surviving 6:06 in Falador, not 6 minutes.
 - Co-op: a double click or a quick second key on a level up, casket or random event no longer
-  answers the next one too, unseen.
+  answers the next one too, unseen. Fixed by Xiodrade.
 - Pressing Enter or Space on a focused casket button no longer resolves the next casket as well.
+  Fixed by Xiodrade.
 - Co-op: a tab left in the background no longer builds up effects to draw all at once when you come
-  back.
+  back. Fixed by Xiodrade.
 - Item icons that failed to draw are tried again, rather than staying blank until the game's
   reopened.
 - Endless: a run no longer holds on to every boss it's had, so very long ones use less memory.
