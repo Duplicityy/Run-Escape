@@ -591,8 +591,8 @@ export const INQUISITORS_FIELD: MapRecipe = {
     squaresX: SQUARES,
     squaresY: SQUARES,
     margin: MARGIN,
-    // At the south of the arena, where the way in comes out
-    spawn: { x: MIDDLE, y: ARENA_MIN + 7 },
+    // The middle of the field, where her entrance puts the player anyway
+    spawn: { x: MIDDLE, y: MIDDLE },
     build: (context) => buildDetail(context).grid,
     detail: buildDetail,
 };

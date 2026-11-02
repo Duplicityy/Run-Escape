@@ -1002,6 +1002,10 @@ export class Sim {
         for (const hero of this.heroes) {
             this.use(hero);
             this.addWeapon(getCharacter(hero.characterId).startingWeapon);
+            // A boss fight's kit: the weapon at its level, and nothing more ever
+            if (this.map.fight) {
+                this.weapons[0].level = this.map.fight.weaponLevel;
+            }
             this.updateStats();
             hero.player.hp = hero.player.maxHp;
             hero.revivesLeft = hero.stats.revival;
@@ -1010,20 +1014,6 @@ export class Sim {
             this.updateFlowField();
         }
         this.use(this.heroes[this.focus]);
-        // A map that's one boss fight: the picks come before anything else,
-        // as the run waits on them from its first tick
-        const fight = this.map.fight;
-        if (fight && fight.levelUps > 0) {
-            this.gainLevels(fight.levelUps);
-            this.checkLevelUp();
-        }
-    }
-
-    // The experience to the end of this many more levels, for a fight with
-    // nothing to level on (MapDef.fight, BossPhasesDef.blastLevelUps). The
-    // levels come with the next checkLevelUp.
-    private gainLevels(levels: number): void {
-        this.xp = Math.max(this.xp, this.xpForLevel(this.level + levels));
     }
 
     // A hero at the spawn, or for a party's others, around it
@@ -3965,11 +3955,6 @@ export class Sim {
         this.forEachHeroInReach(() =>
             this.heal(Math.round(this.player.maxHp * (phases.blastHeal ?? 0))),
         );
-        // Nor anything to level on, where it's the whole run: the picks come
-        // while her shield's back (checkLevelUp, at the end of the tick)
-        if (phases.blastLevelUps) {
-            this.gainLevels(phases.blastLevelUps);
-        }
         const next = phases.phases[phase.index + 1];
         if (!next) {
             boss.shieldEnd = 0;

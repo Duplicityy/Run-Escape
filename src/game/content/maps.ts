@@ -331,23 +331,22 @@ export const MAPS: MapDef[] = [
         name: "Phosani's Nightmare",
         description:
             "The Nightmare's hard mode, on its own: the Inquisitor's Field beneath Slepe, where " +
-            "the Sisterhood's hunters made their last stand. No waves and no caskets. Choose your " +
-            "arms, then she rises, quicker than before and with more at once, and every hit of " +
-            "hers is shown before it lands. Her totems' blasts are the only rest: each heals you " +
-            "and brings three levels.",
+            "the Sisterhood's hunters made their last stand. No waves, no picks and no items: " +
+            "the Inquisitor's mace, and her. She rises as you arrive, quicker than before and " +
+            "with more at once, and every hit of hers is shown before it lands. Her totems' " +
+            "blasts are the only rest, and each heals you.",
         // The Inquisitor's great helm
         iconObjId: 24419,
         arena: getRecipeArena(INQUISITORS_FIELD),
-        // The south of the field, where the way in comes out
-        spawn: getRecipeWorldTile(
-            INQUISITORS_FIELD,
-            INQUISITORS_FIELD.spawn.x,
-            INQUISITORS_FIELD.spawn.y,
-        ),
-        // Her hitpoints come from the event: a run here has eight picks and a
-        // few blasts' worth of levels, not fifteen minutes of them. Her hits
-        // are tuned to those few levels' hitpoints too: a big one takes about
-        // half, as hers do on Hallowed Night with a whole run's behind you
+        // The middle of the field, where her entrance puts the player anyway
+        spawn: {
+            x: INQUISITORS_BOSS_ARENA.baseX + INQUISITORS_BOSS_ARENA.size / 2,
+            y: INQUISITORS_BOSS_ARENA.baseY + INQUISITORS_BOSS_ARENA.size / 2,
+        },
+        // Her hitpoints come from the event: a run here has the Inquisitor's
+        // mace and nothing more, not fifteen minutes of levels. Her hits are
+        // tuned to the Inquisitor's hitpoints too: a big one takes about half,
+        // as hers do on Hallowed Night with a whole run's behind you
         difficulty: { hp: 1, damage: 0.9 },
         hard: { hp: 1.3, damage: 1.3 },
         waves: [],
@@ -356,7 +355,7 @@ export const MAPS: MapDef[] = [
         victoryText: "Phosani's Nightmare is laid to rest!",
         bossArena: INQUISITORS_BOSS_ARENA,
         scaperune: true,
-        fight: { requires: "halloween", levelUps: 8, character: "inquisitor" },
+        fight: { requires: "halloween", character: "inquisitor", weaponLevel: 5 },
         brightness: 0.75,
     },
 ];

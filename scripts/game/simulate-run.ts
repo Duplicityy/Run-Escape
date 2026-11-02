@@ -293,6 +293,11 @@ function fightMove(sim: Sim): { x: number; y: number } | undefined {
         state.walkers.enemies.filter((e) => !e.dead).forEach(consider);
     } else if (phase.stage === "totems") {
         phase.totems.filter((t) => t.hp > 0).forEach(consider);
+    } else if (sim.weapons.every((w) => w.def.kind === "slash" || w.def.kind === "sweep")) {
+        // With nothing but melee (the Inquisitor against Phosani's Nightmare) the
+        // shield has to be hit from up close, so it walks up to her and takes
+        // what comes
+        consider(boss);
     }
     if (target) {
         // Close enough for short weapons, then it just stays there

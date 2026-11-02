@@ -48,15 +48,6 @@ function run(sim: Sim, seconds: number): void {
     }
 }
 
-function pickAll(sim: Sim): number {
-    let picks = 0;
-    while (sim.state === "levelUp") {
-        sim.choose(0);
-        picks++;
-    }
-    return picks;
-}
-
 function phosani() {
     return getEnemy("phosanis_nightmare");
 }
@@ -65,9 +56,8 @@ function phaseOf(boss: Enemy) {
     return boss.bossState!.phase!;
 }
 
-// Through the picks and her entrance, to the fight proper
+// Through her entrance, to the fight proper
 function startFight(sim: Sim): Enemy {
-    pickAll(sim);
     run(sim, phosani().boss!.intro!.seconds + 0.2);
     const boss = sim.enemies.find((e) => e.finalBoss)!;
     boss.attackCooldown = 1e9;
@@ -81,25 +71,32 @@ afterEach(() => {
 describe("the map", () => {
     test("is one fight, with her the only thing on it", () => {
         const map = getMap("phosani");
-        expect(map.fight).toEqual({ requires: "halloween", levelUps: 8, character: "inquisitor" });
+        expect(map.fight).toEqual({
+            requires: "halloween",
+            character: "inquisitor",
+            weaponLevel: 5,
+        });
+        // The player starts where her entrance puts them: the middle of her square
+        expect(map.spawn).toEqual({
+            x: INQUISITORS_BOSS_ARENA.baseX + 32,
+            y: INQUISITORS_BOSS_ARENA.baseY + 32,
+        });
         expect(map.waves).toEqual([]);
         expect(map.events).toEqual([
             { at: 0, kind: "finalBoss", enemyId: "phosanis_nightmare", hp: 4200 },
         ]);
     });
 
-    test("the run begins with its picks, before a tick is played", () => {
+    test("the run begins at once, with the kit and no picks", () => {
         const sim = createSim();
         expect(sim.tick).toBe(0);
-        expect(sim.state).toBe("levelUp");
-        expect(sim.level).toBe(9);
-        expect(sim.choices.length).toBeGreaterThan(0);
-        expect(pickAll(sim)).toBe(8);
         expect(sim.state).toBe("playing");
-        expect(sim.weapons.length + sim.passives.length).toBeGreaterThan(1);
+        expect(sim.level).toBe(1);
+        expect(sim.choices).toEqual([]);
+        expect(sim.passives).toEqual([]);
     });
 
-    test("everyone plays the Inquisitor there, with the mace she drops", () => {
+    test("everyone plays the Inquisitor there, with the mace she drops at its best", () => {
         const map = getMap("phosani");
         expect(map.fight?.character).toBe("inquisitor");
         const inquisitor = getCharacter("inquisitor");
@@ -110,23 +107,14 @@ describe("the map", () => {
             enemyId: "phosanis_nightmare",
         });
         const sim = createSim();
-        expect(sim.weapons.map((w) => w.def.id)).toEqual(["inquisitors_mace"]);
-        // Their picks can take the mace further, though it's a locked weapon
-        let levelled = false;
-        for (let i = 0; i < 8 && !levelled; i++) {
-            const index = sim.choices.findIndex(
-                (c) => c.kind === "weaponLevel" && c.weaponId === "inquisitors_mace",
-            );
-            levelled = index !== -1;
-            sim.choose(Math.max(0, index));
-        }
+        expect(sim.weapons.map((w) => [w.def.id, w.level])).toEqual([["inquisitors_mace", 5]]);
+        expect(sim.weapons[0].def.levels.length).toBe(5);
         expect(sim.stats.moveSpeed).toBeGreaterThan(0);
         expect(sim.stats.bossMight).toBeGreaterThan(0);
     });
 
-    test("she rises as soon as the picks are made, and nothing else ever comes", () => {
+    test("she rises as the run begins, and nothing else ever comes", () => {
         const sim = createSim();
-        pickAll(sim);
         sim.step(0, 0);
         expect(sim.intro?.def.id).toBe("phosanis_nightmare");
         run(sim, phosani().boss!.intro!.seconds + 0.2);
@@ -140,7 +128,7 @@ describe("the map", () => {
         expect(others).toEqual([]);
     });
 
-    test("the picks are made by every hero, and the run waits on each", () => {
+    test("a party has the kit each, and no picks either", () => {
         const sim = new Sim({
             grid: makeGrid(
                 Array.from({ length: SIZE }, (_, y) =>
@@ -163,18 +151,18 @@ describe("the map", () => {
             ],
         });
         sim.map.bossArena = undefined;
-        expect(sim.state).toBe("levelUp");
+        expect(sim.state).toBe("playing");
         for (const hero of sim.heroes) {
-            expect(hero.pendingLevelUps).toBe(8);
+            expect(hero.pendingLevelUps).toBe(0);
+            expect(hero.weapons.map((w) => w.level)).toEqual([5]);
         }
     });
 });
 
 describe("her fight", () => {
-    test("each blast heals and brings three levels' worth of picks", () => {
+    test("each blast heals, and nothing in the fight gives a level", () => {
         const sim = createSim();
         const boss = startFight(sim);
-        const level = sim.level;
         sim.player.hp = 1;
         sim.damageEnemy(boss, phaseOf(boss).shield * 2, 0, boss.x, boss.y, 0);
         expect(phaseOf(boss).stage).toBe("totems");
@@ -183,10 +171,10 @@ describe("her fight", () => {
         }
         expect(phaseOf(boss).index).toBe(1);
         expect(sim.player.hp).toBeGreaterThan(1);
-        sim.step(0, 0);
-        expect(sim.state).toBe("levelUp");
-        expect(sim.level).toBe(level + 3);
-        expect(pickAll(sim)).toBe(3);
+        run(sim, 5);
+        expect(sim.state).toBe("playing");
+        expect(sim.level).toBe(1);
+        expect(sim.xp).toBe(0);
     });
 
     test("she fights with everything of hers from the first phase", () => {

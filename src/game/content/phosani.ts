@@ -21,11 +21,11 @@ import { BossAttackDef, EnemyDef } from "./types";
 
 // Phosani's Nightmare: The Nightmare's hard mode, fought on its own on the
 // Inquisitor's Field (maps.ts, scaperune/maps/inquisitorsField.ts). There's no
-// run before her: she rises as you arrive, and the map's fight settings give
-// the picks to make first and with each totem blast. Everything's hers from
-// nightmare.ts, quicker, and with more of it at once, plus a sweep and a claw
-// on your own tile. It's meant to be learnt: every hit is wound up and shown
-// first, and nothing heals but the totems.
+// run before her: she rises as you arrive, and there are no picks and no
+// items, only the Inquisitor's mace (the map's fight settings). Everything's
+// hers from nightmare.ts, quicker, and with more of it at once, plus a sweep
+// and a claw on your own tile. It's meant to be learnt: every hit is wound up
+// and shown first, and nothing heals but the totems.
 //
 // She looks like The Nightmare (npc 9425, her animations), as Phosani's own
 // NPC can't be checked without the cache: see the pull request.
@@ -443,7 +443,6 @@ export const PHOSANI_ENEMIES: EnemyDef[] = [
                     { shield: 0.3, opener: "Sleepwalkers (more)" },
                 ],
                 blastHeal: 0.35,
-                blastLevelUps: 3,
                 totems: {
                     idleId: "nightmare_totem",
                     chargingId: "nightmare_totem_charging",
@@ -455,7 +454,7 @@ export const PHOSANI_ENEMIES: EnemyDef[] = [
                     chargedSound: 4254,
                 },
                 shieldMessage: "Her shield breaks! Charge the four totems!",
-                blastMessage: "The totems blast her! Her shield's back, and you've learnt from it.",
+                blastMessage: "The totems blast her! Her shield's back!",
             },
         },
     },

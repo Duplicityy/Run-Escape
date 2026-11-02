@@ -35,8 +35,8 @@ built on [rs-map-viewer](https://github.com/dennisdev/rs-map-viewer), the code b
   Inquisitor's, Crystal) and an **Armoury** to upgrade it for good between runs.
 - **Co-op** for up to four players: rooms by invite code or open to all, everyone with their own
   adventurer, shared levels, and the run going on while anyone's standing.
-- **Phosani's Nightmare**, a boss fight on its own once Hallowed Night's beaten: no waves, your
-  picks first, then her, quicker and with more at once.
+- **Phosani's Nightmare**, a boss fight on its own once Hallowed Night's beaten: no waves, no
+  picks and no items, only the Inquisitor's mace and her, quicker and with more at once.
 - **Endless mode** and **hard mode** for every map you've beaten, **skills** to train with the coins
   you bank, and **quests** that pay out over many runs.
 
