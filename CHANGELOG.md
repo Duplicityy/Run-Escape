@@ -19,6 +19,13 @@ the version in the corner).
   from Settings.
 - Killing the final boss wins the run, even if a hit lands in the same instant: it no longer counts
   as a death or uses up a ring of life.
+- Co-op: two players with the same orbit weapon, like Elemental runes, no longer wipe out each
+  other's circle.
+- Co-op: a downed player can't reroll or skip level ups any more, so they can't spend the party's
+  coins.
+- Co-op: one player's Evil Bob finishing no longer ends another's Evil Bob timer early.
+- Co-op: each player's Toktz-mej-tal burns ground of its own: another player's pulse no longer
+  takes over your fire or puts it out.
 
 ## 0.22.1 - 2026-11-02
 

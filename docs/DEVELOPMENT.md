@@ -458,7 +458,9 @@ numbers the ticks (frames) and sends, every frame or two, what happened at each:
 they're pressing (as whole numbers, so every copy moves the same) and who chose what. Guests step
 only as far as the host has sent, sending their own input to the host to go in a frame, a move
 about 15 times a second at most. The host checks what a guest sends (`cleanMove`,
-`cleanAction` in `core/lockstep.ts`) before it goes in, since every copy applies it. Nothing
+`cleanAction` in `core/lockstep.ts`) before it goes in, since every copy applies it. That only
+checks its shape, so whether a player can do it now is the sim's to check: a modified game can
+send anything (a downed player can't choose, reroll or skip, as `isChoosing` says). Nothing
 waits on a slow guest; they see the run a little behind, and catch up at 8 ms a frame at most.
 
 Guests can predict their own **displayed** movement in `client/coop/MovementPrediction.ts`. It's
@@ -513,7 +515,9 @@ The sim's player state is split into `Hero`s, one a player. `sim.player`, `sim.w
 `sim.stats` and the rest are the current hero's: whichever one the sim is working on (an enemy's
 target, a projectile's owner, whoever's picking something up), and between ticks the one this
 browser plays (`focus`). Something that belongs to a hero (a projectile, a thrall, burning ground,
-venom) remembers whose with `hero`, and the sim works as them when it acts. Co-op actions go
+venom) remembers whose with `hero`, and the sim works as them when it acts. Whatever replaces,
+merges with or caps those (an orbit weapon's orbs, burning ground, a power-up's timer) matches on
+`hero` too, so one player's never takes the place of another's. Co-op actions go
 through `sim.as(hero, ...)`. Events that are a hero's own (a hit taken, a pickup, a casket) carry
 `hero` in co-op, so the client shows its own and leaves the rest. A solo run has one hero and
 plays exactly as before.
