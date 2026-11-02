@@ -14,6 +14,9 @@ the version in the corner).
 - Hard mode in co-op: the host can turn it on once everyone in the room has it.
 - Co-op results, by trippy22: a page for each player's own kills, damage, weapons and caskets, with
   arrows (or the arrow keys) to flip between them, and the party's totals underneath.
+- Each weapon's damage during a run: press Tab, or click or tap the DPS under the minimap, to see
+  what each weapon is doing a second right now (the best first), its share, and its total. It stays
+  open or shut as you left it.
 
 ### Changed
 

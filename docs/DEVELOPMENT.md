@@ -409,12 +409,14 @@ src/game/
   client/   GameClient (run flow, camera, input), GameView (3D actors + 2D overlay),
             BossFightView (a phased boss's ground marks, bullets and entrance),
             GameAssets (what gets baked), GameStore (state for the React UI), SaveLock (one
-            tab saves at a time)
+            tab saves at a time), DamageMeter (each weapon's damage a second for the HUD's
+            damage panel)
     coop/     CoopLobby (the relay connection and the room), CoopRun (a run's lockstep, host or
               guest), protocol (the messages)
   render/   GameWebGLRenderer (the map viewer's renderer with the game's passes), CameraRig
   ui/       React screens and HUD, ChestModal (the casket opening), EventModal (a random event's
-            offer), ItemIcon, CoopScreen (the rooms, the lobby, the party in a run)
+            offer), ItemIcon, CoopScreen (the rooms, the lobby, the party in a run),
+            formatCompact (short numbers like 9.5K and 1.2B, for the damage panel)
   client/GameTouch.ts, ui/TouchControls.tsx, ui/Mobile.css   touch screens (see Touch screens)
 server/     coop-relay.mjs: co-op's rooms, and passes each run's frames between its players
 src/mapviewer/webgl/actor/   actor renderer: baked animation frames drawn anywhere in the world,

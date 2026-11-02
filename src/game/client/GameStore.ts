@@ -35,6 +35,10 @@ export type SlotView = {
     stats?: string[];
     // Weapons that evolve: the passive it takes, and what's done of it
     evolution?: { passive: string; maxed: boolean; hasPassive: boolean; ready: boolean };
+    // Weapons, for the damage panel: damage a second just now, and damage this
+    // run (since it became what it is, for one that's evolved)
+    dps?: number;
+    damage?: number;
     // The item's own rarity, for the slot's border
     rarityColor: string;
 };
@@ -133,6 +137,9 @@ export type HudView = {
     coins: number;
     // Damage a second just now, every source counted
     dps: number;
+    // For the damage panel (DamageMeter): what isn't a weapon's (items,
+    // power-ups, recoil), as each weapon's is on its slot
+    otherDps: number;
     maxWeapons: number;
     maxPassives: number;
     weapons: SlotView[];
@@ -365,6 +372,7 @@ export class GameStore {
                 menuSpin: true,
                 pauseOnBlur: true,
                 questTracker: true,
+                damagePanel: false,
                 autoAlch: false,
                 movePrediction: false,
             },

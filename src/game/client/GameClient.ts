@@ -60,6 +60,7 @@ import { ArenaGrid } from "../core/world/ArenaGrid";
 import { CameraRig } from "../render/CameraRig";
 import { GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer";
 import { installRecipe } from "../scaperune/squares";
+import { DamageMeter } from "./DamageMeter";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
 import {
     GameAssets,
@@ -342,6 +343,7 @@ export class GameClient implements GameFrameHandler {
     private cameraGround: number | undefined;
     private shownDps = 0;
     private shownDpsTick = 0;
+    private readonly damageMeter = new DamageMeter();
     // Each hero's look, as last baked
     private appearanceVersions: number[] = [];
     // The casket Auto alch last sent off (a co-op one takes a frame to come
@@ -385,6 +387,7 @@ export class GameClient implements GameFrameHandler {
         this.overlay = new Overlay(overlayCanvas);
         this.input = new GameInput(renderer.canvas);
         this.input.onPress = this.onKeyPress;
+        this.input.takesKey = (code) => code === "Tab" && this.isPlaying();
         this.input.onBlur = () => {
             this.accumulator = 0;
             // With auto-pause off the run carries on (though a hidden tab
@@ -769,6 +772,20 @@ export class GameClient implements GameFrameHandler {
         this.setDisplay({ questTracker: !this.display.questTracker });
     }
 
+    // In a run with nothing over it: Tab is the damage panel's then, and the
+    // browser's (moving between buttons) on every other screen
+    private isPlaying(): boolean {
+        return (
+            this.sim !== undefined &&
+            !this.sim.runOver &&
+            this.store.getSnapshot().overlay === "none"
+        );
+    }
+
+    toggleDamagePanel(): void {
+        this.setDisplay({ damagePanel: !this.display.damagePanel });
+    }
+
     toggleMovePrediction(): void {
         this.setDisplay({ movePrediction: !this.display.movePrediction });
         this.coopRun?.setPrediction(this.display.movePrediction);
@@ -1118,6 +1135,7 @@ export class GameClient implements GameFrameHandler {
         this.accumulator = 0;
         this.shownDps = 0;
         this.shownDpsTick = 0;
+        this.damageMeter.reset();
         this.appearanceVersions = [];
         this.decisionKey = "";
         this.autoAlchedUid = -1;
@@ -1496,6 +1514,10 @@ export class GameClient implements GameFrameHandler {
         }
         if (code === "KeyQ" && this.sim) {
             this.toggleQuestTracker();
+            return;
+        }
+        if (code === "Tab" && this.isPlaying()) {
+            this.toggleDamagePanel();
             return;
         }
         const sim = this.sim;
@@ -1990,6 +2012,8 @@ export class GameClient implements GameFrameHandler {
             this.shownDps = sim.dps;
             this.shownDpsTick = sim.tick;
         }
+        this.damageMeter.sample(sim.tick, sim.damageBySource);
+        const meter = this.damageMeter.read();
         const hud: HudView = {
             mapId: sim.map.id,
             round: sim.endless ? sim.round : undefined,
@@ -2006,6 +2030,7 @@ export class GameClient implements GameFrameHandler {
             kills: sim.kills,
             coins: sim.coins,
             dps: this.shownDps,
+            otherDps: meter.otherPerSecond,
             maxWeapons: sim.maxWeapons,
             maxPassives: sim.maxPassives,
             weapons: sim.weapons.map((w) => {
@@ -2021,6 +2046,8 @@ export class GameClient implements GameFrameHandler {
                     stats: weaponStats(w.def, level).map(formatWeaponStat),
                     evolution: getEvolutionView(sim, w),
                     rarityColor: RARITIES[w.def.rarity].color,
+                    dps: meter.perSecond[`weapon:${w.def.id}`] ?? 0,
+                    damage: meter.totals[`weapon:${w.def.id}`] ?? 0,
                 };
             }),
             passives: sim.passives.map((p) => {

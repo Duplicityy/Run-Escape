@@ -7,6 +7,9 @@ export type DisplaySettings = {
     pauseOnBlur: boolean;
     // The quest tracker on the HUD is open (Q, or its title, opens and shuts it)
     questTracker: boolean;
+    // The damage panel under the HUD's DPS is open (Tab, or the DPS, opens
+    // and shuts it)
+    damagePanel: boolean;
     // Caskets are high alched as they're opened, with no casket screen
     autoAlch: boolean;
     // Joining a co-op game, your own movement shows before the host confirms
@@ -26,6 +29,7 @@ function getDefaults(): DisplaySettings {
         menuSpin: !reducedMotion,
         pauseOnBlur: true,
         questTracker: true,
+        damagePanel: false,
         autoAlch: false,
         movePrediction: false,
     };
@@ -45,6 +49,9 @@ export function loadDisplaySettings(): DisplaySettings {
             }
             if (typeof data.questTracker === "boolean") {
                 settings.questTracker = data.questTracker;
+            }
+            if (typeof data.damagePanel === "boolean") {
+                settings.damagePanel = data.damagePanel;
             }
             if (typeof data.autoAlch === "boolean") {
                 settings.autoAlch = data.autoAlch;
