@@ -4,7 +4,8 @@
     "type": "module",
     "scripts": {
         "dev": "wrangler dev",
-        "deploy": "wrangler deploy"
+        "deploy": "wrangler deploy",
+        "check": "node check.mjs"
     },
     "devDependencies": {
         "wrangler": "^4.40.0"

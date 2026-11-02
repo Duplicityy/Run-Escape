@@ -154,6 +154,12 @@ Or build with `VITE_COOP_URL=wss://relay.example.com/coop npm run build` to poin
 else. `npm start` and `npm run preview` run a relay of their own at `/coop`
 (`npm run start:singleplayer`, or `MULTIPLAYER=off`, without).
 
+**On Cloudflare instead.** [server/cloudflare/](../server/cloudflare/README.md) is the same relay
+as a Cloudflare Worker with Durable Objects: a lobby for the rooms list and names, and each room its
+own object, started near its host, so a run's traffic doesn't cross the world to one server. There's
+no server to run, and it's at a `workers.dev` address with no domain needed. Its README has the
+setup, from `wrangler login` to the build, and what it costs. The game works with either relay.
+
 ## Desktop
 
 **Co-op on desktop.** The app answers every https request itself, so it only reaches a relay built
@@ -311,6 +317,7 @@ src/game/
             offer), ItemIcon, CoopScreen (the rooms, the lobby, the party in a run)
   client/GameTouch.ts, ui/TouchControls.tsx, ui/Mobile.css   touch screens (see Touch screens)
 server/     coop-relay.mjs: co-op's rooms, and passes each run's frames between its players
+  cloudflare/  the same relay on Cloudflare Durable Objects, each room near its host (README.md)
 src/mapviewer/webgl/actor/   actor renderer: baked animation frames drawn anywhere in the world,
                              any number of them, one multi-draw per pass
 src/mapviewer/worker/        RegionDataLoader (collision and heights for the whole arena in one
@@ -543,6 +550,13 @@ ready state and loadout) and forwards `up` messages from guests to the host and 
 from the host to everyone else. The host leaving a run ends it for everyone; in the lobby the
 room goes to the next player. The balance bot plays a party with `PARTY=4`, each player on their
 own, so it can't show teamwork.
+
+The Cloudflare relay (`server/cloudflare/`) speaks the same protocol, with one more message: it
+answers `create` and `join` with a `goto` (a room code and a one-time ticket), and `CoopLobby`
+then makes or joins the room on that room's own connection, at `coop/room/<code>`. What's said in
+a room goes over that connection (`ROOM_MESSAGES` in `CoopLobby.ts`); pings, the list and
+making or joining go to the lobby's. The Node relay never sends `goto`, so with it there's only
+the one connection. Change the protocol in both relays.
 
 The open rooms list comes a page at a time (8 rooms, the fullest first, then the ones waiting
 longest), worked out once after each change rather than for every request; the menu asks for its
