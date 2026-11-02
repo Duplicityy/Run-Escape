@@ -5,11 +5,6 @@ the version in the corner).
 
 ## Unreleased
 
-### Fixed
-
-- Varlamore on a phone: its bosses' animations took several times the memory of any other map's,
-  which could crash the game as the run loaded. They now take a third of it.
-
 ## 0.23.0 - 2026-11-02
 
 ### Added
@@ -65,6 +60,8 @@ the version in the corner).
 - Endless: a run no longer holds on to every boss it's had, so very long ones use less memory.
 - Co-op: waiting on the Multiplayer screen for a room to appear no longer drops the connection
   after 10 minutes.
+- Varlamore on a phone: its bosses' animations took several times the memory of any other map's,
+  which could crash the game as the run loaded. They now take a third of it.
 
 ## 0.22.1 - 2026-11-02
 
