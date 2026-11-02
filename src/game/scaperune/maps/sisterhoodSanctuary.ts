@@ -76,8 +76,8 @@ const DREAM_FLOWER = 37633;
 // Mostly the light tufts: the thick one is 336 triangles, and there are hundreds of them
 export const DEAD_GRASS = [37717, 37717, 37718, 37718, 37718, 37716];
 export const NIGHTMARE_FLOWERS = [37712, 37713, 37714, 37714, 37715, 37710];
-// The Sanctuary's floor: bones and pebbles (clip 0), and Morytania's rubble. Its cracked flags
-// (37800 to 37809) are left out: from the camera they read as loose chequered tiles.
+// The Sanctuary's floor: Morytania's bones and pebbles, and its own bone bits. Its flags
+// (37786 to 37809) are left out: from the camera they read as loose chequered tiles.
 export const CHAMBER_FLOOR = [
     37786, 37787, 37788, 37789, 37790, 37791, 37792, 37793, 12705, 12910, 12911,
 ];
@@ -158,6 +158,16 @@ const DEAD_RAIDERS: Solid[] = [
     [32735, 2, 1],
     [32741, 2, 1],
 ];
+// The dream's sleepers, the armoured figures that hang round her arena. In the cache they
+// stand on an upper level over the void; LocOverrides.ts lifts them off the ground here.
+const SLEEPERS: Solid[] = [
+    [37732, 1, 1],
+    [37733, 1, 1],
+    [37734, 1, 1],
+    [37735, 1, 1],
+    [37736, 1, 1],
+    [37737, 1, 1],
+];
 
 // Everything above that blocks, for a test to build the map without the cache
 export const SOLID_LOCS: Solid[] = [
@@ -190,6 +200,7 @@ export const SOLID_LOCS: Solid[] = [
     BIG_CHEST,
     CRATE,
     ...DEAD_RAIDERS,
+    ...SLEEPERS,
 ];
 // And what's walked through
 export const WALK_THROUGH = [
@@ -324,7 +335,7 @@ class Sanctuary {
     ): void {
         const reach = ARENA_MAX - ARENA_MIN;
         for (let placed = 0, tries = 0; placed < count && tries < count * 12; tries++) {
-            const along = Math.floor(this.rng() * (reach + 1)) - reach / 2;
+            const along = Math.floor(this.rng() * (reach + 1)) - Math.floor(reach / 2);
             const out = from + Math.floor(this.rng() * (to - from + 1));
             const [x, y] = side(along, out);
             if (put(x, y, Math.floor(this.rng() * 4))) {
@@ -579,8 +590,26 @@ function placeChamber(sanctuary: Sanctuary): void {
                 sanctuary.solid(STANDING_COFFIN, ...side(at, 9), side === WEST ? 1 : 3);
             }
         }
-        sanctuary.scatter(side, 3, 3, 7, (x, y, turn) =>
-            sanctuary.solid(pick(rng, DEAD_RAIDERS), x, y, turn, 1),
+        // The Theatre's dead, over the empty ground, each in its own blood
+        sanctuary.scatter(side, 10, 2, 8, (x, y, turn) => {
+            if (!sanctuary.solid(pick(rng, DEAD_RAIDERS), x, y, turn, 1)) {
+                return false;
+            }
+            for (const [dx, dy] of [
+                [-1, 0],
+                [2, 0],
+                [0, 1],
+                [1, -1],
+            ]) {
+                if (rng() < 0.7) {
+                    sanctuary.dress(pick(rng, BLOOD), LOC_FLOOR_DECORATION, x + dx, y + dy);
+                }
+            }
+            return true;
+        });
+        // The dream's sleepers, hanging in the dark over the chamber
+        sanctuary.scatter(side, 4, 3, 8, (x, y, turn) =>
+            sanctuary.solid(pick(rng, SLEEPERS), x, y, turn),
         );
         sanctuary.scatter(side, 3, 2, 3, (x, y, turn) => sanctuary.solid(CHAINS, x, y, turn));
         sanctuary.scatter(side, 4, 2, 4, (x, y, turn) => sanctuary.solid(BROKEN_CHAIN, x, y, turn));

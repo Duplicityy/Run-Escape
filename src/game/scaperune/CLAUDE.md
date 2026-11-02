@@ -1420,8 +1420,8 @@ and a ring of scenery would strand them outside: a sealed arena needs nothing wa
 - `seasonal: true` keeps it out of the campaign chain and opens it from the start, and `fight` (one boss fight,
   open once another map's beaten) does the same. Without one of them, adding to `MAPS` trips the unlock chain,
   difficulty order and unique enemies tests.
-- A recipe only writes a loc's id, type and rotation. To scale a model, give a loc nothing else uses a new model
-  and size in `src/rs/config/loctype/LocOverrides.ts`. Check the world index first.
+- A recipe only writes a loc's id, type and rotation. To scale a model, or lift one off the ground so it floats, give a loc nothing else uses a new model
+  and size, or a `height`, in `src/rs/config/loctype/LocOverrides.ts`. Check the world index first.
 - `bossArena` on the `MapDef` gives a phased boss a square of its own. The player's brought to its middle and
   can't leave while the boss is up. Without it, her totems are in the corners of the whole map.
 - Blending brown soil into blue ground goes through green, so give a soil underlay low saturation. Thin overlay

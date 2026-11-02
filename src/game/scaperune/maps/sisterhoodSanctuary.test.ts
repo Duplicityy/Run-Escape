@@ -111,6 +111,13 @@ describe("the Sisterhood Sanctuary", () => {
         // The barriers, north and south, and the pilasters at the gates and the corners
         expect(count(37730)).toBe(2);
         expect(count(37783) + count(37784)).toBeGreaterThanOrEqual(8 + 16);
+        // The Theatre's dead over the chamber's ground, and the dream's sleepers over it
+        expect(count(32735) + count(32741)).toBeGreaterThanOrEqual(20);
+        const sleepers = [37732, 37733, 37734, 37735, 37736, 37737].reduce(
+            (sum, id) => sum + count(id),
+            0,
+        );
+        expect(sleepers).toBeGreaterThanOrEqual(12);
         // The Pool of Nightmares and Phosani's coffin beyond the north gate, the scythe
         // statues and the stairs beyond the south one
         expect(count(37825)).toBe(1);
