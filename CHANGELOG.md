@@ -14,15 +14,12 @@ the version in the corner).
 - Hard mode in co-op: the host can turn it on once everyone in the room has it.
 - Co-op results, by trippy22: a page for each player's own kills, damage, weapons and caskets, with
   arrows (or the arrow keys) to flip between them, and the party's totals underneath.
-- Co-op servers, by trippy22: player and room counts for monitoring (Prometheus), on the server
-  itself only, with `MULTIPLAYER_METRICS=off` to turn them off.
 
 ### Changed
 
 - Co-op's server holds up better against anyone trying to flood it or take every room.
 - Co-op bosses come as a pair, or one for each player on hard mode, by trippy22. Between them
   they have one boss's hitpoints and loot, so a party fights more bosses rather than bigger ones.
-- Desktop: the game can only reach its own files and the co-op server, nothing else.
 - The Bow of Faerdhinen counts as a crystal bow for the Crystal armour set's bonus.
 
 ### Fixed
