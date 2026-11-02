@@ -15,6 +15,7 @@ import { isUtf8 } from "node:buffer";
 import { createHash, randomInt } from "node:crypto";
 import { createServer } from "node:http";
 import { isIP } from "node:net";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 import { clientAddress, proxyMode, viaProxy, watchCloudflareRanges } from "./client-ip.mjs";
@@ -31,6 +32,24 @@ export function isMultiplayerOn(env = process.env, argv = process.argv) {
         (env.npm_lifecycle_event ?? "").endsWith(":singleplayer") ||
         argv.includes("--no-multiplayer")
     );
+}
+
+// Aggregate counts on a separate loopback listener, on by default. Nothing is kept on disk.
+export function isMetricsOn(env = process.env) {
+    return ["true", "on", "1"].includes((env.MULTIPLAYER_METRICS ?? "true").trim().toLowerCase());
+}
+
+export function metricsPortSetting(env = process.env) {
+    const value = env.MULTIPLAYER_METRICS_PORT;
+    if (value === undefined || value.trim() === "") {
+        return 8788;
+    }
+    const port = Number(value);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        console.warn(`MULTIPLAYER_METRICS_PORT "${value}" isn't a valid port: taking 8788.`);
+        return 8788;
+    }
+    return port;
 }
 
 // Whether players can join rooms on maps they haven't unlocked (and so open
@@ -588,12 +607,28 @@ export function createRelay(limits = {}) {
         proxy = proxyMode(),
         // Rooms take players without their map (see isAnyMapOn)
         anyMap = isAnyMapOn(),
+        metrics = isMetricsOn(),
+        metricsPort = metricsPortSetting(),
     } = limits;
     // Behind Cloudflare, its addresses, fetched from its API
     const stopCloudflare = proxy === "cloudflare" ? watchCloudflareRanges() : () => {};
     let warnedProxy = false;
     const rooms = new Map();
     const clients = new Set();
+    // Only connection, room creation and run start events update these.
+    // Live counts come from the rooms when asked, never from game traffic.
+    const counters = metrics
+        ? {
+              startedAt: performance.now(),
+              connections: 0,
+              roomsCreated: 0,
+              runsStarted: 0,
+              peakPlayers: 0,
+              peakRooms: 0,
+          }
+        : undefined;
+    let metricsServer;
+    let stopMetrics = () => {};
     // Every connected player's name, so no two have the same
     const playerNames = new Set();
     let nextId = 1;
@@ -608,6 +643,124 @@ export function createRelay(limits = {}) {
     // The open rooms as the list shows them, worked out again only after a
     // room changes (everyone browsing asks every few seconds)
     let openRooms;
+
+    function metricsText() {
+        let lobbyPlayers = 0;
+        let playingPlayers = 0;
+        let runningRooms = 0;
+        let publicRooms = 0;
+        for (const room of rooms.values()) {
+            if (room.started) {
+                runningRooms++;
+                playingPlayers += room.members.length;
+            } else {
+                lobbyPlayers += room.members.length;
+            }
+            if (room.open) {
+                publicRooms++;
+            }
+        }
+        // Prometheus text 0.0.4: fixed names and help, numeric samples only.
+        // Each series has HELP and TYPE lines and ends with a newline.
+        const metric = (name, help, value, type = "gauge") =>
+            `# HELP ${name} ${help}\n# TYPE ${name} ${type}\n${name} ${value}\n`;
+        return [
+            metric(
+                "coop_uptime_seconds",
+                "Seconds since this relay started.",
+                Math.floor((performance.now() - counters.startedAt) / 1000),
+            ),
+            metric("coop_players_connected", "Currently connected player sockets.", clients.size),
+            metric(
+                "coop_players_browsing",
+                "Connected players not in a room.",
+                clients.size - lobbyPlayers - playingPlayers,
+            ),
+            metric("coop_players_lobby", "Players waiting in room lobbies.", lobbyPlayers),
+            metric("coop_players_in_run", "Players in started runs.", playingPlayers),
+            metric("coop_rooms", "Current rooms, including started runs.", rooms.size),
+            metric("coop_rooms_lobby", "Rooms waiting to start a run.", rooms.size - runningRooms),
+            metric("coop_rooms_in_run", "Rooms with a started run.", runningRooms),
+            metric(
+                "coop_rooms_public",
+                "Public rooms, including full and started rooms.",
+                publicRooms,
+            ),
+            metric(
+                "coop_rooms_private",
+                "Invite-only rooms, including started rooms.",
+                rooms.size - publicRooms,
+            ),
+            metric(
+                "coop_connections_total",
+                "Accepted connections since this relay started.",
+                counters.connections,
+                "counter",
+            ),
+            metric(
+                "coop_rooms_created_total",
+                "Rooms created since this relay started.",
+                counters.roomsCreated,
+                "counter",
+            ),
+            metric(
+                "coop_runs_started_total",
+                "Runs started since this relay started.",
+                counters.runsStarted,
+                "counter",
+            ),
+            metric(
+                "coop_players_connected_peak",
+                "Most simultaneous player sockets since startup.",
+                counters.peakPlayers,
+            ),
+            metric("coop_rooms_peak", "Most simultaneous rooms since startup.", counters.peakRooms),
+            metric(
+                "coop_connections_limit",
+                "Maximum simultaneous connections allowed.",
+                maxConnections,
+            ),
+            metric("coop_rooms_limit", "Maximum simultaneous rooms allowed.", maxRooms),
+        ].join("");
+    }
+
+    function startMetrics(path) {
+        if (!counters || metricsServer) {
+            return metricsServer;
+        }
+        // A local reverse proxy can make public requests look like loopback
+        // connections. Keep metrics off the public listener altogether.
+        metricsServer = createServer((req, res) => {
+            res.setHeader("Cache-Control", "no-store");
+            if (requestPath(req) !== `${path}/metrics`) {
+                res.writeHead(404);
+                res.end();
+            } else if (req.method !== "GET" && req.method !== "HEAD") {
+                res.writeHead(405, { Allow: "GET, HEAD" });
+                res.end();
+            } else {
+                res.writeHead(200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
+                res.end(req.method === "HEAD" ? undefined : metricsText());
+            }
+        });
+        const abort = new AbortController();
+        stopMetrics = () => {
+            abort.abort();
+            metricsServer.closeAllConnections();
+        };
+        metricsServer.on("error", (error) => {
+            console.error(
+                `Multiplayer metrics unavailable on 127.0.0.1:${metricsPort}: ${error.message}`,
+            );
+        });
+        metricsServer.listen({ host: "127.0.0.1", port: metricsPort, signal: abort.signal }, () => {
+            console.log(
+                `Multiplayer metrics at http://127.0.0.1:${metricsServer.address().port}${path}/metrics (local only)`,
+            );
+        });
+        metricsServer.unref();
+        return metricsServer;
+    }
 
     function newCode() {
         for (;;) {
@@ -969,6 +1122,10 @@ export function createRelay(limits = {}) {
                     hostBytesAt: Date.now(),
                 };
                 rooms.set(created.code, created);
+                if (counters) {
+                    counters.roomsCreated++;
+                    counters.peakRooms = Math.max(counters.peakRooms, rooms.size);
+                }
                 client.room = created;
                 roomChanged(created);
                 return;
@@ -1129,6 +1286,9 @@ export function createRelay(limits = {}) {
                         0x1,
                         Buffer.from(JSON.stringify({ t: "start", game: message.game }), "utf8"),
                     );
+                    if (counters) {
+                        counters.runsStarted++;
+                    }
                     for (const member of room.members) {
                         member.ready = false;
                         member.connection.write(start);
@@ -1239,6 +1399,10 @@ export function createRelay(limits = {}) {
             bytesPerSecond,
         );
         clients.add(client);
+        if (counters) {
+            counters.connections++;
+            counters.peakPlayers = Math.max(counters.peakPlayers, clients.size);
+        }
         playerNames.add(client.name);
         // anyMap: the game shows rooms on maps the player hasn't got as locked
         // unless it's on
@@ -1292,13 +1456,24 @@ export function createRelay(limits = {}) {
                     refuse(socket, "404 Not Found");
                 }
             });
+            const localMetrics = startMetrics(path);
+            server.once("close", stopMetrics);
+            return localMetrics;
         },
         handleUpgrade,
         // Answers a plain GET of path with what's going on, for the game to
         // see co-op's there (from another site too, with VITE_COOP_URL).
         // False for any other request, to go to whatever else serves.
         handleRequest(req, res, path = RELAY_PATH) {
-            if (requestPath(req) !== path || (req.method !== "GET" && req.method !== "HEAD")) {
+            const requestedPath = requestPath(req);
+            if (requestedPath === `${path}/metrics`) {
+                // Never expose metrics through the public server or its proxy.
+                res.setHeader("Cache-Control", "no-store");
+                res.writeHead(404);
+                res.end();
+                return true;
+            }
+            if (requestedPath !== path || (req.method !== "GET" && req.method !== "HEAD")) {
                 return false;
             }
             res.writeHead(200, {
@@ -1307,14 +1482,7 @@ export function createRelay(limits = {}) {
                 "Access-Control-Allow-Origin": "*",
                 "Cross-Origin-Resource-Policy": "cross-origin",
             });
-            res.end(
-                JSON.stringify({
-                    coop: true,
-                    players: clients.size,
-                    rooms: rooms.size,
-                    full: rooms.size >= maxRooms,
-                }),
-            );
+            res.end(JSON.stringify({ coop: true }));
             return true;
         },
         // Closes idle rooms as if it were this time (for the tests)
@@ -1323,6 +1491,7 @@ export function createRelay(limits = {}) {
             clearInterval(pinger);
             clearInterval(sweeper);
             stopCloudflare();
+            stopMetrics();
             for (const client of clients) {
                 client.connection.close(1001);
             }

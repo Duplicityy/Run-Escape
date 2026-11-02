@@ -172,6 +172,82 @@ Or build with `VITE_COOP_URL=wss://relay.example.com/coop npm run build` to poin
 else. `npm start` and `npm run preview` run a relay of their own at `/coop`
 (`npm run start:singleplayer`, or `MULTIPLAYER=off`, without).
 
+#### Optional multiplayer metrics
+
+Multiplayer metrics are on by default, on a separate listener bound only to `127.0.0.1`, port 8788.
+The endpoint serves Prometheus text format 0.0.4 with `HELP` and `TYPE` metadata. Read it from the
+server itself:
+
+```sh
+npm run serve
+curl http://127.0.0.1:8788/coop/metrics
+```
+
+In PowerShell:
+
+```powershell
+npm run serve
+# From another terminal:
+(Invoke-WebRequest http://127.0.0.1:8788/coop/metrics).Content
+```
+
+Set `MULTIPLAYER_METRICS=false` and restart to disable collection and the metrics listener
+(`$env:MULTIPLAYER_METRICS = "false"` in PowerShell). Unset it or set it to `true` to enable metrics
+again; `on` and `1` also enable it. The same setting works with `npm start`,
+`npm run preview` and the standalone relay. If the standalone relay uses `MULTIPLAYER_PATH`,
+the metrics path is that path plus `/metrics`. Multiplayer must be running for metrics to be available.
+Set `MULTIPLAYER_METRICS_PORT` to another port (1–65535) if needed, for example when running several
+relays on one machine. If that port is occupied, the server logs an error and co-op keeps running;
+metrics are never moved to the public listener. The metrics listener closes with the relay.
+
+The metrics are:
+
+- Player gauges: `coop_players_connected`, split into `coop_players_browsing` (no room),
+  `coop_players_lobby` and `coop_players_in_run`. These count WebSocket connections, so multiple tabs
+  count separately; single-player games aren't counted.
+- Room gauges: `coop_rooms`, split into `coop_rooms_lobby` and `coop_rooms_in_run`, and separately
+  into `coop_rooms_public` and `coop_rooms_private`. Public rooms include full and started rooms.
+- Counters since startup: `coop_connections_total` (accepted connections), `coop_rooms_created_total`
+  and `coop_runs_started_total`.
+- Peak gauges since startup: `coop_players_connected_peak` and `coop_rooms_peak`.
+- Uptime gauge: `coop_uptime_seconds`.
+- Configured limit gauges: `coop_connections_limit` and `coop_rooms_limit`.
+
+For example, part of the response looks like this:
+
+```text
+# HELP coop_players_connected Currently connected player sockets.
+# TYPE coop_players_connected gauge
+coop_players_connected 4
+```
+
+For Prometheus running on the same machine (and in the same network namespace if using containers),
+add this job to its `scrape_configs`:
+
+```yaml
+scrape_configs:
+  - job_name: run_escape
+    scrape_interval: 15s
+    metrics_path: /coop/metrics
+    static_configs:
+      - targets: ["127.0.0.1:8788"]
+```
+
+Adjust the target port or metrics path if you changed the settings above. Samples have no labels
+or explicit timestamps; Prometheus supplies scrape timestamps.
+
+Counts are in memory and reset on restart. Each GET reads the existing rooms once; totals and peaks
+update only on connections, room creation and run starts. There is no background sampling, extra
+package, disk write or per-message tracking. Responses aren't cached. Refresh the URL for a live snapshot;
+if using a monitor, polling every 15–30 seconds is plenty for these counts.
+
+The public game/relay port always returns 404 for `/coop/metrics`, even for requests coming through
+a local reverse proxy. Keep port 8788 out of public proxy routes and container port publishing;
+run the request on the server (inside its container if applicable), or use an SSH tunnel. `HOST`
+only controls the game/relay listener and cannot make metrics listen publicly.
+Metrics contain aggregate numbers only, with no player names, addresses or room codes. The public
+`/coop` availability response contains only `{"coop":true}`, so it doesn't expose aggregate counts.
+
 ## Desktop
 
 **Co-op on desktop.** The app answers every https request itself, so it only reaches a relay built

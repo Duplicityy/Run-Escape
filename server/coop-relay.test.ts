@@ -1,3 +1,4 @@
+import { once } from "node:events";
 import { Server, createServer } from "node:http";
 import { AddressInfo, Socket, connect as connectTcp } from "node:net";
 
@@ -6,8 +7,10 @@ import {
     addressKey,
     createRelay,
     isAnyMapOn,
+    isMetricsOn,
     isMultiplayerOn,
     maxRoomsSetting,
+    metricsPortSetting,
     networkKey,
 } from "./coop-relay.mjs";
 
@@ -121,6 +124,29 @@ class RawClient {
 }
 
 describe("multiplayer toggle", () => {
+    it("uses a configurable port for local metrics", () => {
+        expect(metricsPortSetting({})).toBe(8788);
+        expect(metricsPortSetting({ MULTIPLAYER_METRICS_PORT: "9001" })).toBe(9001);
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+            for (const value of ["0", "-1", "65536", "1.5", "bad"]) {
+                expect(metricsPortSetting({ MULTIPLAYER_METRICS_PORT: value })).toBe(8788);
+            }
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
+    it("enables local metrics by default and allows disabling them", () => {
+        expect(isMetricsOn({})).toBe(true);
+        for (const value of ["false", "off", "0", "no", "", "anything"]) {
+            expect(isMetricsOn({ MULTIPLAYER_METRICS: value })).toBe(false);
+        }
+        for (const value of ["true", "on", "1", " TRUE "]) {
+            expect(isMetricsOn({ MULTIPLAYER_METRICS: value })).toBe(true);
+        }
+    });
+
     it("is on unless it's turned off", () => {
         expect(isMultiplayerOn({}, [])).toBe(true);
         expect(isMultiplayerOn({ MULTIPLAYER: "on" }, [])).toBe(true);
@@ -150,6 +176,7 @@ describe("multiplayer toggle", () => {
 
 describe("co-op relay", () => {
     let server: Server;
+    let metricsServer: Server | undefined;
     let relay: ReturnType<typeof createRelay>;
     let url: string;
     const clients: TestClient[] = [];
@@ -166,19 +193,29 @@ describe("co-op relay", () => {
         createsPerMinute: 1000,
         roomUpdateMs: 5,
         anyMap: true,
+        metrics: false,
+        metricsPort: 0,
     };
 
-    async function start(limits: Parameters<typeof createRelay>[0] = LOOSE): Promise<void> {
+    async function start(
+        limits: Parameters<typeof createRelay>[0] = LOOSE,
+        path = RELAY_PATH,
+    ): Promise<void> {
         relay = createRelay(limits);
         server = createServer((req, res) => {
-            if (!relay.handleRequest(req, res)) {
+            if (!relay.handleRequest(req, res, path)) {
                 res.writeHead(404);
                 res.end();
             }
         });
-        relay.attach(server, RELAY_PATH, { closeOthers: true });
+        metricsServer = relay.attach(server, path, { closeOthers: true });
+        const metricsReady =
+            metricsServer && !metricsServer.listening
+                ? once(metricsServer, "listening")
+                : undefined;
         await new Promise<void>((resolve) => server.listen(0, resolve));
-        url = `ws://localhost:${(server.address() as AddressInfo).port}${RELAY_PATH}`;
+        await metricsReady;
+        url = `ws://localhost:${(server.address() as AddressInfo).port}${path}`;
     }
 
     async function stop(): Promise<void> {
@@ -190,9 +227,12 @@ describe("co-op relay", () => {
     }
 
     // Starts again with these limits
-    async function restart(limits: Parameters<typeof createRelay>[0]): Promise<void> {
+    async function restart(
+        limits: Parameters<typeof createRelay>[0],
+        path = RELAY_PATH,
+    ): Promise<void> {
         await stop();
-        await start({ ...LOOSE, ...limits });
+        await start({ ...LOOSE, ...limits }, path);
     }
 
     beforeEach(() => start());
@@ -407,8 +447,295 @@ describe("co-op relay", () => {
         await party(1);
         const response = await fetch(url.replace("ws:", "http:"));
         expect(response.headers.get("access-control-allow-origin")).toBe("*");
-        expect(await response.json()).toEqual({ coop: true, players: 2, rooms: 1, full: false });
+        expect(await response.json()).toEqual({ coop: true });
         expect((await fetch(url.replace("ws:", "http:") + "/nope")).status).toBe(404);
+    });
+
+    describe("optional metrics", () => {
+        const publicMetricsUrl = () => url.replace("ws:", "http:") + "/metrics";
+        const metricsUrl = () =>
+            `http://127.0.0.1:${(metricsServer!.address() as AddressInfo).port}${new URL(url).pathname}/metrics`;
+        const parseMetrics = (text: string): Record<string, number> => {
+            const values: Record<string, number> = {};
+            for (const line of text.trimEnd().split("\n")) {
+                if (line.startsWith("#")) {
+                    continue;
+                }
+                const sample = /^(coop_[a-z_]+) (\d+)$/.exec(line);
+                expect(sample, `invalid metric sample: ${line}`).not.toBeNull();
+                const [, name, value] = sample!;
+                expect(values).not.toHaveProperty(name);
+                values[name] = Number(value);
+            }
+            return values;
+        };
+        const snapshot = async () => parseMetrics(await (await fetch(metricsUrl())).text());
+
+        it("uses the environment toggle and keeps disabled metrics unavailable", async () => {
+            vi.stubEnv("MULTIPLAYER_METRICS", "false");
+            try {
+                await restart({ metrics: undefined });
+                expect(metricsServer).toBeUndefined();
+                expect((await fetch(publicMetricsUrl())).status).toBe(404);
+                vi.stubEnv("MULTIPLAYER_METRICS", undefined);
+                await restart({ metrics: undefined });
+                expect((await fetch(metricsUrl())).status).toBe(200);
+                vi.stubEnv("MULTIPLAYER_METRICS", "true");
+                await restart({ metrics: undefined });
+                expect((await fetch(metricsUrl())).status).toBe(200);
+                const previousUrl = metricsUrl();
+                await restart({ metrics: false });
+                expect(metricsServer).toBeUndefined();
+                expect((await fetch(publicMetricsUrl())).status).toBe(404);
+                await expect(fetch(previousUrl)).rejects.toThrow();
+            } finally {
+                vi.unstubAllEnvs();
+            }
+        });
+
+        it("binds only to loopback and never serves metrics through the public listener", async () => {
+            await restart({ metrics: true, proxy: "local" });
+            expect((metricsServer!.address() as AddressInfo).address).toBe("127.0.0.1");
+            expect((metricsServer!.address() as AddressInfo).port).not.toBe(
+                (server.address() as AddressInfo).port,
+            );
+            for (const headers of [
+                {},
+                { "x-forwarded-for": "127.0.0.1" },
+                { "x-forwarded-for": "203.0.113.1" },
+                { "cf-connecting-ip": "127.0.0.1" },
+                { forwarded: "for=127.0.0.1" },
+            ]) {
+                const response = await fetch(publicMetricsUrl(), { headers });
+                expect(response.status).toBe(404);
+                expect(await response.text()).toBe("");
+            }
+            expect((await fetch(publicMetricsUrl(), { method: "HEAD" })).status).toBe(404);
+            const status = await fetch(url.replace("ws:", "http:"));
+            expect(await status.json()).toEqual({ coop: true });
+            expect((await fetch(metricsUrl())).status).toBe(200);
+        });
+
+        it("closes the metrics listener when the public server closes", async () => {
+            await restart({ metrics: true });
+            const localUrl = metricsUrl();
+            const closed = once(metricsServer!, "close");
+            await new Promise((resolve) => server.close(resolve));
+            await closed;
+            expect(metricsServer!.listening).toBe(false);
+            await expect(fetch(localUrl)).rejects.toThrow();
+        });
+
+        it("serves Prometheus text, supports HEAD, and follows a custom relay path", async () => {
+            await restart({ metrics: true });
+            const response = await fetch(metricsUrl() + "?refresh=1");
+            expect(response.status).toBe(200);
+            expect(response.headers.get("content-type")).toBe(
+                "text/plain; version=0.0.4; charset=utf-8",
+            );
+            expect(response.headers.get("cache-control")).toBe("no-store");
+            const body = await response.text();
+            const values = parseMetrics(body);
+            expect(values).toEqual({
+                coop_uptime_seconds: expect.any(Number),
+                coop_players_connected: 0,
+                coop_players_browsing: 0,
+                coop_players_lobby: 0,
+                coop_players_in_run: 0,
+                coop_rooms: 0,
+                coop_rooms_lobby: 0,
+                coop_rooms_in_run: 0,
+                coop_rooms_public: 0,
+                coop_rooms_private: 0,
+                coop_connections_total: 0,
+                coop_rooms_created_total: 0,
+                coop_runs_started_total: 0,
+                coop_players_connected_peak: 0,
+                coop_rooms_peak: 0,
+                coop_connections_limit: 800,
+                coop_rooms_limit: 500,
+            });
+            expect(body.endsWith("\n")).toBe(true);
+            expect(body).not.toContain("\r");
+            const lines = body.trimEnd().split("\n");
+            expect(lines).toHaveLength(51);
+            for (const name of Object.keys(values)) {
+                const type = [
+                    "coop_connections_total",
+                    "coop_rooms_created_total",
+                    "coop_runs_started_total",
+                ].includes(name)
+                    ? "counter"
+                    : "gauge";
+                const sampleLine = lines.indexOf(`${name} ${values[name]}`);
+                expect(lines[sampleLine - 1]).toBe(`# TYPE ${name} ${type}`);
+                expect(lines[sampleLine - 2]).toMatch(new RegExp(`^# HELP ${name} .+$`));
+            }
+            const head = await fetch(metricsUrl(), { method: "HEAD" });
+            expect(head.status).toBe(200);
+            expect(head.headers.get("content-type")).toBe(response.headers.get("content-type"));
+            expect(await head.text()).toBe("");
+            const post = await fetch(metricsUrl(), { method: "POST" });
+            expect(post.status).toBe(405);
+            expect(post.headers.get("allow")).toBe("GET, HEAD");
+
+            await restart({ metrics: true }, "/game/coop");
+            expect((await fetch(metricsUrl())).status).toBe(200);
+            expect((await fetch(publicMetricsUrl())).status).toBe(404);
+            const wrongPath = metricsUrl().replace("/game/coop/metrics", "/coop/metrics");
+            expect((await fetch(wrongPath)).status).toBe(404);
+        });
+
+        it("tracks rooms and players through runs, leaving, disbanding and disconnecting", async () => {
+            await restart({ metrics: true });
+            const open = await party(1, true);
+            const privateRoom = await party(0);
+            await connect();
+            expect(await snapshot()).toMatchObject({
+                coop_players_connected: 4,
+                coop_players_browsing: 1,
+                coop_players_lobby: 3,
+                coop_players_in_run: 0,
+                coop_rooms: 2,
+                coop_rooms_lobby: 2,
+                coop_rooms_in_run: 0,
+                coop_rooms_public: 1,
+                coop_rooms_private: 1,
+                coop_connections_total: 4,
+                coop_rooms_created_total: 2,
+                coop_runs_started_total: 0,
+                coop_players_connected_peak: 4,
+                coop_rooms_peak: 2,
+            });
+
+            open.host.send({ t: "start", game: {} });
+            await open.guests[0].next("start");
+            expect(await snapshot()).toMatchObject({
+                coop_players_connected: 4,
+                coop_players_browsing: 1,
+                coop_players_lobby: 1,
+                coop_players_in_run: 2,
+                coop_rooms: 2,
+                coop_rooms_lobby: 1,
+                coop_rooms_in_run: 1,
+                coop_rooms_public: 1,
+                coop_rooms_private: 1,
+                coop_runs_started_total: 1,
+            });
+            // A repeated start and the game's traffic aren't new runs.
+            open.host.send({ t: "start", game: {} });
+            open.host.send({ t: "down", d: { n: 1 } });
+            await open.guests[0].next("down");
+            open.host.send({ t: "end" });
+            await open.host.roomWhere((r) => r.started);
+            await open.host.roomWhere((r) => !r.started);
+            expect(await snapshot()).toMatchObject({
+                coop_players_lobby: 3,
+                coop_players_in_run: 0,
+                coop_rooms_lobby: 2,
+                coop_rooms_in_run: 0,
+                coop_runs_started_total: 1,
+            });
+
+            open.host.send({ t: "settings", open: false });
+            await open.host.roomWhere((r) => !r.open);
+            open.guests[0].send({ t: "leave" });
+            await open.guests[0].next("gone");
+            expect(await snapshot()).toMatchObject({
+                coop_players_connected: 4,
+                coop_players_browsing: 2,
+                coop_players_lobby: 2,
+                coop_players_in_run: 0,
+                coop_rooms_public: 0,
+                coop_rooms_private: 2,
+            });
+            privateRoom.host.send({ t: "disband" });
+            await privateRoom.host.next("gone");
+            open.host.socket.close();
+            await expect.poll(async () => (await snapshot()).coop_players_connected).toBe(3);
+            expect(await snapshot()).toMatchObject({
+                coop_players_connected: 3,
+                coop_players_browsing: 3,
+                coop_players_lobby: 0,
+                coop_players_in_run: 0,
+                coop_rooms: 0,
+                coop_rooms_lobby: 0,
+                coop_rooms_in_run: 0,
+                coop_rooms_public: 0,
+                coop_rooms_private: 0,
+                coop_connections_total: 4,
+                coop_rooms_created_total: 2,
+                coop_runs_started_total: 1,
+                coop_players_connected_peak: 4,
+                coop_rooms_peak: 2,
+            });
+            // A fresh relay starts its counters over.
+            await restart({ metrics: true });
+            expect(await snapshot()).toMatchObject({
+                coop_connections_total: 0,
+                coop_rooms_created_total: 0,
+                coop_runs_started_total: 0,
+                coop_players_connected_peak: 0,
+                coop_rooms_peak: 0,
+            });
+        });
+
+        it("counts cleanup when a host goes mid-run or rooms expire", async () => {
+            await restart({ metrics: true, idleMs: 1 });
+            const { host, guests } = await party(1);
+            host.send({ t: "start", game: {} });
+            await guests[0].next("start");
+            host.socket.close();
+            await guests[0].next("gone");
+            expect(await snapshot()).toMatchObject({
+                coop_players_connected: 1,
+                coop_players_browsing: 1,
+                coop_players_lobby: 0,
+                coop_players_in_run: 0,
+                coop_rooms: 0,
+                coop_rooms_in_run: 0,
+            });
+            const lobby = await party(1, true);
+            relay.sweep(Date.now() + 1000);
+            await lobby.host.next("gone");
+            expect(await snapshot()).toMatchObject({
+                coop_players_connected: 3,
+                coop_players_browsing: 3,
+                coop_players_lobby: 0,
+                coop_players_in_run: 0,
+                coop_rooms: 0,
+                coop_rooms_public: 0,
+                coop_rooms_private: 0,
+                coop_connections_total: 4,
+                coop_rooms_created_total: 2,
+                coop_runs_started_total: 1,
+                coop_players_connected_peak: 3,
+                coop_rooms_peak: 1,
+            });
+        });
+
+        it("counts accepted connections and rooms, excluding refused attempts", async () => {
+            await restart({ metrics: true, maxConnections: 2, maxRooms: 1 });
+            await party(0);
+            const browser = await connect();
+            browser.send({ t: "create", me: {} });
+            await browser.next("error");
+            const refused = new WebSocket(url);
+            await new Promise((resolve) => refused.addEventListener("error", resolve));
+            expect(await snapshot()).toMatchObject({
+                coop_players_connected: 2,
+                coop_players_browsing: 1,
+                coop_players_lobby: 1,
+                coop_players_in_run: 0,
+                coop_connections_total: 2,
+                coop_rooms_created_total: 1,
+                coop_runs_started_total: 0,
+                coop_players_connected_peak: 2,
+                coop_rooms_peak: 1,
+                coop_connections_limit: 2,
+                coop_rooms_limit: 1,
+            });
+        });
     });
 
     it("tells you when every room's taken", async () => {

@@ -10,6 +10,7 @@
 //                                          # (or MULTIPLAYER_ANY_MAP=on; see coop-relay.mjs)
 //   ... -- --max-rooms=1000                # rooms at once, 500 unless it's set
 //                                          # (or MULTIPLAYER_MAX_ROOMS=1000)
+//   MULTIPLAYER_METRICS=false              # disable local Prometheus metrics (on by default)
 //
 // Without a slim cache in the build it serves the full one from caches/, like
 // `vite preview` does.

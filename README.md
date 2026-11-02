@@ -112,6 +112,9 @@ examples. `npm run serve` serves the build with those headers from one Node proc
 packages, co-op's relay included (`npm run serve:singleplayer` leaves it out). The game only offers
 Multiplayer where a relay answers, so a plain static host serves it as a single-player game; see
 [Co-op relay](docs/DEVELOPMENT.md#co-op-relay).
+Lightweight Prometheus player and room metrics are on by default, accessible locally at
+`http://127.0.0.1:8788/coop/metrics`
+(`MULTIPLAYER_METRICS=false` disables them; [metrics setup](docs/DEVELOPMENT.md#optional-multiplayer-metrics)).
 
 ## Desktop
 
