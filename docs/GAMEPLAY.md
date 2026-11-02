@@ -302,8 +302,10 @@ version and how to run it.
       afflicted, zombies, skeletons and ghouls, shades and ghosts, the Ankou, mummies and feral
       vampyres.
     - **Phosani's Nightmare** (a boss fight, open once Hallowed Night's beaten): nothing but her.
-      The run's one fight on the Inquisitor's Field, a cavern under Slepe where the Sisterhood's
-      hunters fell. There are no waves, no picks and no items: you play the Inquisitor with the
+      The run's one fight in her dream, as the real one is: a square of her dark floor ringed with
+      posts and dark spikes, a gate north and south closed by its barrier, inside the Sisterhood Sanctuary's
+      chamber under Slepe, with the Pool of Nightmares and Phosani's coffin beyond the north gate.
+      There are no waves, no picks and no items: you play the Inquisitor with the
       Armadyl crossbow at its third level and nothing more, start in the middle of the field, and
       she rises at once, to The Bane of Ashihama. Each of her totems' blasts heals you. It can't be endless; it has a hard mode
       once it's beaten.

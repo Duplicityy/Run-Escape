@@ -2,7 +2,7 @@ import { getCharacter } from "../content/characters";
 import { getEnemy } from "../content/enemies";
 import { getMap } from "../content/maps";
 import { emptyStats } from "../content/types";
-import { INQUISITORS_BOSS_ARENA } from "../scaperune/maps/inquisitorsField";
+import { SANCTUARY_BOSS_ARENA } from "../scaperune/maps/sisterhoodSanctuary";
 import { Sim, TICKS_PER_SECOND } from "./Sim";
 import { Enemy } from "./entities";
 import { makeGrid } from "./world/testGrid";
@@ -65,7 +65,7 @@ function startFight(sim: Sim): Enemy {
 }
 
 afterEach(() => {
-    getMap("phosani").bossArena = INQUISITORS_BOSS_ARENA;
+    getMap("phosani").bossArena = SANCTUARY_BOSS_ARENA;
 });
 
 describe("the map", () => {
@@ -78,8 +78,8 @@ describe("the map", () => {
         });
         // The player starts where her entrance puts them: the middle of her square
         expect(map.spawn).toEqual({
-            x: INQUISITORS_BOSS_ARENA.baseX + 32,
-            y: INQUISITORS_BOSS_ARENA.baseY + 32,
+            x: SANCTUARY_BOSS_ARENA.baseX + 32,
+            y: SANCTUARY_BOSS_ARENA.baseY + 32,
         });
         expect(map.waves).toEqual([]);
         expect(map.events).toEqual([

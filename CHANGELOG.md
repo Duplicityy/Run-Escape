@@ -8,7 +8,9 @@ the version in the corner).
 ### Added
 
 - Phosani's Nightmare: a boss fight on its own, open once Hallowed Night's beaten. The run is one
-  fight on the Inquisitor's Field, a cavern under Slepe: no waves, no picks and no items. She
+  fight in her dream, as the real one is: her dark floor ringed with posts and spikes, with a barred
+  gate north and south, inside the Sisterhood Sanctuary's chamber under Slepe, among its candles,
+  statues, coffins and the dead. No waves, no picks and no items. She
   rises as you arrive, with everything The Nightmare has, quicker and with more at once, her
   charge from the start, a sweep of petals to step against, and in her last phase a claw on the
   tile you stand on. She charges three times over, her claws come at random round you three times

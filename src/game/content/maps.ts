@@ -1,6 +1,6 @@
 import { SCAPERUNE_DEV_MAPS } from "../scaperune/maps/devMaps";
 import { HALLOWED_BOSS_ARENA, HALLOWED_NIGHT } from "../scaperune/maps/hallowedNight";
-import { INQUISITORS_BOSS_ARENA, INQUISITORS_FIELD } from "../scaperune/maps/inquisitorsField";
+import { SANCTUARY_BOSS_ARENA, SISTERHOOD_SANCTUARY } from "../scaperune/maps/sisterhoodSanctuary";
 import { MapRecipe, getRecipeArena, getRecipeWorldTile } from "../scaperune/recipe";
 import { getEnemy } from "./enemies";
 import { FUN_MAPS } from "./fun/maps";
@@ -330,18 +330,18 @@ export const MAPS: MapDef[] = [
         id: "phosani",
         name: "Phosani's Nightmare",
         description:
-            "The Nightmare's hard mode, on its own: the Inquisitor's Field beneath Slepe, where " +
-            "the Sisterhood's hunters made their last stand. No waves, no picks and no items: " +
+            "The Nightmare's hard mode, on its own: her dream, ringed with its spikes, in the " +
+            "Sisterhood Sanctuary beneath Slepe. No waves, no picks and no items: " +
             "the Armadyl crossbow, and her. She rises as you arrive, quicker than before and " +
             "with more at once, and every hit of hers is shown before it lands. Her totems' " +
             "blasts are the only rest, and each heals you.",
         // The Inquisitor's great helm
         iconObjId: 24419,
-        arena: getRecipeArena(INQUISITORS_FIELD),
-        // The middle of the field, where her entrance puts the player anyway
+        arena: getRecipeArena(SISTERHOOD_SANCTUARY),
+        // The middle of the arena, where her entrance puts the player anyway
         spawn: {
-            x: INQUISITORS_BOSS_ARENA.baseX + INQUISITORS_BOSS_ARENA.size / 2,
-            y: INQUISITORS_BOSS_ARENA.baseY + INQUISITORS_BOSS_ARENA.size / 2,
+            x: SANCTUARY_BOSS_ARENA.baseX + SANCTUARY_BOSS_ARENA.size / 2,
+            y: SANCTUARY_BOSS_ARENA.baseY + SANCTUARY_BOSS_ARENA.size / 2,
         },
         // Her hitpoints come from the event: a run here has the Inquisitor's
         // crossbow and nothing more, not fifteen minutes of levels. Her hits are
@@ -353,7 +353,7 @@ export const MAPS: MapDef[] = [
         events: [{ at: 0, kind: "finalBoss", enemyId: "phosanis_nightmare", hp: 6000 }],
         finalBossWarning: "",
         victoryText: "Phosani's Nightmare is laid to rest!",
-        bossArena: INQUISITORS_BOSS_ARENA,
+        bossArena: SANCTUARY_BOSS_ARENA,
         scaperune: true,
         fight: { requires: "halloween", character: "inquisitor", weaponLevel: 3 },
         brightness: 0.75,

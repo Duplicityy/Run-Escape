@@ -20,7 +20,7 @@ import {
 import { BossAttackDef, EnemyDef } from "./types";
 
 // Phosani's Nightmare: The Nightmare's hard mode, fought on its own on the
-// Inquisitor's Field (maps.ts, scaperune/maps/inquisitorsField.ts). There's no
+// Sisterhood Sanctuary (maps.ts, scaperune/maps/sisterhoodSanctuary.ts). There's no
 // run before her: she rises as you arrive, and there are no picks and no
 // items, only the Inquisitor's mace (the map's fight settings). Everything's
 // hers from nightmare.ts, quicker, and with more of it at once, plus a sweep
