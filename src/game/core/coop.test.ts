@@ -86,6 +86,25 @@ describe("co-op", () => {
         expect(createParty(["warrior", "wizard"], 1, 1).player).not.toBe(a.player);
     });
 
+    it("keeps each player's own runes going round when they share the weapon", () => {
+        const sim = createParty(["seer", "seer"]);
+        const [a, b] = sim.heroes;
+        const runes = (index: number) => sim.projectiles.filter((p) => p.orbit && p.hero === index);
+        // Cast on the same tick
+        a.weapons[0].cooldown = b.weapons[0].cooldown = 0;
+        sim.step();
+        expect(runes(0).length).toBeGreaterThan(0);
+        expect(runes(1).length).toBeGreaterThan(0);
+        // Used again by one of them, only that one's are replaced
+        const before = runes(0);
+        const others = runes(1);
+        b.weapons[0].cooldown = 1e9;
+        a.weapons[0].cooldown = 0;
+        sim.step();
+        expect(runes(0).some((p) => before.includes(p))).toBe(false);
+        expect(runes(1)).toEqual(others);
+    });
+
     it("has enemies go for whoever's nearest", () => {
         const sim = createParty(["warrior", "wizard"]);
         const [a, b] = sim.heroes;

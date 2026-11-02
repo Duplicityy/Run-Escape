@@ -56,6 +56,13 @@ export function isAvailable(
     return !def.unlock || !unlocked || unlocked.has(def.id);
 }
 
+// "10 minutes", or "6:06" when rounding would promise an unlock too soon
+function describeSurvival(seconds: number): string {
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+    return rest === 0 ? `${minutes} minutes` : `${minutes}:${String(rest).padStart(2, "0")}`;
+}
+
 // "Beat Barrows", "Kill Count Draynor in Lumbridge" (or just "Kill Count
 // Draynor" where it's clear which map it's on)
 export function describeUnlockTask(task: UnlockTask, withMap = true): string {
@@ -67,7 +74,7 @@ export function describeUnlockTask(task: UnlockTask, withMap = true): string {
         case "killBoss":
             return `Kill ${getEnemy(task.enemyId).name}${where}`;
         case "survive":
-            return `Survive ${Math.round(task.seconds / 60)} minutes${where}`;
+            return `Survive ${describeSurvival(task.seconds)}${where}`;
     }
 }
 

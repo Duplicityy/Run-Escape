@@ -6031,10 +6031,12 @@ export class Sim {
     }
 
     // Puts the weapon's items circling the player, evenly spaced, in place of
-    // any still going round from last time
+    // any of theirs still going round from last time
     private fireOrbit(def: WeaponDef, level: WeaponDef["levels"][number]): void {
         const player = this.player;
-        this.projectiles = this.projectiles.filter((p) => !(p.orbit && p.weapon === def));
+        this.projectiles = this.projectiles.filter(
+            (p) => !(p.orbit && p.weapon === def && p.hero === this.hero.index),
+        );
         const amount = level.amount + this.stats.amount;
         const radius = level.area * (1 + this.stats.area);
         // Speed is how fast they go round, in tiles a second
