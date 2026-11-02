@@ -205,6 +205,10 @@ const FOOD_HEAL = 10;
 // After being hit the player can't be hit again for a moment, so a crowd hurts
 // more than one enemy but can't melt them instantly
 const HIT_INVULNERABLE_TICKS = 12;
+// A scattered ground attack's spots keep this many tiles between their edges,
+// trying this many places for each
+const SCATTER_GAP = 0.4;
+const SCATTER_ATTEMPTS = 40;
 // Co-op: a teammate stands over a downed player this long to bring them back,
 // and nothing can hurt the revived for this long after (see content/coop.ts)
 const REVIVE_TICKS = REVIVE_SECONDS * TICKS_PER_SECOND;
@@ -4137,16 +4141,28 @@ export class Sim {
                     }
                     break;
                 }
-                case "scatter":
+                case "scatter": {
+                    // Clear of each other, so each is its own thing to step round;
+                    // a spot with no room left goes wherever it falls
+                    const placed: { x: number; y: number }[] = [];
+                    const apart = ground.radius * 2 + SCATTER_GAP;
                     for (let i = 0; i < spots.count; i++) {
-                        const angle = this.rng.range(0, Math.PI * 2);
-                        const distance = this.rng.range(1, spots.spread);
-                        add(
-                            player.x + fm.cos(angle) * distance,
-                            player.y + fm.sin(angle) * distance,
-                        );
+                        let x = player.x;
+                        let y = player.y;
+                        for (let attempt = 0; attempt < SCATTER_ATTEMPTS; attempt++) {
+                            const angle = this.rng.range(0, Math.PI * 2);
+                            const distance = this.rng.range(1, spots.spread);
+                            x = player.x + fm.cos(angle) * distance;
+                            y = player.y + fm.sin(angle) * distance;
+                            if (placed.every((p) => fm.hypot(p.x - x, p.y - y) >= apart)) {
+                                break;
+                            }
+                        }
+                        placed.push({ x, y });
+                        add(x, y);
                     }
                     break;
+                }
             }
         }
     }

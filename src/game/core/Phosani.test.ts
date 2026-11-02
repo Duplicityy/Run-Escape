@@ -74,7 +74,7 @@ describe("the map", () => {
         expect(map.fight).toEqual({
             requires: "halloween",
             character: "inquisitor",
-            weaponLevel: 5,
+            weaponLevel: 3,
         });
         // The player starts where her entrance puts them: the middle of her square
         expect(map.spawn).toEqual({
@@ -83,7 +83,7 @@ describe("the map", () => {
         });
         expect(map.waves).toEqual([]);
         expect(map.events).toEqual([
-            { at: 0, kind: "finalBoss", enemyId: "phosanis_nightmare", hp: 4200 },
+            { at: 0, kind: "finalBoss", enemyId: "phosanis_nightmare", hp: 6000 },
         ]);
     });
 
@@ -96,7 +96,7 @@ describe("the map", () => {
         expect(sim.passives).toEqual([]);
     });
 
-    test("everyone plays the Inquisitor there, with their crossbow at its best", () => {
+    test("everyone plays the Inquisitor there, with their crossbow at the map's level", () => {
         const map = getMap("phosani");
         expect(map.fight?.character).toBe("inquisitor");
         const inquisitor = getCharacter("inquisitor");
@@ -108,10 +108,9 @@ describe("the map", () => {
             enemyId: "phosanis_nightmare",
         });
         const sim = createSim();
-        expect(sim.weapons.map((w) => [w.def.id, w.level])).toEqual([["armadyl_crossbow", 5]]);
-        expect(sim.weapons[0].def.levels.length).toBe(5);
+        expect(sim.weapons.map((w) => [w.def.id, w.level])).toEqual([["armadyl_crossbow", 3]]);
         expect(sim.stats.moveSpeed).toBeGreaterThan(0);
-        expect(sim.stats.bossMight).toBeGreaterThan(0);
+        expect(sim.stats.maxHp).toBeGreaterThan(0);
     });
 
     test("she rises as the run begins, and nothing else ever comes", () => {
@@ -121,7 +120,7 @@ describe("the map", () => {
         run(sim, phosani().boss!.intro!.seconds + 0.2);
         const boss = sim.enemies.find((e) => e.finalBoss)!;
         expect(boss.def.id).toBe("phosanis_nightmare");
-        expect(boss.maxHp).toBe(4200);
+        expect(boss.maxHp).toBe(6000);
         expect(boss.damageScale).toBe(getMap("phosani").difficulty.damage);
         boss.attackCooldown = 1e9;
         run(sim, 30);
@@ -155,7 +154,7 @@ describe("the map", () => {
         expect(sim.state).toBe("playing");
         for (const hero of sim.heroes) {
             expect(hero.pendingLevelUps).toBe(0);
-            expect(hero.weapons.map((w) => w.level)).toEqual([5]);
+            expect(hero.weapons.map((w) => w.level)).toEqual([3]);
         }
     });
 });
@@ -295,7 +294,7 @@ describe("her fight", () => {
         const sim = createSim();
         const boss = startFight(sim);
         const attack = phosani().boss!.attacks.find((a) => a.name === "Grasping Claws (random)")!;
-        expect(attack.ground!.spots).toEqual([{ shape: "scatter", count: 10, spread: 7 }]);
+        expect(attack.ground!.spots).toEqual([{ shape: "scatter", count: 16, spread: 11 }]);
         boss.bossState!.chain = { attack, left: attack.chain!.times };
         sim["startBossAttack"](boss, attack);
         let rounds = 0;
@@ -312,9 +311,17 @@ describe("her fight", () => {
         const player = sim.player;
         sim["startBossAttack"](boss, attack);
         const spots = sim.hazards.filter((h) => h.attack === attack);
-        expect(spots.length).toBe(10);
+        expect(spots.length).toBe(16);
         for (const spot of spots) {
-            expect(Math.hypot(spot.x - player.x, spot.y - player.y)).toBeLessThanOrEqual(7.1);
+            expect(Math.hypot(spot.x - player.x, spot.y - player.y)).toBeLessThanOrEqual(11.1);
+            // None on another: each is its own thing to step round
+            for (const other of spots) {
+                if (other !== spot) {
+                    expect(Math.hypot(spot.x - other.x, spot.y - other.y)).toBeGreaterThan(
+                        spot.radius * 2,
+                    );
+                }
+            }
         }
         let clear = 0;
         for (let i = 0; i < 16; i++) {

@@ -350,13 +350,15 @@ export const MAPS: MapDef[] = [
         difficulty: { hp: 1, damage: 0.9 },
         hard: { hp: 1.3, damage: 1.3 },
         waves: [],
-        events: [{ at: 0, kind: "finalBoss", enemyId: "phosanis_nightmare", hp: 4200 }],
+        events: [{ at: 0, kind: "finalBoss", enemyId: "phosanis_nightmare", hp: 6000 }],
         finalBossWarning: "",
         victoryText: "Phosani's Nightmare is laid to rest!",
         bossArena: INQUISITORS_BOSS_ARENA,
         scaperune: true,
-        fight: { requires: "halloween", character: "inquisitor", weaponLevel: 5 },
+        fight: { requires: "halloween", character: "inquisitor", weaponLevel: 3 },
         brightness: 0.75,
+        // Her own track; the recording goes in src/media/music (see GameClient)
+        music: "The Bane of Ashihama",
     },
 ];
 

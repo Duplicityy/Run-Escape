@@ -368,7 +368,7 @@ export type BulletPatternDef = {
 export type GroundPatternDef = {
     // under: on the boss; player: on the player; ring: around the boss, ring
     // tiles out; grid: a lattice around the player, spacing tiles apart;
-    // scatter: at random within spread tiles of the player
+    // scatter: at random within spread tiles of the player, none on another
     spots: (
         | { shape: "under" | "player" }
         | { shape: "ring"; count: number; distance: number }
@@ -988,8 +988,9 @@ export type MapDef = {
     // The countdown before the final boss, and the victory title
     finalBossWarning: string;
     victoryText: string;
-    // The OSRS music track that loops quietly through a run here, by name
-    // (the client has a recording of each, see GameClient's MUSIC)
+    // The OSRS music track that loops quietly through a run here, by name:
+    // its recording goes in src/media/music, named as GameClient's musicFor
+    // says, and until it's there the map plays nothing
     music?: string;
     // Fun maps: endless from the start and outside the unlock chain (see
     // FunMapDef). Campaign maps leave it unset.

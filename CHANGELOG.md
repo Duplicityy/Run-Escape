@@ -14,9 +14,10 @@ the version in the corner).
   tile you stand on. She charges three times over, her claws come at random round you three times
   running, for her flowers she takes the middle and keeps up her petals and claws, and she has a
   ring with one way through, rings to weave between, a barrage that follows you and orbs that hunt
-  you. Her warnings on the ground are half see-through. Her totems' blasts heal you. It has a hard mode once it's beaten, a quest,
+  you. Her warnings on the ground are faint. Her totems' blasts heal you. She fights to The Bane
+  of Ashihama. It has a hard mode once it's beaten, a quest,
   and it can't be endless. Everyone plays the Inquisitor there, an adventurer made for the fight:
-  the Armadyl crossbow at its best, quicker on their feet, more hitpoints and harder on bosses.
+  the Armadyl crossbow, quicker on their feet and with more hitpoints.
   Beating her brings them to every other map, and the adventurer choice is blurred out while the
   map's picked.
 

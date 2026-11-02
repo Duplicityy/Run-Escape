@@ -3,7 +3,6 @@ import { MapViewer } from "../../mapviewer/MapViewer";
 import { ActorRenderer } from "../../mapviewer/webgl/actor/ActorRenderer";
 import { RegionData, RegionDataInput } from "../../mapviewer/worker/RegionData";
 import { RegionDataLoader } from "../../mapviewer/worker/RegionDataLoader";
-import massacre from "../../media/music/massacre.ogg";
 import { CollisionFlag } from "../../rs/pathfinder/flag/CollisionFlag";
 import { isCoarsePointer } from "../../util/DeviceUtil";
 import { CHARACTERS, getCharacter } from "../content/characters";
@@ -119,10 +118,18 @@ const DPS_HOLD_TICKS = TICKS_PER_SECOND / 2;
 const TITLE_MAP = MAPS[0];
 
 // Recordings of the OSRS music tracks maps play (MapDef.music), from the OSRS
-// Wiki
-const MUSIC: Record<string, string> = {
-    Massacre: massacre,
-};
+// Wiki, in src/media/music: a track's file is its name in lower case with
+// underscores (massacre.ogg, the_bane_of_ashihama.ogg). A track with no
+// recording there plays nothing, so a map can name one before it's in.
+const MUSIC_FILES = import.meta.glob("../../media/music/*.ogg", {
+    eager: true,
+    import: "default",
+}) as Record<string, string>;
+
+function musicFor(track: string): string | undefined {
+    const file = track.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+    return MUSIC_FILES[`../../media/music/${file}.ogg`];
+}
 
 // Title screen camera: lower and slowly circling the character (RS angle units
 // per tick), or settling in front of them when it's not to spin
@@ -1124,7 +1131,7 @@ export class GameClient implements GameFrameHandler {
         this.cameraGround = undefined;
         this.renderer.setBrightness(map.brightness ?? 1);
         this.minimap.setMap(map);
-        const music = map.music && MUSIC[map.music];
+        const music = map.music && musicFor(map.music);
         if (music) {
             this.audio.playMusic(music);
         } else {

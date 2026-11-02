@@ -456,6 +456,10 @@ A boss's fight is in its `BossDef` and `BossAttackDef`, with no boss named in `S
   leaves a way through a ring that turns with it, and `track` re-aims a spread's every volley.
 - `Sim.bossArena` is the square all this goes by: `MapDef.bossArena`, or the whole map. Nothing's
   sized by hand, so she fights on any square.
+- A map's `music` names an OSRS track, and its recording (from the OSRS Wiki) goes in
+  `src/media/music` as the name in lower case with underscores: `the_bane_of_ashihama.ogg` for
+  Phosani's Nightmare, which isn't in the repository yet, so the map is silent until it is.
+  `GameClient` finds the files with a glob, so a missing one breaks nothing.
 - `MapDef.fight` makes a map one fight (Phosani's Nightmare, `content/phosani.ts`): no waves, its
   final boss event at 0, and the adventurer's starting weapon at `weaponLevel` from the first tick,
   with nothing in the fight dropping experience. Phosani's is built from her data alone: her sweep

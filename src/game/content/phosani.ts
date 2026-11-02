@@ -173,7 +173,7 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
         seq: CLAWS_SEQ,
         chain: { times: 2, windup: 0.9 },
         ground: {
-            spots: [{ shape: "scatter", count: 10, spread: 7 }],
+            spots: [{ shape: "scatter", count: 16, spread: 11 }],
             radius: 1.3,
             spotAnim: 1759,
             middleSpotAnim: 1761,
@@ -193,7 +193,7 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
         weight: 4,
         seq: SURGE_SEQ,
         radius: 2.8,
-        speed: 30,
+        speed: 45,
         chain: { times: 2, windup: 0.8 },
         message: "She's going to charge, again and again! Keep out of the lanes!",
     },

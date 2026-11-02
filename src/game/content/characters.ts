@@ -546,8 +546,7 @@ export const CHARACTERS: CharacterDef[] = [
         name: "Inquisitor",
         description:
             "Made for Phosani's Nightmare, and everyone plays them there: starts with the " +
-            "Armadyl crossbow, moves 15% faster, has 20% more hitpoints and hits bosses 25% " +
-            "harder.",
+            "Armadyl crossbow, moves 15% faster and has 20% more hitpoints.",
         style: "ranged",
         startingWeapon: "armadyl_crossbow",
         // The Inquisitor's armour, her own drop, with Barrows gloves and climbing boots
@@ -558,9 +557,9 @@ export const CHARACTERS: CharacterDef[] = [
             [EquipSlot.HANDS]: FUN_ITEMS.barrowsGloves,
             [EquipSlot.FEET]: FUN_ITEMS.climbingBoots,
         },
-        // A fight that's all dodging and one boss: feet, hitpoints to learn her
-        // on, and damage where it counts
-        bonus: { moveSpeed: 0.15, maxHp: 0.2, bossMight: 0.25 },
+        // A fight that's all dodging and one boss: feet, and hitpoints to learn
+        // her on. The damage is the crossbow's alone, at the level the map says.
+        bonus: { moveSpeed: 0.15, maxHp: 0.2 },
         unlock: { kind: "killBoss", mapId: "phosani", enemyId: "phosanis_nightmare" },
     },
 ];

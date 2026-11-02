@@ -34,9 +34,9 @@ const FUSE_FLASH = 0.7;
 const PARASITE_HEIGHT = 2;
 const DARK = 0.78;
 const FADE_TICKS = 40;
-// Warnings on the ground (her marks, lanes, cones and aim) are drawn half see
-// through, so what's under them still shows
-const WARNING_ALPHA = 0.5;
+// Warnings on the ground (her marks, lanes, cones and aim) are drawn nearly see
+// through, so what's under them shows and they're there to be read, not stared at
+const WARNING_ALPHA = 0.1;
 const LANE_CHEVRON_GAP = 4;
 // Pixels, at a scale of 1
 const TOTEM_ARROW = 14;
