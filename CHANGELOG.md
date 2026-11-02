@@ -63,8 +63,6 @@ the version in the corner).
 
 ### Fixed
 
-- Cache setup now reports stalled downloads and archive errors instead of waiting indefinitely.
-- Loading a downloaded cache no longer requests unused index files omitted by the archive.
 - Exporting your save from the home screen on an iPhone or iPad opens the share menu, instead of a
   tiny sheet you had to scroll inside.
 

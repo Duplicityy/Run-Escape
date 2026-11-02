@@ -69,17 +69,10 @@ and open http://localhost:5173.
 
 `npm run download-caches` fetches the game's cache (see [Cache version](#cache-version)) from the
 [OpenRS2 Archive](https://archive.openrs2.org/) into `caches/`; you can also copy a `caches/` folder
-over from another checkout. The first load copies the 227 MB cache into
-the browser's cache storage, so later loads are quick.
-
-For a manual download, use the cache in the table above and extract the contents of the
-archive's `cache/` directory into `caches/osrs-241_2026-09-30/`, alongside `info.json` and
-`keys.json`. Keep `caches/caches.json` from the downloader. Unused index files, including
-`main_file_cache.idx16` and `main_file_cache.idx23`, are intentionally absent in this archive;
-the loader skips their empty metadata entries. Do not create placeholder files.
-Run `npx tsx scripts/cache/validate-decoders.ts` from this directory to check the cache.
-No texture export or slim-cache generation is needed for local development. Keep the game pane
-visible during loading: a hidden editor browser can suspend rendering at zero percent.
+over from another checkout. The download gives up when nothing has arrived for a minute; on a
+connection that drops out for longer, set `CACHE_DOWNLOAD_TIMEOUT_MS` to a longer wait in
+milliseconds. The first load copies the 227 MB cache into the browser's cache storage, so later
+loads are quick.
 
 ### Controls
 
