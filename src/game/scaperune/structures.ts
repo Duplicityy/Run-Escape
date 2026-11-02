@@ -1,7 +1,7 @@
+import { TileRect } from "./collision";
 import {
     Build,
     LOC_NORMAL,
-    LOC_WALL,
     WALL_EAST,
     WALL_NORTH,
     WALL_SOUTH,
@@ -12,13 +12,14 @@ import {
 } from "./mapBuild";
 import { distanceTo } from "./noise";
 import { Point } from "./paths";
+import { RESERVE_PIECE } from "./reservations";
 import { RoadNetwork } from "./roads";
-import { PlacedBuilding, fitsBuilding, getPlotHeight, markOffLimits, pinPlot } from "./settlements";
+import { fitsBuilding, getPlotHeight, markOffLimits, pinPlot, putFence } from "./settlements";
 
 // What a place is known for: one big thing, or a few that belong together, standing on a plot
 // as a building does, because a big loc on a slope shows its underside. Then what only makes
-// sense on a map that's otherwise done: wrecks and drowned towns in the water, town walls and
-// stones along the roads. Biomes say which pieces they have (biomes.ts).
+// sense on a map that's otherwise done: wrecks and drowned towns in the water, and stones along
+// the roads. Biomes say which pieces they have (biomes.ts).
 
 // [loc id, tiles across, tiles deep]
 export type PieceLoc = [number, number, number];
@@ -31,7 +32,15 @@ export type SetPiece =
     // A loose crowd in a circle
     | { kind: "grove"; locs: PieceLoc[]; count: number; radius: number }
     // Rows, as graves are
-    | { kind: "rows"; locs: PieceLoc[]; across: number; deep: number; gap: number }
+    | {
+          kind: "rows";
+          locs: PieceLoc[];
+          across: number;
+          deep: number;
+          gap: number;
+          // What grows round the outside
+          edge?: PieceLoc[];
+      }
     // In the water, close in to the shore
     | { kind: "wreck"; locs: PieceLoc[] }
     // Out in the water: the top of something tall, and what's left of a town round it
@@ -39,7 +48,25 @@ export type SetPiece =
     // A hedge maze, cells a side, with something to find in the middle
     | { kind: "maze"; hedges: number[]; cells: number; middle: PieceLoc }
     // The biome's wall round a yard, tiles a side, with a gate each way and things inside
-    | { kind: "fort"; size: number; inside: PieceLoc[]; count: number };
+    | { kind: "fort"; size: number; inside: PieceLoc[]; count: number }
+    // Normal things put together, at places on a plot of its own: what a real landmark is
+    | RecipePiece;
+
+// [loc id, tiles across, tiles deep, x and y on the plot, rotation]
+type RecipeLoc = [number, number, number, number, number, number?];
+
+type RecipePiece = {
+    kind: "recipe";
+    sizeX: number;
+    sizeY: number;
+    locs: RecipeLoc[];
+    // Paved, as a town's square is
+    paved?: boolean;
+    // A fence round it, open at a gate in its south side
+    fenced?: boolean;
+    // What grows on the plot, on all that's left of it, in rows
+    crops?: number[];
+};
 
 function single(...locs: PieceLoc[]): SetPiece {
     return { kind: "single", locs };
@@ -59,6 +86,12 @@ const GRAVES: PieceLoc[] = [
     [405, 1, 1],
     [401, 1, 1],
     [400, 1, 1],
+];
+// Real graves stand among bushes: they're 87 to 115 times likelier together than by chance
+const BUSHES: PieceLoc[] = [
+    [1124, 1, 1],
+    [1124, 1, 1],
+    [1393, 1, 1],
 ];
 const MUSHROOM_TREES: PieceLoc[] = [
     [43129, 4, 4],
@@ -91,6 +124,67 @@ export const SET_PIECES: Record<string, SetPiece> = {
         radius: 5,
         middle: [11100, 2, 2],
     },
+    market: {
+        kind: "recipe",
+        sizeX: 15,
+        sizeY: 11,
+        paved: true,
+        locs: [
+            [884, 2, 2, 7, 5],
+            [634, 2, 2, 2, 2],
+            [11729, 2, 2, 11, 2, 2],
+            [11730, 2, 2, 2, 7],
+            [634, 2, 2, 11, 7, 2],
+            [362, 1, 1, 4, 2],
+            [357, 1, 1, 10, 3],
+            [365, 1, 1, 4, 8],
+            [358, 1, 1, 10, 7],
+        ],
+    },
+    farm: {
+        kind: "recipe",
+        sizeX: 16,
+        sizeY: 11,
+        fenced: true,
+        crops: [15506, 15507, 15508],
+        locs: [
+            [300, 2, 2, 2, 7],
+            [304, 1, 1, 5, 8],
+            [304, 1, 1, 5, 7],
+        ],
+    },
+    orchard: {
+        kind: "recipe",
+        sizeX: 15,
+        sizeY: 11,
+        fenced: true,
+        locs: [
+            [1276, 2, 2, 2, 2],
+            [1278, 2, 2, 7, 2],
+            [1276, 2, 2, 12, 2],
+            [1278, 2, 2, 2, 7],
+            [1276, 2, 2, 7, 7],
+            [1278, 2, 2, 12, 7],
+            [300, 2, 2, 5, 5],
+        ],
+    },
+    shrine: {
+        kind: "recipe",
+        sizeX: 9,
+        sizeY: 9,
+        paved: true,
+        locs: [
+            [7002, 2, 2, 3, 4],
+            [34780, 1, 1, 1, 1],
+            [34781, 1, 1, 7, 1],
+            [34781, 1, 1, 1, 7],
+            [34780, 1, 1, 7, 7],
+            [1188, 1, 1, 2, 3],
+            [1187, 1, 1, 6, 3],
+            [1188, 1, 1, 2, 6],
+            [1187, 1, 1, 6, 6],
+        ],
+    },
     great_skeleton: single([59324, 7, 3]),
     beached_wreck: single([49423, 6, 4], [59372, 6, 3]),
     fairy_ring: {
@@ -104,7 +198,16 @@ export const SET_PIECES: Record<string, SetPiece> = {
         radius: 4,
         middle: [29495, 1, 1],
     },
-    great_boulder: single([60444, 6, 4]),
+    great_boulder: {
+        kind: "grove",
+        locs: [
+            [11433, 2, 2],
+            [11434, 2, 2],
+            [11435, 2, 2],
+        ],
+        count: 5,
+        radius: 4,
+    },
     giant_mushroom: single([43131, 9, 9]),
     mushroom_grove: { kind: "grove", locs: MUSHROOM_TREES, count: 4, radius: 7 },
     toadstools: {
@@ -140,7 +243,7 @@ export const SET_PIECES: Record<string, SetPiece> = {
         count: 4,
         radius: 7,
     },
-    graveyard: { kind: "rows", locs: GRAVES, across: 6, deep: 4, gap: 2 },
+    graveyard: { kind: "rows", locs: GRAVES, across: 6, deep: 4, gap: 2, edge: BUSHES },
     blisterwood: single([37989, 6, 4]),
     redwoods: {
         kind: "grove",
@@ -218,41 +321,42 @@ const PIECES_A_SQUARE = 1.5;
 
 const TRIES_A_PIECE = 40;
 
+// How near a town a site counts as taken, tries at each site, and how far off it a piece can be
+const SITE_TAKEN = 30;
+
+const SITE_TRIES = 8;
+
+const SITE_JITTER = 16;
+
 // Houses in a drowned town
 const DROWNED_HOUSES = 3;
 
 // A wreck's this near the shore, in tiles from its edge
 const WRECK_REACH = 4;
 
-// Of a town's walls, tiles either side of a gate where there's no road through
-const GATE_HALF = 2;
-
 // The same for a fort's
 const FORT_GATE = 2;
 
-// Tiles from a town's outermost building to its wall
-const TOWN_WALL_GAP = 4;
-
-// A town needs this many buildings to have a wall
-const MIN_WALLED_BUILDINGS = 2;
-
-// Half the width of a town's square, how far off its middle to look for one, in steps of 2 tiles,
-// and how much the ground can rise over it
-const TOWN_SQUARE = 4;
-
-const TOWN_SQUARE_SEARCH = 6;
-
-const TOWN_SQUARE_RISE = 14;
-
-// In a town's square, and the cobbles on its streets
+// In a walled town's square
 export const FOUNTAIN = 879;
 
-export const PAVING = 12;
+// Varrock's street stone, a plain warm grey. Texture's for small patches.
+export const PAVING = 171;
+
+// Small things tried round a big one, and the share of a rectangle's edge that gets one
+const ROUND_A_PIECE = 14;
+
+// Tiles of ground a single big thing keeps round it for them
+const ROUND_TILES = 3;
+
+const EDGE_SHARE = 0.7;
 
 // Tiles along a road between stones, and off its edge
 const MARKER_SPACING = 16;
 
 const MARKER_OFFSET = 2;
+
+const ROADSIDE_MARKERS = 0.4;
 
 // Tiles across a maze's corridors, with a tile of hedge between them. Crowds have to fit.
 const MAZE_CELL = 3;
@@ -271,6 +375,13 @@ export function getPieceLocs(piece: SetPiece): PieceLoc[] {
             return [piece.middle, ...piece.hedges.map((id): PieceLoc => [id, 1, 1])];
         case "fort":
             return piece.inside;
+        case "recipe":
+            return [
+                ...piece.locs.map(([id, across, deep]): PieceLoc => [id, across, deep]),
+                ...(piece.crops ?? []).map((id): PieceLoc => [id, 1, 1]),
+            ];
+        case "rows":
+            return [...piece.locs, ...(piece.edge ?? [])];
         default:
             return piece.locs;
     }
@@ -279,10 +390,14 @@ export function getPieceLocs(piece: SetPiece): PieceLoc[] {
 // The rectangle a piece needs
 function getPieceSize(piece: SetPiece): { sizeX: number; sizeY: number } {
     if (piece.kind === "single" || piece.kind === "wreck") {
+        const round = piece.kind === "single" ? ROUND_TILES * 2 : 0;
         return {
-            sizeX: Math.max(...piece.locs.map((loc) => loc[1])),
-            sizeY: Math.max(...piece.locs.map((loc) => loc[2])),
+            sizeX: Math.max(...piece.locs.map((loc) => loc[1])) + round,
+            sizeY: Math.max(...piece.locs.map((loc) => loc[2])) + round,
         };
+    }
+    if (piece.kind === "recipe") {
+        return { sizeX: piece.sizeX, sizeY: piece.sizeY };
     }
     if (piece.kind === "rows") {
         return { sizeX: piece.across * piece.gap, sizeY: piece.deep * piece.gap };
@@ -419,13 +534,14 @@ function placeFort(
     piece: Extract<SetPiece, { kind: "fort" }>,
     x: number,
     y: number,
+    owner: TileRect,
 ): void {
     const { ground, rng, biomeAt } = build;
     const last = piece.size - 1;
     const id = biomeAt(x, y).wall;
     const gate = (at: number) => Math.abs(at - (last >> 1)) <= FORT_GATE;
     const wall = (tx: number, ty: number, rotation: number) => {
-        ground.grid.locs.push({ id, type: LOC_WALL, rotation, level: 0, x: tx, y: ty });
+        putFence(build, id, tx, ty, rotation, owner);
         ground.reserved[ground.tile(tx, ty)] = 1;
     };
     for (let at = 0; at <= last; at++) {
@@ -450,11 +566,15 @@ function placeFort(
 function placeOnPlot(build: Build, piece: SetPiece, x: number, y: number): void {
     const { ground, rng } = build;
     const { sizeX, sizeY } = getPieceSize(piece);
+    const owner = { x0: x, y0: y, x1: x + sizeX - 1, y1: y + sizeY - 1 };
     const middleX = x + (sizeX >> 1);
     const middleY = y + (sizeY >> 1);
     if (piece.kind === "single") {
         const loc = pick(rng, piece.locs);
         putLoc(build, loc, x + ((sizeX - loc[1]) >> 1), y + ((sizeY - loc[2]) >> 1), 0);
+        placeRound(build, x, y, sizeX, sizeY);
+    } else if (piece.kind === "recipe") {
+        placeRecipe(build, piece, x, y, owner);
     } else if (piece.kind === "ring") {
         putRing(build, piece.stones, piece.count, piece.radius, middleX, middleY);
         if (piece.middle) {
@@ -489,25 +609,130 @@ function placeOnPlot(build: Build, piece: SetPiece, x: number, y: number): void 
                 }
             }
         }
+        if (piece.edge) {
+            placeEdge(build, piece.edge, x - 1, y - 1, sizeX + 1, sizeY + 1);
+        }
     } else if (piece.kind === "maze") {
         placeMaze(build, piece, x, y);
     } else if (piece.kind === "fort") {
-        placeFort(build, piece, x, y);
+        placeFort(build, piece, x, y, owner);
+    }
+}
+
+// A single big thing isn't a place by itself: this puts the biome's own small things round it
+function placeRound(build: Build, x: number, y: number, sizeX: number, sizeY: number): void {
+    const { ground, rng, biomeAt } = build;
+    const { flowers } = biomeAt(x + (sizeX >> 1), y + (sizeY >> 1));
+    if (flowers.length === 0) {
+        return;
+    }
+    for (let i = 0; i < ROUND_A_PIECE; i++) {
+        const tx = x + Math.floor(rng() * sizeX);
+        const ty = y + Math.floor(rng() * sizeY);
+        if (ground.isClear(tx, ty, 1, 1)) {
+            putLoc(build, [pick(rng, flowers), 1, 1], tx, ty, Math.floor(rng() * 4));
+        }
+    }
+}
+
+// Things along the outside of a rectangle, with gaps, leaving a way in on every side
+function placeEdge(
+    build: Build,
+    locs: PieceLoc[],
+    x: number,
+    y: number,
+    sizeX: number,
+    sizeY: number,
+): void {
+    const { ground, rng } = build;
+    const put = (tx: number, ty: number) => {
+        if (rng() < EDGE_SHARE && ground.isClear(tx, ty, 1, 1)) {
+            putLoc(build, pick(rng, locs), tx, ty, Math.floor(rng() * 4));
+        }
+    };
+    for (let along = 0; along <= sizeX; along += 2) {
+        put(x + along, y);
+        put(x + along, y + sizeY);
+    }
+    for (let along = 2; along < sizeY; along += 2) {
+        put(x, y + along);
+        put(x + sizeX, y + along);
+    }
+}
+
+function placeRecipe(
+    build: Build,
+    piece: RecipePiece,
+    x: number,
+    y: number,
+    owner: TileRect,
+): void {
+    const { ground, rng, biomeAt } = build;
+    const { sizeX, sizeY } = piece;
+    const biome = biomeAt(x + (sizeX >> 1), y + (sizeY >> 1));
+    if (piece.paved) {
+        const mask = new Uint8Array(ground.sizeX * ground.sizeY);
+        for (let ty = y; ty < y + sizeY; ty++) {
+            mask.fill(1, ground.tile(x, ty), ground.tile(x + sizeX, ty));
+        }
+        ground.paintOverlay(mask, biome.paving ?? PAVING, false);
+    }
+    for (const [id, across, deep, tx, ty, rotation] of piece.locs) {
+        putLoc(build, [id, across, deep], x + tx, y + ty, rotation ?? 0);
+    }
+    if (piece.crops) {
+        for (let ty = y + 1; ty < y + sizeY - 1; ty += 2) {
+            for (let tx = x + 1; tx < x + sizeX - 1; tx++) {
+                if (ground.isClear(tx, ty, 1, 1)) {
+                    putLoc(build, [pick(rng, piece.crops), 1, 1], tx, ty, 0);
+                }
+            }
+        }
+    }
+    if (piece.fenced) {
+        const post = (tx: number, ty: number, rotation: number) =>
+            putFence(build, biome.fence, tx, ty, rotation, owner);
+        const gate = x + (sizeX >> 1);
+        for (let tx = x; tx < x + sizeX; tx++) {
+            if (Math.abs(tx - gate) > 1) {
+                post(tx, y, WALL_SOUTH);
+            }
+            post(tx, y + sizeY - 1, WALL_NORTH);
+        }
+        for (let ty = y; ty < y + sizeY; ty++) {
+            post(x, ty, WALL_WEST);
+            post(x + sizeX - 1, ty, WALL_EAST);
+        }
     }
 }
 
 // Places the pieces that stand on land, where their biome has them, spread out over the map.
 // What goes in water comes later: see placeWaterPieces.
 export function placeSetPieces(build: Build, roads: RoadNetwork, water: Uint8Array): PlacedPiece[] {
-    const { settings, rng, biomeAt, arena } = build;
+    const { settings, rng, biomeAt, arena, ground } = build;
     const wanted = Math.round(
         settings.landmarks * settings.squaresX * settings.squaresY * PIECES_A_SQUARE,
     );
     const placed: PlacedPiece[] = [];
     const used = new Map<string, number>();
+    // The sites with nothing on them first, a little off their middles. Rolled for anyway, so
+    // that a map with no sites comes out as it did.
+    const sites = (build.sites ?? []).filter(
+        (site) =>
+            !build.towns?.some(
+                ({ x0, y0, x1, y1 }) =>
+                    Math.hypot(site.x - (x0 + x1) / 2, site.y - (y0 + y1) / 2) < SITE_TAKEN,
+            ),
+    );
     for (let attempt = 0; attempt < wanted * TRIES_A_PIECE && placed.length < wanted; attempt++) {
-        const middleX = Math.round(lerp(arena.x0, arena.x1, rng()));
-        const middleY = Math.round(lerp(arena.y0, arena.y1, rng()));
+        const site = sites[attempt % Math.max(sites.length, 1)];
+        const spotX = lerp(arena.x0, arena.x1, rng());
+        const spotY = lerp(arena.y0, arena.y1, rng());
+        const onSite = site && attempt < sites.length * SITE_TRIES;
+        const nearX = site ? site.x + (spotX / arena.x1 - 0.5) * SITE_JITTER : spotX;
+        const nearY = site ? site.y + (spotY / arena.y1 - 0.5) * SITE_JITTER : spotY;
+        const middleX = Math.round(onSite ? nearX : spotX);
+        const middleY = Math.round(onSite ? nearY : spotY);
         const names = biomeAt(middleX, middleY).landmarks.filter(
             (name) => !["wreck", "sunken"].includes(SET_PIECES[name].kind),
         );
@@ -527,6 +752,14 @@ export function placeSetPieces(build: Build, roads: RoadNetwork, water: Uint8Arr
         if (!fitsBuilding(build, water, x, y, sizeX, sizeY)) {
             continue;
         }
+        // A city's no place for a piece that's a place of its own
+        const inCity = build.towns?.some(
+            ({ wall }) =>
+                wall && x < wall.x1 && y < wall.y1 && x + sizeX > wall.x0 && y + sizeY > wall.y0,
+        );
+        if (inCity && piece.kind !== "recipe") {
+            continue;
+        }
         const height = getPlotHeight(build, x, y, sizeX, sizeY);
         if (height === undefined) {
             continue;
@@ -534,6 +767,7 @@ export function placeSetPieces(build: Build, roads: RoadNetwork, water: Uint8Arr
         pinPlot(build, x, y, sizeX, sizeY, height);
         markOffLimits(build, roads, x, y, sizeX, sizeY, 1);
         placeOnPlot(build, piece, x, y);
+        ground.claims.take(x, y, sizeX, sizeY, RESERVE_PIECE);
         used.set(name, (used.get(name) ?? 0) + 1);
         placed.push({ name, x, y, sizeX, sizeY, onLand: true });
     }
@@ -562,6 +796,7 @@ function placeDrownedWalls(build: Build, radius: number, x: number, y: number): 
 function isAllWater(
     build: Build,
     water: Uint8Array,
+    bridgeZone: Uint8Array,
     x: number,
     y: number,
     sizeX: number,
@@ -570,7 +805,8 @@ function isAllWater(
     const { ground } = build;
     for (let ty = y; ty < y + sizeY; ty++) {
         for (let tx = x; tx < x + sizeX; tx++) {
-            if (!ground.inside(tx, ty) || !water[ground.tile(tx, ty)]) {
+            const i = ground.tile(tx, ty);
+            if (!ground.inside(tx, ty) || !water[i] || bridgeZone[i]) {
                 return false;
             }
         }
@@ -580,7 +816,11 @@ function isAllWater(
 
 // Wrecks close in to the shore, and drowned towns further out, wherever there's water
 // for them: on heights that won't move, so there are no plots
-export function placeWaterPieces(build: Build, water: Uint8Array): PlacedPiece[] {
+export function placeWaterPieces(
+    build: Build,
+    water: Uint8Array,
+    bridgeZone: Uint8Array,
+): PlacedPiece[] {
     const { settings, rng, arena, biomeAt, sizeX, sizeY } = build;
     const placed: PlacedPiece[] = [];
     const wanted = Math.round(settings.landmarks * settings.squaresX * settings.squaresY);
@@ -612,7 +852,7 @@ export function placeWaterPieces(build: Build, water: Uint8Array): PlacedPiece[]
         const clear = placed.every(
             (other) => Math.hypot(other.x - x, other.y - y) > other.sizeX + size.sizeX,
         );
-        if (!clear || !isAllWater(build, water, x, y, size.sizeX, size.sizeY)) {
+        if (!clear || !isAllWater(build, water, bridgeZone, x, y, size.sizeX, size.sizeY)) {
             continue;
         }
         if (piece.kind === "wreck") {
@@ -632,130 +872,19 @@ export function placeWaterPieces(build: Build, water: Uint8Array): PlacedPiece[]
     return placed;
 }
 
-// A town with a wall round it, by the rectangle the wall stands on
-export type WalledTown = { x0: number; y0: number; x1: number; y1: number };
-
-// Which towns have walls, a little way out from their buildings, each with a square and a
-// fountain at its middle if there's room
-export function chooseWalledTowns(
-    build: Build,
-    buildings: PlacedBuilding[],
-    roads: RoadNetwork,
-): WalledTown[] {
-    const { settings, ground, arena, rng, terrain, spawn } = build;
-    const walled: WalledTown[] = [];
-    if (settings.townWalls <= 0) {
-        return walled;
-    }
-    const towns = new Map<number, PlacedBuilding[]>();
-    for (const building of buildings) {
-        if (building.town !== undefined) {
-            towns.set(building.town, [...(towns.get(building.town) ?? []), building]);
-        }
-    }
-    for (const members of towns.values()) {
-        if (rng() >= settings.townWalls || members.length < MIN_WALLED_BUILDINGS) {
-            continue;
-        }
-        const x0 = Math.max(Math.min(...members.map((b) => b.x)) - TOWN_WALL_GAP, arena.x0 + 2);
-        const y0 = Math.max(Math.min(...members.map((b) => b.y)) - TOWN_WALL_GAP, arena.y0 + 2);
-        const x1 = Math.min(
-            Math.max(...members.map((b) => b.x + b.sizeX)) + TOWN_WALL_GAP,
-            arena.x1 - 2,
-        );
-        const y1 = Math.min(
-            Math.max(...members.map((b) => b.y + b.sizeY)) + TOWN_WALL_GAP,
-            arena.y1 - 2,
-        );
-        walled.push({ x0, y0, x1, y1 });
-        // Round the middle till there's a spot for the square
-        const middleX = (x0 + x1) >> 1;
-        const middleY = (y0 + y1) >> 1;
-        let done = false;
-        for (let reach = 0; reach < TOWN_SQUARE_SEARCH && !done; reach++) {
-            for (let tries = 0; tries < 8 && !done; tries++) {
-                const angle = (tries / 8) * Math.PI * 2;
-                const x = Math.round(middleX + Math.cos(angle) * reach * 2) - TOWN_SQUARE;
-                const y = Math.round(middleY + Math.sin(angle) * reach * 2) - TOWN_SQUARE;
-                const size = TOWN_SQUARE * 2;
-                const clearOfSpawn = Math.hypot(x - spawn.x, y - spawn.y) > TOWN_SQUARE * 3;
-                const { min, max } = terrain.getRange(x, y, size, size);
-                if (
-                    clearOfSpawn &&
-                    max - min < TOWN_SQUARE_RISE &&
-                    ground.isClear(x, y, size, size)
-                ) {
-                    pinPlot(build, x, y, size, size, Math.round((min + max) / 2));
-                    roads.addSquare(x + TOWN_SQUARE, y + TOWN_SQUARE, TOWN_SQUARE);
-                    ground.place(
-                        {
-                            id: FOUNTAIN,
-                            type: LOC_NORMAL,
-                            rotation: 0,
-                            level: 0,
-                            x: x + TOWN_SQUARE - 1,
-                            y: y + TOWN_SQUARE - 1,
-                        },
-                        2,
-                        2,
-                    );
-                    done = true;
-                }
-            }
-        }
-    }
-    return walled;
-}
-
-// Inside a wall a road's paved
-export function getPaving(walled: WalledTown[], x: number, y: number): number | undefined {
-    return walled.some((town) => x > town.x0 && x < town.x1 && y > town.y0 && y < town.y1)
-        ? PAVING
-        : undefined;
-}
-
-// The walls round towns, open where roads go through them, and with a gate each way
-export function placeTownWalls(build: Build, walled: WalledTown[], roadTiles: Uint8Array): void {
-    const { ground, biomeAt, spawn } = build;
-    for (const { x0, y0, x1, y1 } of walled) {
-        const id = biomeAt((x0 + x1) >> 1, (y0 + y1) >> 1).wall;
-        // A gate on each side, on the line to the spawn if it's that side
-        const gateX = Math.min(Math.max(spawn.x, x0 + GATE_HALF + 1), x1 - GATE_HALF - 1);
-        const gateY = Math.min(Math.max(spawn.y, y0 + GATE_HALF + 1), y1 - GATE_HALF - 1);
-        const put = (x: number, y: number, rotation: number) => {
-            const i = ground.tile(x, y);
-            const wall = !ground.isWaterTile(x, y) && !ground.footprint[i] && !roadTiles[i];
-            const gate =
-                rotation === WALL_NORTH || rotation === WALL_SOUTH
-                    ? Math.abs(x - gateX) <= GATE_HALF
-                    : Math.abs(y - gateY) <= GATE_HALF;
-            if (wall && !gate) {
-                ground.grid.locs.push({ id, type: LOC_WALL, rotation, level: 0, x, y });
-                ground.reserved[i] = 1;
-            }
-        };
-        for (let x = x0; x <= x1; x++) {
-            put(x, y0, WALL_SOUTH);
-            put(x, y1, WALL_NORTH);
-        }
-        for (let y = y0; y <= y1; y++) {
-            put(x0, y, WALL_WEST);
-            put(x1, y, WALL_EAST);
-        }
-    }
-}
-
 // Old stones along the roads, the same way apart on either side of them in turn
 export function placeWaymarkers(build: Build, roads: RoadNetwork): Point[] {
     const { settings, ground, biomeAt, rng, toEdge } = build;
     const markers: Point[] = [];
-    if (settings.waymarkers <= 0) {
+    // Something to see on the way, on a map of sites: no road goes far with nothing by it
+    const share = Math.max(settings.waymarkers, settings.sites * ROADSIDE_MARKERS);
+    if (share <= 0) {
         return markers;
     }
     for (const line of roads.lines) {
         const { points, lead, halfWidth } = line;
         let side = rng() < 0.5 ? 1 : -1;
-        const spacing = Math.round(MARKER_SPACING / settings.waymarkers);
+        const spacing = Math.round(MARKER_SPACING / share);
         for (let at = lead + spacing; at + 1 < points.length; at += spacing) {
             const from = points[at];
             const to = points[at + 1];

@@ -130,6 +130,25 @@ describe("Terrain.settle", () => {
     });
 });
 
+describe("Terrain.lock", () => {
+    it("keeps a pin off a locked corner, however near", () => {
+        const terrain = new Terrain(21, 21);
+        terrain.height.fill(40);
+        terrain.lock(terrain.corner(10, 10));
+        terrain.pin(10, 10, 90);
+        terrain.settle(4, new Uint8Array(terrain.height.length).fill(0));
+        expect(terrain.isPinned(10, 10)).toBe(false);
+    });
+
+    it("leaves a pin that was there first", () => {
+        const terrain = new Terrain(21, 21);
+        terrain.pin(10, 10, 90);
+        terrain.lock(terrain.corner(10, 10));
+        terrain.pin(10, 10, 20, 0);
+        expect(terrain.getPinned(10, 10)).toBe(90);
+    });
+});
+
 describe("limitNorthFaces", () => {
     it("cuts back the top of a drop to the north, and leaves one to the south", () => {
         // A step up going south: from the camera, that's a wall hiding the ground behind it

@@ -11,6 +11,9 @@ export class GameInput {
 
     // Called once per press (not repeated while held)
     onPress?: (code: string) => void;
+    // Keys the game uses that the browser would otherwise act on too (Tab
+    // moving the focus, during a run)
+    takesKey?: (code: string) => boolean;
     // Called when the window loses focus or the tab is hidden
     onBlur?: () => void;
 
@@ -68,7 +71,12 @@ export class GameInput {
         if (this.isTyping(event)) {
             return;
         }
-        if (event.code.startsWith("Arrow") || event.code === "Space" || event.code === "F3") {
+        if (
+            event.code.startsWith("Arrow") ||
+            event.code === "Space" ||
+            event.code === "F3" ||
+            this.takesKey?.(event.code)
+        ) {
             event.preventDefault();
         }
         if (!this.down.has(event.code)) {

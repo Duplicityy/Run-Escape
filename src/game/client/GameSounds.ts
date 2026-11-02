@@ -28,6 +28,7 @@ const USE_SOUNDS: Record<ItemUse["kind"], number> = {
     bones: SOUNDS.bonecrusher,
     blast: SOUNDS.chinchompa,
     xp: SOUNDS.lamp,
+    revive: SOUNDS.revive,
 };
 
 // Every sound effect a run can play, to synthesize up front
@@ -219,6 +220,7 @@ export class GameSounds {
                     audio.play(SOUNDS.coins, { volume: 0.8 });
                     break;
                 case "revive":
+                case "heroRevived":
                     audio.play(SOUNDS.revive, { volume: 1 });
                     break;
                 case "evolved":

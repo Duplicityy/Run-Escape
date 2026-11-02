@@ -1,4 +1,5 @@
 import { Exit } from "./building";
+import { TileRect } from "./collision";
 import {
     Build,
     LOC_WALL,
@@ -11,10 +12,15 @@ import {
     hasRelief,
     lerp,
     pick,
+    refreshTileHeights,
 } from "./mapBuild";
+import { createRng, distanceTo } from "./noise";
 import { Point } from "./paths";
 import { BuildingKind, PREFABS, getBuildingKind, isBuildingKind } from "./prefabs";
+import { RESERVE_PIECE, RESERVE_PLOT } from "./reservations";
 import { ROAD_STEEPEST, RoadNetwork } from "./roads";
+import { CLOSE_STREETS, LEVEL_FADE, PlannedTown, fillTown, getPlot, layOutTown } from "./townPlan";
+import { WalledTown, getWallInside, isInsideWall } from "./townWalls";
 
 // Where buildings go, and the ground they stand on.
 
@@ -46,8 +52,55 @@ const TOWN_RISE = 24;
 // What a city's quarters are given over to, going round it
 const DISTRICTS: BuildingKind[] = ["house", "shop", "church"];
 
-// A fenced yard stands this far off a building's walls
+// A fenced yard stands this far off a building's walls, with a gap at its door that takes a road
 const YARD_GAP = 2;
+
+const YARD_DOOR_GAP = 2.5;
+
+// A town needs this many buildings to have a wall
+const MIN_WALLED_BUILDINGS = 2;
+
+// A real town's walls come from one kit, and its fences with them: 5 to 12 ids do 90% of a new
+// town. So a town keeps to one family of prefabs, by the start of their names, and gives up
+// after this many spots that wouldn't take one
+const KIT_PATIENCE = 30;
+
+const TOWN_KIT_SEED = 400;
+
+const SITE_SEED = 420;
+
+// Places to a map square, with the setting at 1, tiles between them and in from the edge, and
+// buildings to a hamlet
+const SITES_A_SQUARE = 1.2;
+
+const SITE_SPACING = 50;
+
+const SITE_INSET = 16;
+
+const SITE_TRIES = 40;
+
+const SITE_BUILDINGS = 3;
+
+// Buildings a family has for a town in blocks, past what its biome lists: towns get them, and
+// nothing else does. West Varrock's, cut for this: see the guide.
+const BLOCK_FAMILIES: Record<string, string[]> = {
+    varrock: [
+        "varrock_cottage",
+        "varrock_house",
+        "varrock_terrace",
+        "varrock_store",
+        "varrock_corner",
+    ],
+};
+
+// Where a family has a fence of its own. Anywhere else it's the biome's.
+export const KIT_FENCES: Record<string, number> = {
+    lumbridge: 980,
+    varrock: 23849,
+    hosidius: 7456,
+    shayzien: 42113,
+    lovakengj: 23753,
+};
 
 // A building: its way out, if it has one, and whether a road ends there
 export type PlacedBuilding = {
@@ -60,9 +113,40 @@ export type PlacedBuilding = {
     hasRoad: boolean;
     // Which town it's in, if it's in one
     town?: number;
+    // Its plot, as tiles, its yard and fence and a tile round its walls: nothing else goes on
+    // that but its own way out. Only the generator's buildings have one.
+    plot?: TileRect;
+    yard?: TileRect;
 };
 
-type Candidate = { name: string; centreX: number; centreY: number; town?: number };
+// A length of fence, on a side of a tile, and the plot or piece it belongs to
+export type PlacedFence = { x: number; y: number; rotation: number; owner: TileRect };
+
+// Where towns are and what's been laid out of them, for the steps that come later
+export type TownPlans = {
+    middles: Point[];
+    kits: TownKit[];
+    // By which town it is: towns inside another's wall are that one
+    byTown: (PlannedTown | undefined)[];
+    plans: PlannedTown[];
+    wanted: number;
+};
+
+type Candidate = {
+    name: string;
+    centreX: number;
+    centreY: number;
+    town?: number;
+    // The wall its town has, if it has one, which it has to be inside
+    wall?: WalledTown;
+};
+
+// A town's family of prefabs, and how many spots it's missed
+type TownKit = { family?: string; misses: number };
+
+export function kitOf(name: string): string {
+    return name.split("_")[0];
+}
 
 // The buildings that can go somewhere, by the settings
 function getBuildingNames(build: Build, x: number, y: number): string[] {
@@ -113,22 +197,53 @@ function getTownCentres(build: Build): Point[] {
     return centres;
 }
 
-export function pickSpot(build: Build, towns: Point[]): Candidate | undefined {
+// The buildings of a town's own family, which it picks the first time it's asked
+function keepToKit(build: Build, kit: TownKit, town: number, names: string[]): string[] {
+    if (kit.misses >= KIT_PATIENCE || names.length === 0) {
+        return names;
+    }
+    if (kit.family === undefined) {
+        const roll = createRng(build.settings.seed + TOWN_KIT_SEED + town);
+        const rolled = kitOf(names[Math.floor(roll() * names.length)]);
+        // A town built in blocks wants a family that's got the buildings for it
+        const blocks = names.map(kitOf).find((family) => BLOCK_FAMILIES[family]);
+        kit.family = build.settings.sideStreets > CLOSE_STREETS && blocks ? blocks : rolled;
+    }
+    const own = names.filter((name) => kitOf(name) === kit.family);
+    const more = (BLOCK_FAMILIES[kit.family] ?? []).filter((name) =>
+        isBuildingKind(name, build.settings),
+    );
+    return own.length > 0 ? [...own, ...more] : names;
+}
+
+function pickSpot(build: Build, plans: TownPlans): Candidate | undefined {
     const { settings, arena, rng } = build;
+    const { middles: towns, kits, byTown } = plans;
     let x: number;
     let y: number;
     let town: number | undefined;
+    let wall: WalledTown | undefined;
     if (towns.length > 0) {
         town = Math.floor(rng() * towns.length);
         const angle = rng() * Math.PI * 2;
         const distance = Math.sqrt(rng()) * settings.townSize;
         x = towns[town].x + Math.cos(angle) * distance;
         y = towns[town].y + Math.sin(angle) * distance;
+        wall = byTown[town]?.wall;
+        if (wall) {
+            // All the city, not just what's near its middle
+            const inside = getWallInside(wall.kit, wall);
+            x = lerp(inside.x0, inside.x1, rng());
+            y = lerp(inside.y0, inside.y1, rng());
+        }
     } else {
         x = lerp(arena.x0, arena.x1, rng());
         y = lerp(arena.y0, arena.y1, rng());
     }
     let names = getBuildingNames(build, Math.floor(x), Math.floor(y));
+    if (town !== undefined) {
+        names = keepToKit(build, kits[town], town, names);
+    }
     // A town with walls is a city, in districts, each a wedge of it
     if (town !== undefined && settings.townWalls > 0) {
         const angle = Math.atan2(y - towns[town].y, x - towns[town].x) / (Math.PI * 2) + 0.5;
@@ -136,7 +251,9 @@ export function pickSpot(build: Build, towns: Point[]): Candidate | undefined {
         const inDistrict = names.filter((name) => getBuildingKind(name) === kind);
         names = inDistrict.length > 0 ? inDistrict : names;
     }
-    return names.length > 0 ? { name: pick(rng, names), centreX: x, centreY: y, town } : undefined;
+    return names.length > 0
+        ? { name: pick(rng, names), centreX: x, centreY: y, town, wall }
+        : undefined;
 }
 
 // Whether a rectangle has room for a building, with space round it
@@ -258,29 +375,46 @@ export function pinPlot(
     }
 }
 
-// A fence round a building a little way off, with a gap at its door
-function placeYard(build: Build, plot: PlacedBuilding): void {
-    const { ground, biomeAt } = build;
+// A length of fence, on record so that check-maps.ts can hold it to the rules
+export function putFence(
+    build: Build,
+    id: number,
+    x: number,
+    y: number,
+    rotation: number,
+    owner: TileRect,
+): void {
+    build.ground.grid.locs.push({ id, type: LOC_WALL, rotation, level: 0, x, y });
+    (build.fences ??= []).push({ x, y, rotation, owner });
+}
+
+// A fence round a building a little way off, with a gap at its door, on a plot that's its own
+function placeYard(
+    build: Build,
+    roads: RoadNetwork,
+    plot: PlacedBuilding,
+    yard: TileRect,
+    family?: string,
+): void {
+    const { biomeAt } = build;
     const { exit } = plot;
-    const x0 = plot.x - YARD_GAP;
-    const y0 = plot.y - YARD_GAP;
-    const x1 = plot.x + plot.sizeX + YARD_GAP - 1;
-    const y1 = plot.y + plot.sizeY + YARD_GAP - 1;
+    const { x0, y0, x1, y1 } = yard;
+    const gap = Math.max(YARD_DOOR_GAP, roads.halfWidth + 0.5);
     const post = (x: number, y: number, rotation: number) => {
         // The gap at the door, on the fence's own line
         const inGap =
             exit !== undefined &&
             ((exit.outX !== 0 &&
-                Math.abs(y + 0.5 - exit.y) < 2.5 &&
+                Math.abs(y + 0.5 - exit.y) < gap &&
                 (exit.outX > 0 ? x === x1 : x === x0) &&
                 (rotation === WALL_EAST || rotation === WALL_WEST)) ||
                 (exit.outY !== 0 &&
-                    Math.abs(x + 0.5 - exit.x) < 2.5 &&
+                    Math.abs(x + 0.5 - exit.x) < gap &&
                     (exit.outY > 0 ? y === y1 : y === y0) &&
                     (rotation === WALL_NORTH || rotation === WALL_SOUTH)));
         if (!inGap) {
-            const id = biomeAt(x, y).fence;
-            ground.grid.locs.push({ id, type: LOC_WALL, rotation, level: 0, x, y });
+            const id = (family && KIT_FENCES[family]) || biomeAt(x, y).fence;
+            putFence(build, id, x, y, rotation, yard);
         }
     };
     for (let x = x0; x <= x1; x++) {
@@ -310,6 +444,11 @@ function getPlacings(
         const x = Math.round(spot.centreX - prefab.sizeX / 2);
         const y = Math.round(spot.centreY - prefab.sizeY / 2);
         if (!fitsBuilding(build, water, x, y, prefab.sizeX, prefab.sizeY)) {
+            continue;
+        }
+        const { wall } = spot;
+        const lot = { x0: x, y0: y, x1: x + prefab.sizeX - 1, y1: y + prefab.sizeY - 1 };
+        if (wall && !isInsideWall(wall, lot)) {
             continue;
         }
         for (const local of exits) {
@@ -346,6 +485,16 @@ export function markOffLimits(
     }
 }
 
+// A building's plot with a yard round it, as far out as its fence
+function getYard(x: number, y: number, sizeX: number, sizeY: number): TileRect {
+    return {
+        x0: x - YARD_GAP,
+        y0: y - YARD_GAP,
+        x1: x + sizeX + YARD_GAP - 1,
+        y1: y + sizeY + YARD_GAP - 1,
+    };
+}
+
 // Places a building at a spot if one fits, turned so that a way out faces the nearest
 // road. One that wants a road only goes where its road can join the others, ending at
 // that door. One on its own faces the nearest road anyway, or the spawn if there are none.
@@ -360,6 +509,10 @@ function placeBuilding(
     const { name } = spot;
     for (const { turns, x, y, exit } of getPlacings(build, roads, water, spot)) {
         const { prefab } = kit.get(name, turns);
+        // A yard's part of its plot, and roads keep off where it'll be, whether or not it gets one
+        const room = getYard(x, y, prefab.sizeX, prefab.sizeY);
+        const roomX = room.x1 - room.x0 + 1;
+        const roomY = room.y1 - room.y0 + 1;
         const plot: PlacedBuilding = {
             name,
             x,
@@ -375,12 +528,15 @@ function placeBuilding(
         for (let step = 0; step <= roads.doorLead; step++) {
             lead.push({ x: exit.x + exit.outX * step, y: exit.y + exit.outY * step });
         }
+        if (wantsRoad && !roads.isLeadClear(lead)) {
+            continue;
+        }
         const end = lead[lead.length - 1];
         const from = { x: Math.floor(end.x), y: Math.floor(end.y) };
-        markOffLimits(build, roads, x, y, prefab.sizeX, prefab.sizeY, 1);
+        markOffLimits(build, roads, room.x0, room.y0, roomX, roomY, 1);
         const route = wantsRoad && ground.inside(from.x, from.y) ? roads.findRoute(from, lead) : [];
         if (wantsRoad && route.length === 0) {
-            markOffLimits(build, roads, x, y, prefab.sizeX, prefab.sizeY, -1);
+            markOffLimits(build, roads, room.x0, room.y0, roomX, roomY, -1);
             continue;
         }
         // Its road has to be able to get from its door to where it joins
@@ -389,13 +545,18 @@ function placeBuilding(
         const steepest = settings.walkSlope * ROAD_STEEPEST * route.length;
         const tooFar = joining !== undefined && Math.abs(joining - (height ?? 0)) > steepest;
         if (height === undefined || tooFar) {
-            markOffLimits(build, roads, x, y, prefab.sizeX, prefab.sizeY, -1);
+            markOffLimits(build, roads, room.x0, room.y0, roomX, roomY, -1);
             continue;
         }
         kit.stamp(ground, name, turns, x, y, true);
         pinPlot(build, x, y, prefab.sizeX, prefab.sizeY, height, exit);
-        if (rng() < settings.gardens) {
-            placeYard(build, plot);
+        plot.yard = rng() < settings.gardens ? room : undefined;
+        plot.plot = plot.yard ?? getPlot(x, y, prefab.sizeX, prefab.sizeY);
+        const { x0, y0, x1, y1 } = plot.plot;
+        ground.claims.take(x0, y0, x1 - x0 + 1, y1 - y0 + 1, RESERVE_PLOT);
+        if (plot.yard) {
+            const family = spot.town === undefined ? undefined : kitOf(name);
+            placeYard(build, roads, plot, plot.yard, family);
         }
         if (wantsRoad) {
             roads.lay(from, lead, route, roads.halfWidth, height);
@@ -405,15 +566,115 @@ function placeBuilding(
     return undefined;
 }
 
+// Places about 50 tiles apart, on ground that can take them, away from the spawn: where a map's
+// hamlets and landmarks go, with quieter land between. Real settlements are 49 to 56 apart.
+function getSites(build: Build, water: Uint8Array, taken: Point[]): Point[] {
+    const { settings, arena, spawn, ground, cliffs, mainland, toEdge } = build;
+    const roll = createRng(settings.seed + SITE_SEED);
+    const wanted = Math.round(
+        settings.sites * settings.squaresX * settings.squaresY * SITES_A_SQUARE,
+    );
+    const sites: Point[] = [];
+    for (let attempt = 0; attempt < wanted * SITE_TRIES && sites.length < wanted; attempt++) {
+        const x = Math.floor(lerp(arena.x0, arena.x1, roll()));
+        const y = Math.floor(lerp(arena.y0, arena.y1, roll()));
+        const i = ground.tile(x, y);
+        const spaced = [...taken, ...sites].every(
+            (other) => Math.hypot(other.x - x, other.y - y) >= SITE_SPACING,
+        );
+        if (
+            spaced &&
+            toEdge(x, y) >= SITE_INSET &&
+            Math.hypot(x - spawn.x, y - spawn.y) >= SITE_SPACING / 2 &&
+            !water[i] &&
+            !cliffs[i] &&
+            mainland[i]
+        ) {
+            sites.push({ x, y });
+        }
+    }
+    return sites;
+}
+
+// The first steps of a place, for every town and hamlet on the map: where it is, its wall and
+// gates, and its square and main streets. Nothing else has been laid but bridges. A town that
+// lands inside a wall that's already up is part of that city.
+export function planTowns(build: Build, roads: RoadNetwork, water: Uint8Array): TownPlans {
+    const { settings, rng } = build;
+    const wanted = Math.round(settings.buildings * settings.squaresX * settings.squaresY * 3);
+    const named = getTownCentres(build);
+    build.sites = settings.sites > 0 ? getSites(build, water, named) : [];
+    // With no towns asked for, what there is to build gathers in hamlets at the first sites
+    const hamlets =
+        named.length > 0 || settings.roads <= 0 ? 0 : Math.ceil(wanted / SITE_BUILDINGS);
+    const middles = [...named, ...build.sites.slice(0, hamlets)];
+    const kits = middles.map((): TownKit => ({ misses: 0 }));
+    const plans: PlannedTown[] = [];
+    const byTown = middles.map((): PlannedTown | undefined => undefined);
+    if (wanted === 0) {
+        return { middles, kits, byTown, plans, wanted };
+    }
+    const rough = new Uint8Array(water.length);
+    rough.forEach((_, i) => {
+        rough[i] = water[i] | build.cliffs[i];
+    });
+    const toRough = distanceTo(rough, build.sizeX, build.sizeY, LEVEL_FADE);
+    const share = Math.ceil(wanted / middles.length);
+    middles.forEach((middle, town) => {
+        const city = plans.find(
+            ({ wall }) =>
+                wall &&
+                middle.x >= wall.x0 &&
+                middle.x <= wall.x1 &&
+                middle.y >= wall.y0 &&
+                middle.y <= wall.y1,
+        );
+        if (city) {
+            city.parts.wanted += share;
+            byTown[town] = city;
+            kits[town] = kits[city.town];
+            return;
+        }
+        const all = getBuildingNames(build, Math.floor(middle.x), Math.floor(middle.y));
+        const names = keepToKit(build, kits[town], town, all);
+        const wantsWall =
+            town < named.length &&
+            settings.townWalls > 0 &&
+            rng() < settings.townWalls &&
+            share >= MIN_WALLED_BUILDINGS;
+        if (names.length > 0) {
+            const parts = {
+                names,
+                wanted: share,
+                town,
+                family: kits[town].family ?? kitOf(names[0]),
+            };
+            const plan = layOutTown(build, roads, water, middle, parts, wantsWall, toRough);
+            if (plan) {
+                plans.push(plan);
+                byTown[town] = plan;
+            }
+        }
+    });
+    refreshTileHeights(build);
+    return { middles, kits, byTown, plans, wanted };
+}
+
+// Buildings, once their towns' streets and the roads between are down: on the streets first, and
+// what doesn't fit there, and towns with no roads to have streets, on the loose ground round them
+// with lanes of their own
 export function placeBuildings(
     build: Build,
     roads: RoadNetwork,
     water: Uint8Array,
+    plans: TownPlans,
 ): PlacedBuilding[] {
     const { settings } = build;
-    const wanted = Math.round(settings.buildings * settings.squaresX * settings.squaresY * 3);
-    const towns = getTownCentres(build);
+    const { wanted, kits } = plans;
     const plots: PlacedBuilding[] = [];
+    for (const plan of settings.roads > 0 ? plans.plans : []) {
+        plots.push(...fillTown(build, roads, water, plan));
+    }
     // Those with roads first, so that the rest can face all the roads there'll be
     const roadCount = Math.round(wanted * settings.roads);
     for (const [count, wantsRoad] of [
@@ -421,10 +682,12 @@ export function placeBuildings(
         [wanted, false],
     ] as const) {
         for (let attempt = 0; attempt < wanted * 40 && plots.length < count; attempt++) {
-            const spot = pickSpot(build, towns);
+            const spot = pickSpot(build, plans);
             const plot = spot && placeBuilding(build, roads, water, spot, wantsRoad);
             if (plot) {
                 plots.push(plot);
+            } else if (spot?.town !== undefined) {
+                kits[spot.town].misses++;
             }
         }
     }
@@ -453,6 +716,7 @@ export function placeRuins(build: Build, roads: RoadNetwork, water: Uint8Array):
             if (height === undefined) {
                 continue;
             }
+            ground.claims.take(x, y, prefab.sizeX, prefab.sizeY, RESERVE_PIECE);
             kit.stampRuin(ground, name, turns, x, y, rng, true);
             pinPlot(build, x, y, prefab.sizeX, prefab.sizeY, height);
             markOffLimits(build, roads, x, y, prefab.sizeX, prefab.sizeY, 1);

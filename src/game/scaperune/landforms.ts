@@ -503,10 +503,71 @@ export function shapeCliffs(terrain: Terrain, walkSlope: number): Uint8Array {
 
 // Slopes are eased to under this share of what's walkable, so rounding doesn't tip them over
 const SLOPE_MARGIN = 0.92;
+// How far apart flat land's levels are, in height units. Each runs flat, then ramps up to the next.
+const FLAT_STEP = 12;
+// Slopes over this share of what's walkable stay as they are
+const FLAT_SLOPE_SHARE = 0.5;
 // Cliffs smaller than this are bumps, and go
 const MIN_CLIFF_PIECE = 10;
 // Walkable ground smaller than this among cliffs goes to the cliffs
 const MIN_LEDGE_PIECE = 24;
+
+// Three quarters of real walkable ground is dead flat, with the height in short ramps, and hills
+// left to noise read as a soft blanket. This puts open ground on levels: flatness is the share
+// of each level that's flat. Cliffs and what's held stay as they are.
+export function flattenLand(
+    terrain: Terrain,
+    cliffs: Uint8Array,
+    held: Uint8Array,
+    flatness: number,
+    walkSlope: number,
+): void {
+    const { cornersX, cornersY, height } = terrain;
+    if (flatness <= 0) {
+        return;
+    }
+    const sizeX = cornersX - 1;
+    const sizeY = cornersY - 1;
+    const open = new Uint8Array(height.length);
+    for (let y = 0; y < cornersY; y++) {
+        for (let x = 0; x < cornersX; x++) {
+            let clear = 1;
+            for (const [tx, ty] of [
+                [x - 1, y - 1],
+                [x, y - 1],
+                [x - 1, y],
+                [x, y],
+            ]) {
+                if (tx >= 0 && ty >= 0 && tx < sizeX && ty < sizeY && cliffs[tx + ty * sizeX]) {
+                    clear = 0;
+                }
+            }
+            const at = x + y * cornersX;
+            open[at] = clear && !held[at] ? 1 : 0;
+        }
+    }
+    // A slope near the limit has no room for levels: its ramps would be too steep to walk, and
+    // roads climbing it couldn't make their grade
+    const before = Float32Array.from(height);
+    for (let y = 1; y < cornersY - 1; y++) {
+        for (let x = 1; x < cornersX - 1; x++) {
+            const at = x + y * cornersX;
+            if (!open[at]) {
+                continue;
+            }
+            const slope = Math.max(
+                Math.abs(before[at + 1] - before[at - 1]),
+                Math.abs(before[at + cornersX] - before[at - cornersX]),
+            );
+            const room = 1 - smoothstep(slope / 2 / (walkSlope * FLAT_SLOPE_SHARE) - 0.5);
+            const level = Math.floor(before[at] / FLAT_STEP);
+            const along = before[at] / FLAT_STEP - level;
+            const ramp = smoothstep((along - flatness) / (1 - flatness));
+            height[at] = lerp(before[at], (level + ramp) * FLAT_STEP, room);
+        }
+    }
+    limitSlope(height, cornersX, cornersY, walkSlope * SLOPE_MARGIN, open);
+}
 
 // Flips pieces of a value smaller than a size
 function dropSmallPieces(

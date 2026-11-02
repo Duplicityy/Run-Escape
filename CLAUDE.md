@@ -23,6 +23,7 @@ go stale. Add anything that cost you time to work out.
 | The Windows app, its game updates, releases           | `docs/DEVELOPMENT.md`, Desktop           |
 | The app's main process and update code                | `desktop/`                               |
 | The release workflow                                  | `.github/workflows/release.yml`          |
+| The checks on a pull request                          | `.github/workflows/check.yml`            |
 | What's in the game, map by map                        | `docs/GAMEPLAY.md`                       |
 | Getting it running, controls, cache version           | `README.md`                              |
 | What changed in each version                          | `CHANGELOG.md`                           |
@@ -32,10 +33,13 @@ go stale. Add anything that cost you time to work out.
 | Level up choices, and when a weapon can evolve        | `src/game/core/Upgrades.ts`              |
 | Evolution recipes, for the UI                         | `src/game/content/evolutions.ts`         |
 | Hard mode's numbers (each map's are on its `MapDef`)  | `src/game/content/hard.ts`               |
+| Co-op's numbers: the party's scaling, boss copies     | `src/game/content/coop.ts`               |
 | Caskets and the inventory                             | `src/game/core/Loot.ts`                  |
 | Random events: who turns up, what they do             | `src/game/content/randomEvents.ts`       |
 | Save data and migrations                              | `src/game/core/save.ts`                  |
+| One tab saving, newer saves, unreadable ones          | `docs/DEVELOPMENT.md`, Saves             |
 | Run flow, camera, input, the HUD's data               | `src/game/client/GameClient.ts`          |
+| The damage panel: each weapon's DPS during a run      | `src/game/client/DamageMeter.ts`         |
 | 3D actors, swooshes, hitsplats                        | `src/game/client/GameView.ts`            |
 | Touch screens: the stick, its buttons, phone layouts  | `docs/DEVELOPMENT.md`, Touch screens     |
 | The game on a phone's home screen (PWA)               | `docs/DEVELOPMENT.md`, Touch screens     |
@@ -141,7 +145,8 @@ npx tsx scripts/cache/validate-decoders.ts    # after touching a decoder or chan
 
 ## Tests on the release build
 
-The release workflow is the only place `npm test` runs on its own, and a failure there stops the
+`.github/workflows/check.yml` runs the type check and `npm test` on every pull request, without
+the game's cache. The release workflow runs the tests with it, and a failure there stops the
 desktop build.
 
 - **It runs everything, on a busy machine.** It has the game's cache, so `generator.test.ts` runs
@@ -167,6 +172,8 @@ desktop build.
   console, takes a moment to show up.
 - Headless Chromium needs `--use-angle=swiftshader --enable-unsafe-swiftshader`, and a persistent
   profile, or the cache won't fit in its storage quota. The cache can take a while to load.
+- On Windows, keep that profile on a short path (a session's scratchpad is too long). Past 260
+  characters the Cache API fails with `UnknownError: Failed to execute 'open' on 'CacheStorage'`.
 - A small window isn't a phone: `Mobile.css` needs `(pointer: coarse)` too. Over DevTools,
   `Emulation.setTouchEmulationEnabled` only lasts as long as the session that set it, so keep that
   session open while you test.
@@ -193,7 +200,9 @@ desktop build.
 - **Content** is plain data with real cache ids. Look ids up with the scripts, not from memory. OSRS
   names should be spelled as the cache spells them.
 - **Saves**: if `SaveData` changes shape, raise `SAVE_VERSION` and add a step to `migrateSave`.
-  New shop upgrades, ids and optional fields don't need one.
+  New shop upgrades, ids and optional fields don't need one. Write the save only through
+  `GameClient.persist()`: it doesn't write while another tab has `SaveLock` or the save is from a
+  newer game. Never rename the lock, `run-escape-save`, any more than the keys.
 - **Determinism**: the sim only uses its seeded `Rng`, never `Math.random`. Co-op runs the same sim
   on every player's browser, so in `src/game/core/` trigonometry goes through `fm` (`fm.sin`,
   `fm.cos`, `fm.atan2`, `fm.hypot`, `fm.acos`, `fm.pow`) from `core/fmath.ts`, never `Math`'s.

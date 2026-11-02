@@ -65,11 +65,19 @@ function isHalfCovered(a: number, b: number): boolean {
     return a * 3 + b > 0;
 }
 
+// A side's two half sides
+function getSideBits(a: number, b: number): number {
+    return (isHalfCovered(a, b) ? 1 : 0) | (isHalfCovered(b, a) ? 2 : 0);
+}
+
 // The half sides a tile covers, from a field at its corners
 export function getCoveredSides(sw: number, se: number, ne: number, nw: number): number {
-    const side = (a: number, b: number) =>
-        (isHalfCovered(a, b) ? 1 : 0) | (isHalfCovered(b, a) ? 2 : 0);
-    return side(sw, nw) | (side(nw, ne) << 2) | (side(ne, se) << 4) | (side(se, sw) << 6);
+    return (
+        getSideBits(sw, nw) |
+        (getSideBits(nw, ne) << 2) |
+        (getSideBits(ne, se) << 4) |
+        (getSideBits(se, sw) << 6)
+    );
 }
 
 // The shape for some half sides, undefined for none. Patterns with no shape are

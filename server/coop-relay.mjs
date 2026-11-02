@@ -33,6 +33,31 @@ export function isMultiplayerOn(env = process.env, argv = process.argv) {
     );
 }
 
+// Whether the relay serves its counts on a separate loopback listener
+// (see startMetrics): MULTIPLAYER_METRICS=off or on, like MULTIPLAYER. Without
+// it, byDefault: on for a server that hosts the game, off for the dev server,
+// so two checkouts don't fight over the port. Nothing is kept on disk.
+export function isMetricsOn(env = process.env, byDefault = true) {
+    const value = (env.MULTIPLAYER_METRICS ?? "").trim().toLowerCase();
+    if (["off", "0", "false", "no"].includes(value)) {
+        return false;
+    }
+    return ["on", "1", "true", "yes"].includes(value) || byDefault;
+}
+
+export function metricsPortSetting(env = process.env) {
+    const value = env.MULTIPLAYER_METRICS_PORT;
+    if (value === undefined || value.trim() === "") {
+        return 8788;
+    }
+    const port = Number(value);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        console.warn(`MULTIPLAYER_METRICS_PORT "${value}" isn't a valid port: taking 8788.`);
+        return 8788;
+    }
+    return port;
+}
+
 // Whether players can join rooms on maps they haven't unlocked (and so open
 // them by winning there): MULTIPLAYER_ANY_MAP=on or --any-map. Off by default, so nobody
 // skips ahead: a room only takes players with its map unlocked (and its
@@ -47,7 +72,8 @@ export function isAnyMapOn(env = process.env, argv = process.argv) {
 }
 
 // Rooms on the relay at once: MULTIPLAYER_MAX_ROOMS=1000 or --max-rooms=1000,
-// or MAX_ROOMS. Each room of four is about 12 KB/s each way through the relay.
+// and MAX_ROOMS without either. Each room of four is about 12 KB/s each way
+// through the relay.
 export function maxRoomsSetting(env = process.env, argv = process.argv) {
     const flag = argv.find((arg) => arg.startsWith("--max-rooms="))?.slice("--max-rooms=".length);
     const value = flag ?? env.MULTIPLAYER_MAX_ROOMS;
@@ -75,19 +101,32 @@ const MAX_ROOMS = 500;
 // a LAN party behind one address.
 const MAX_CONNECTIONS_PER_ADDRESS = 16;
 const MAX_ROOMS_PER_ADDRESS = 4;
+// And on each IPv6 /48 (see networkKey), which one person can have 65,536
+// /64s of. Looser, as some providers (mobile ones above all) put many homes
+// in one: enough that a busy evening on one of them isn't turned away.
+const MAX_CONNECTIONS_PER_NETWORK = 128;
+const MAX_ROOMS_PER_NETWORK = 16;
 const MAX_CREATES_PER_MINUTE = 10;
 // Joining's a room update for everyone in it, and so's leaving: enough to look
 // round a few rooms, not enough to flood one by going in and out
 const MAX_JOINS_PER_MINUTE = 12;
 // Connections in all, below a server's usual limit of 1,024 open files
 const MAX_CONNECTIONS = 800;
-// A connection that's in no room and has done nothing for this long is closed
-// (a room left alone goes by IDLE_MS)
+// A connection that's in no room and has done nothing but ping for this long
+// is closed (a room left alone goes by IDLE_MS)
 const IDLE_CONNECTION_MS = 10 * 60_000;
 // Room codes that don't exist, tried from one address, before it has to wait
 const MAX_WRONG_CODES_PER_MINUTE = 20;
+// And from its whole IPv6 /48, so that a guesser moving along their /64s is
+// caught, without one of them shutting their neighbours out
+const MAX_WRONG_CODES_PER_NETWORK_PER_MINUTE = 80;
 // A room nobody's done anything in for this long is closed
 const IDLE_MS = 30 * 60_000;
+// Messages that don't count as doing anything in a room, for IDLE_MS: pings,
+// browsing, and a player's own updates and name, which could otherwise be
+// sent now and then to hold a room for ever. A connection in no room only
+// idles on pings (IDLE_CONNECTION_MS): browsing the list is waiting for a room.
+const IDLE_MESSAGES = new Set(["ping", "list", "me", "rename"]);
 // Bigger than any real loadout (the shop's bonuses, unlocked items and
 // Armoury); a bigger one is dropped rather than sent round the room
 export const MAX_LOADOUT_BYTES = 16 * 1024;
@@ -108,6 +147,12 @@ const MAX_BYTES_PER_SECOND = 2 * MAX_MESSAGE_BYTES;
 // or bigger than this goes no further
 const MAX_UP_BYTES = 1024;
 const MAX_UPS_PER_SECOND = 60;
+// What a host sends through its room (its runs' starts, and their frames),
+// which goes on to each guest: a run's frames are a few KB a second. What's
+// not used builds up to one of the biggest messages, for a start with
+// everyone's loadout. A host past it is dropped, rather than frames the
+// guests' games can't do without.
+const MAX_HOST_BYTES_PER_SECOND = 64 * 1024;
 // What a player says about themselves: a loadout and unlocks at their limits
 const MAX_ME_BYTES = 40 * 1024;
 // A message in more pieces than this isn't from a browser
@@ -119,9 +164,11 @@ const MAX_DEPTH = 16;
 // whose game has stopped reading would otherwise grow the relay's memory
 const MAX_BUFFERED_BYTES = 1024 * 1024;
 const PING_MS = 20_000;
-// How often a room hears what its players say about themselves, however often
-// they say it: one player can't flood the rest off a slow line
-const MEMBER_UPDATE_MS = 250;
+// How often a room hears how it is, however often it changes. Each time it's
+// everyone's loadout and unlocks to everyone (up to about 130 KB for four),
+// so one player can't flood the rest off a slow line, or make the relay send
+// that for every tiny message.
+const ROOM_UPDATE_MS = 250;
 // Room codes leave out letters and digits that look alike
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 // Long enough that no number of addresses can guess one
@@ -459,9 +506,10 @@ export function addressKey(address) {
         .join(":")}::/64`;
 }
 
-// Who's guessing room codes: an address, or an IPv6 /48, which one person can
-// easily have 65,536 /64s of
-export function guesserKey(address) {
+// The network an address (from addressKey) is on: itself, or an IPv6 /48,
+// which one person can easily have 65,536 /64s of. It has limits of its own on
+// top of each address's, looser ones: a provider can put many homes in one.
+export function networkKey(address) {
     return address.endsWith("::/64") ? `${address.split(":").slice(0, 3).join(":")}::/48` : address;
 }
 
@@ -506,15 +554,34 @@ function acceptKey(key) {
 
 // ---- Rooms ----
 
-// The maps a player's game says it has unlocked, and has endless for
+// The maps a player's game says it has unlocked, and has endless and hard mode
+// for
 function cleanUnlocks(unlocks) {
     const list = (ids) =>
         Array.isArray(ids) ? ids.slice(0, MAX_UNLOCKED_MAPS).map(cleanId).filter(Boolean) : [];
-    return { maps: list(unlocks?.maps), endless: list(unlocks?.endless) };
+    return {
+        maps: list(unlocks?.maps),
+        endless: list(unlocks?.endless),
+        hard: list(unlocks?.hard),
+    };
 }
 
-function hasUnlocked(unlocks, mapId, endless) {
-    return unlocks.maps.includes(mapId) && (!endless || unlocks.endless.includes(mapId));
+function hasUnlocked(unlocks, mapId, endless, hard) {
+    return (
+        unlocks.maps.includes(mapId) &&
+        (!endless || unlocks.endless.includes(mapId)) &&
+        (!hard || unlocks.hard.includes(mapId))
+    );
+}
+
+// Adds n to a count kept for each address, forgetting it at none
+function addCount(counts, key, n) {
+    const count = (counts.get(key) ?? 0) + n;
+    if (count > 0) {
+        counts.set(key, count);
+    } else {
+        counts.delete(key);
+    }
 }
 
 // A whole number from a message, kept within min and max
@@ -534,36 +601,187 @@ export function createRelay(limits = {}) {
         maxRooms = maxRoomsSetting(),
         connectionsPerAddress = MAX_CONNECTIONS_PER_ADDRESS,
         roomsPerAddress = MAX_ROOMS_PER_ADDRESS,
+        connectionsPerNetwork = MAX_CONNECTIONS_PER_NETWORK,
+        roomsPerNetwork = MAX_ROOMS_PER_NETWORK,
         createsPerMinute = MAX_CREATES_PER_MINUTE,
         wrongCodesPerMinute = MAX_WRONG_CODES_PER_MINUTE,
+        wrongCodesPerNetworkPerMinute = MAX_WRONG_CODES_PER_NETWORK_PER_MINUTE,
         joinsPerMinute = MAX_JOINS_PER_MINUTE,
         maxConnections = MAX_CONNECTIONS,
         bytesPerSecond = MAX_BYTES_PER_SECOND,
+        hostBytesPerSecond = MAX_HOST_BYTES_PER_SECOND,
+        // What a host's unused bytes build up to (see MAX_HOST_BYTES_PER_SECOND)
+        hostBurstBytes = MAX_MESSAGE_BYTES,
         idleConnectionMs = IDLE_CONNECTION_MS,
-        memberUpdateMs = MEMBER_UPDATE_MS,
+        roomUpdateMs = ROOM_UPDATE_MS,
         idleMs = IDLE_MS,
         // The proxy in front (see client-ip.mjs), as the server's set it
         proxy = proxyMode(),
         // Rooms take players without their map (see isAnyMapOn)
         anyMap = isAnyMapOn(),
+        metrics = isMetricsOn(),
+        metricsPort = metricsPortSetting(),
     } = limits;
     // Behind Cloudflare, its addresses, fetched from its API
     const stopCloudflare = proxy === "cloudflare" ? watchCloudflareRanges() : () => {};
     let warnedProxy = false;
     const rooms = new Map();
     const clients = new Set();
+    // For the metrics: only connections, rooms being made and runs starting
+    // update these (counted whether or not they're served). Live counts come
+    // from the rooms when asked, never from game traffic.
+    const counters = {
+        startedAt: Date.now(),
+        connections: 0,
+        roomsCreated: 0,
+        runsStarted: 0,
+        peakPlayers: 0,
+        peakRooms: 0,
+    };
+    let metricsServer;
+    let stopMetrics = () => {};
     // Every connected player's name, so no two have the same
     const playerNames = new Set();
     let nextId = 1;
-    // Connections from each address, and when each made its latest rooms
+    // Connections from each address and network, and when each address made
+    // its latest rooms
     const connectionsFrom = new Map();
+    const connectionsFromNetwork = new Map();
     const createdFrom = new Map();
     const wrongCodesFrom = new Map();
+    const wrongCodesFromNetwork = new Map();
     const joinedFrom = new Map();
     let nextRoomOrder = 1;
     // The open rooms as the list shows them, worked out again only after a
     // room changes (everyone browsing asks every few seconds)
     let openRooms;
+
+    function metricsText() {
+        let lobbyPlayers = 0;
+        let playingPlayers = 0;
+        let runningRooms = 0;
+        let publicRooms = 0;
+        for (const room of rooms.values()) {
+            if (room.started) {
+                runningRooms++;
+                playingPlayers += room.members.length;
+            } else {
+                lobbyPlayers += room.members.length;
+            }
+            if (room.open) {
+                publicRooms++;
+            }
+        }
+        // Prometheus text 0.0.4: fixed names and help, numeric samples only.
+        // Each series has HELP and TYPE lines and ends with a newline.
+        const metric = (name, help, value, type = "gauge") =>
+            `# HELP ${name} ${help}\n# TYPE ${name} ${type}\n${name} ${value}\n`;
+        return [
+            metric(
+                "coop_uptime_seconds",
+                "Seconds since this relay started.",
+                Math.floor((Date.now() - counters.startedAt) / 1000),
+            ),
+            metric("coop_players_connected", "Currently connected player sockets.", clients.size),
+            metric(
+                "coop_players_browsing",
+                "Connected players not in a room.",
+                clients.size - lobbyPlayers - playingPlayers,
+            ),
+            metric("coop_players_lobby", "Players waiting in room lobbies.", lobbyPlayers),
+            metric("coop_players_in_run", "Players in started runs.", playingPlayers),
+            metric("coop_rooms", "Current rooms, including started runs.", rooms.size),
+            metric("coop_rooms_lobby", "Rooms waiting to start a run.", rooms.size - runningRooms),
+            metric("coop_rooms_in_run", "Rooms with a started run.", runningRooms),
+            metric(
+                "coop_rooms_public",
+                "Public rooms, including full and started rooms.",
+                publicRooms,
+            ),
+            metric(
+                "coop_rooms_private",
+                "Invite-only rooms, including started rooms.",
+                rooms.size - publicRooms,
+            ),
+            metric(
+                "coop_connections_total",
+                "Accepted connections since this relay started.",
+                counters.connections,
+                "counter",
+            ),
+            metric(
+                "coop_rooms_created_total",
+                "Rooms created since this relay started.",
+                counters.roomsCreated,
+                "counter",
+            ),
+            metric(
+                "coop_runs_started_total",
+                "Runs started since this relay started.",
+                counters.runsStarted,
+                "counter",
+            ),
+            metric(
+                "coop_players_connected_peak",
+                "Most simultaneous player sockets since startup.",
+                counters.peakPlayers,
+            ),
+            metric("coop_rooms_peak", "Most simultaneous rooms since startup.", counters.peakRooms),
+            metric(
+                "coop_connections_limit",
+                "Maximum simultaneous connections allowed.",
+                maxConnections,
+            ),
+            metric("coop_rooms_limit", "Maximum simultaneous rooms allowed.", maxRooms),
+        ].join("");
+    }
+
+    function startMetrics(path) {
+        if (!metrics || metricsServer) {
+            return metricsServer;
+        }
+        // A local reverse proxy can make public requests look like loopback
+        // connections. Keep metrics off the public listener altogether.
+        const local = createServer((req, res) => {
+            res.setHeader("Cache-Control", "no-store");
+            if (requestPath(req) !== `${path}/metrics`) {
+                res.writeHead(404);
+                res.end();
+            } else if (req.method !== "GET" && req.method !== "HEAD") {
+                res.writeHead(405, { Allow: "GET, HEAD" });
+                res.end();
+            } else {
+                res.writeHead(200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
+                res.end(req.method === "HEAD" ? undefined : metricsText());
+            }
+        });
+        const abort = new AbortController();
+        const stop = () => {
+            abort.abort();
+            local.closeAllConnections();
+        };
+        local.on("error", (error) => {
+            // The port's taken, most likely. Co-op goes on without metrics,
+            // and nothing's kept that looks like a listener.
+            console.error(
+                `Multiplayer metrics unavailable on 127.0.0.1:${metricsPort}: ${error.message}`,
+            );
+            stop();
+            if (metricsServer === local) {
+                metricsServer = undefined;
+                stopMetrics = () => {};
+            }
+        });
+        local.listen({ host: "127.0.0.1", port: metricsPort, signal: abort.signal }, () => {
+            console.log(
+                `Multiplayer metrics at http://127.0.0.1:${local.address().port}${path}/metrics (local only)`,
+            );
+        });
+        local.unref();
+        metricsServer = local;
+        stopMetrics = stop;
+        return local;
+    }
 
     function newCode() {
         for (;;) {
@@ -586,6 +804,7 @@ export function createRelay(limits = {}) {
             hostId: room.hostId,
             mapId: room.mapId,
             endless: room.endless,
+            hard: room.hard,
             started: room.started,
             members: room.members.map((client) => ({
                 id: client.id,
@@ -598,21 +817,22 @@ export function createRelay(limits = {}) {
         };
     }
 
+    // The view's encoded once, for everyone. The open rooms list catches up
+    // then too, so changing a room fast can't make it be worked out each time.
     function broadcastRoom(room) {
         openRooms = undefined;
-        const view = roomView(room);
+        const view = JSON.stringify(roomView(room));
         for (const member of room.members) {
-            member.connection.send({ t: "room", room: view, you: member.id });
+            const message = `{"t":"room","room":${view},"you":${JSON.stringify(member.id)}}`;
+            member.connection.sendFrame(0x1, Buffer.from(message, "utf8"));
         }
     }
 
-    // For what players say about themselves. It goes out now if it's been a
-    // while, and otherwise once, with the latest. Mid-run nobody's reading it,
-    // and the room hears it all when the run ends.
-    function broadcastMembers(room) {
-        if (room.started) {
-            return;
-        }
+    // Tells everyone in a room how it is now, if it's been a while, and
+    // otherwise once when it has, with the latest (see ROOM_UPDATE_MS)
+    function roomChanged(room) {
+        // The list's stale as soon as the room is, sent round now or later
+        openRooms = undefined;
         if (room.updateTimer) {
             room.updateWaiting = true;
             return;
@@ -622,10 +842,18 @@ export function createRelay(limits = {}) {
             room.updateTimer = undefined;
             if (room.updateWaiting && rooms.get(room.code) === room) {
                 room.updateWaiting = false;
-                broadcastMembers(room);
+                roomChanged(room);
             }
-        }, memberUpdateMs);
+        }, roomUpdateMs);
         room.updateTimer.unref?.();
+    }
+
+    // For what players say about themselves: mid-run nobody's reading it, and
+    // the room hears it all when the run ends
+    function membersChanged(room) {
+        if (!room.started) {
+            roomChanged(room);
+        }
     }
 
     function listing(room) {
@@ -638,6 +866,7 @@ export function createRelay(limits = {}) {
             max: MAX_PARTY,
             mapId: room.mapId,
             endless: room.endless,
+            hard: room.hard,
         };
     }
 
@@ -684,7 +913,7 @@ export function createRelay(limits = {}) {
                 member.connection.send({ t: "left", id: client.id });
             }
         }
-        broadcastRoom(room);
+        roomChanged(room);
     }
 
     function disband(room, reason) {
@@ -709,16 +938,21 @@ export function createRelay(limits = {}) {
         return roomName((name) => taken.has(name));
     }
 
-    // Rooms whose host is at this address
-    function roomsHostedFrom(address) {
-        let count = 0;
+    // Whether this player's address, or their network, hosts as many rooms as
+    // it can
+    function hostsTooMany(client) {
+        let fromAddress = 0;
+        let fromNetwork = 0;
         for (const room of rooms.values()) {
             const host = room.members.find((member) => member.id === room.hostId);
-            if (host?.address === address) {
-                count++;
+            if (host?.network === client.network) {
+                fromNetwork++;
+                if (host.address === client.address) {
+                    fromAddress++;
+                }
             }
         }
-        return count;
+        return fromAddress >= roomsPerAddress || fromNetwork >= roomsPerNetwork;
     }
 
     // Whether this address has done something (made a room, tried a wrong
@@ -734,12 +968,15 @@ export function createRelay(limits = {}) {
         return under;
     }
 
-    // Whether this address has tried too many codes that don't exist lately
-    function guessing(address) {
+    // Whether this address, or its whole network, has tried too many codes
+    // that don't exist lately
+    function guessing(client) {
         const now = Date.now();
+        const lately = (times, key) =>
+            (times.get(key) ?? []).filter((t) => now - t < 60_000).length;
         return (
-            (wrongCodesFrom.get(guesserKey(address)) ?? []).filter((t) => now - t < 60_000)
-                .length >= wrongCodesPerMinute
+            lately(wrongCodesFrom, client.address) >= wrongCodesPerMinute ||
+            lately(wrongCodesFromNetwork, client.network) >= wrongCodesPerNetworkPerMinute
         );
     }
 
@@ -779,14 +1016,19 @@ export function createRelay(limits = {}) {
     // What stops these players (with these unlocks, or their own) playing on a
     // map: the first one without it, as an error for whoever's asking, or
     // nothing. who: the player's name, said when it isn't the one asking.
-    function missingMap(players, mapId, endless, asking) {
+    function missingMap(players, mapId, endless, hard, asking) {
         if (anyMap) {
             return undefined;
         }
         for (const { client, unlocks = client.unlocks } of players) {
-            if (!hasUnlocked(unlocks, mapId, endless)) {
-                const need = { mapId, endless, ...(client !== asking && { who: client.name }) };
-                const what = `${mapId}${endless ? " (endless)" : ""}`;
+            if (!hasUnlocked(unlocks, mapId, endless, hard)) {
+                const need = {
+                    mapId,
+                    endless,
+                    hard,
+                    ...(client !== asking && { who: client.name }),
+                };
+                const what = `${mapId}${hard ? " (hard)" : ""}${endless ? " (endless)" : ""}`;
                 return {
                     t: "error",
                     message:
@@ -810,12 +1052,29 @@ export function createRelay(limits = {}) {
         return payload.length <= MAX_UP_BYTES && ++client.upsThisSecond <= MAX_UPS_PER_SECOND;
     }
 
+    // Whether a room's host can send this many bytes more through it, and if
+    // so, takes them off what it can (see MAX_HOST_BYTES_PER_SECOND)
+    function hostCanSend(room, bytes) {
+        const now = Date.now();
+        room.hostBytes = Math.min(
+            hostBurstBytes,
+            room.hostBytes + ((now - room.hostBytesAt) * hostBytesPerSecond) / 1000,
+        );
+        room.hostBytesAt = now;
+        if (bytes > room.hostBytes) {
+            return false;
+        }
+        room.hostBytes -= bytes;
+        return true;
+    }
+
     // payload: the message's bytes as they came, for passing on
     function handle(client, message, payload) {
         const room = client.room;
-        // Pings, browsing the list and a player's own updates don't keep
-        // anything open
-        if (message.t !== "ping" && message.t !== "list" && message.t !== "me") {
+        if (message.t !== "ping") {
+            client.lastActive = Date.now();
+        }
+        if (!IDLE_MESSAGES.has(message.t)) {
             client.lastActive = Date.now();
             if (room) {
                 room.lastActive = client.lastActive;
@@ -849,7 +1108,7 @@ export function createRelay(limits = {}) {
                     error(FULL_TEXT);
                     return;
                 }
-                if (roomsHostedFrom(client.address) >= roomsPerAddress) {
+                if (hostsTooMany(client)) {
                     error("There are too many rooms from your connection already.");
                     return;
                 }
@@ -857,6 +1116,7 @@ export function createRelay(limits = {}) {
                     [{ client, unlocks: cleanUnlocks(message.me?.unlocks ?? client.unlocks) }],
                     cleanId(message.mapId) || "lumbridge",
                     message.endless === true,
+                    message.hard === true,
                     client,
                 );
                 if (hostMissing) {
@@ -877,20 +1137,29 @@ export function createRelay(limits = {}) {
                     hostId: client.id,
                     mapId: cleanId(message.mapId) || "lumbridge",
                     endless: message.endless === true,
+                    hard: message.hard === true,
                     started: false,
                     members: [client],
                     order: nextRoomOrder++,
                     lastActive: Date.now(),
-                    // Addresses the host's kicked, who can't come back
+                    // The addresses (an IPv6 one by its /64) of players the
+                    // host's kicked: not their whole /48, which other homes
+                    // can share
                     kicked: new Set(),
+                    // What the host can send through it now (see
+                    // MAX_HOST_BYTES_PER_SECOND), as of when
+                    hostBytes: hostBurstBytes,
+                    hostBytesAt: Date.now(),
                 };
                 rooms.set(created.code, created);
+                counters.roomsCreated++;
+                counters.peakRooms = Math.max(counters.peakRooms, rooms.size);
                 client.room = created;
-                broadcastRoom(created);
+                roomChanged(created);
                 return;
             }
             case "join": {
-                if (guessing(client.address)) {
+                if (guessing(client)) {
                     error("That's a lot of wrong codes. Wait a minute and try again.");
                     return;
                 }
@@ -898,7 +1167,8 @@ export function createRelay(limits = {}) {
                     typeof message.code === "string" ? message.code.toUpperCase().slice(0, 16) : "";
                 const target = rooms.get(code);
                 if (!target) {
-                    underLimit(wrongCodesFrom, guesserKey(client.address), Infinity);
+                    underLimit(wrongCodesFrom, client.address, Infinity);
+                    underLimit(wrongCodesFromNetwork, client.network, Infinity);
                     error(`There's no room ${code || "with that code"}.`);
                     return;
                 }
@@ -921,6 +1191,7 @@ export function createRelay(limits = {}) {
                     [{ client, unlocks: cleanUnlocks(message.me?.unlocks ?? client.unlocks) }],
                     target.mapId,
                     target.endless,
+                    target.hard,
                     client,
                 );
                 if (missing) {
@@ -945,7 +1216,7 @@ export function createRelay(limits = {}) {
                 client.ready = false;
                 target.members.push(client);
                 client.room = target;
-                broadcastRoom(target);
+                roomChanged(target);
                 return;
             }
             case "leave":
@@ -954,7 +1225,7 @@ export function createRelay(limits = {}) {
             case "me":
                 if (room && payload.length <= MAX_ME_BYTES) {
                     setMember(client, message);
-                    broadcastMembers(room);
+                    membersChanged(room);
                 }
                 return;
             case "rename":
@@ -967,7 +1238,7 @@ export function createRelay(limits = {}) {
                     playerNames.add(name);
                     client.connection.send({ t: "named", name: client.name });
                     if (room) {
-                        broadcastMembers(room);
+                        membersChanged(room);
                     }
                 }
                 return;
@@ -982,11 +1253,13 @@ export function createRelay(limits = {}) {
                             : room.mapId;
                     const endless =
                         message.endless !== undefined ? message.endless === true : room.endless;
+                    const hard = message.hard !== undefined ? message.hard === true : room.hard;
                     // Only a map everyone in the room has
                     const missing = missingMap(
                         room.members.map((member) => ({ client: member })),
                         mapId,
                         endless,
+                        hard,
                         client,
                     );
                     if (missing) {
@@ -994,8 +1267,9 @@ export function createRelay(limits = {}) {
                     } else {
                         room.mapId = mapId;
                         room.endless = endless;
+                        room.hard = hard;
                     }
-                    broadcastRoom(room);
+                    roomChanged(room);
                 }
                 return;
             case "kick": {
@@ -1020,6 +1294,7 @@ export function createRelay(limits = {}) {
                         room.members.map((member) => ({ client: member })),
                         room.mapId,
                         room.endless,
+                        room.hard,
                         client,
                     );
                     if (missing) {
@@ -1031,19 +1306,28 @@ export function createRelay(limits = {}) {
                         error(versionError);
                         return;
                     }
+                    if (!hostCanSend(room, payload.length)) {
+                        client.connection.close(1008);
+                        return;
+                    }
                     room.started = true;
+                    const start = encodeFrame(
+                        0x1,
+                        Buffer.from(JSON.stringify({ t: "start", game: message.game }), "utf8"),
+                    );
+                    counters.runsStarted++;
                     for (const member of room.members) {
                         member.ready = false;
-                        member.connection.send({ t: "start", game: message.game });
+                        member.connection.write(start);
                     }
-                    broadcastRoom(room);
+                    roomChanged(room);
                 }
                 return;
             case "end":
                 // The host's back in the lobby: the room is again
                 if (isHost && room.started) {
                     room.started = false;
-                    broadcastRoom(room);
+                    roomChanged(room);
                 }
                 return;
             // The game's own traffic, nearly all of what comes through, goes on
@@ -1059,6 +1343,10 @@ export function createRelay(limits = {}) {
             case "down":
                 // The host's frames, for everyone else: one frame for them all
                 if (isHost && room.started) {
+                    if (!hostCanSend(room, payload.length)) {
+                        client.connection.close(1008);
+                        return;
+                    }
                     const frame = encodeFrame(0x1, payload);
                     for (const member of room.members) {
                         if (member !== client) {
@@ -1089,8 +1377,11 @@ export function createRelay(limits = {}) {
                     "relay's limits. Set PROXY=local (or PROXY=cloudflare behind Cloudflare).",
             );
         }
-        const connections = connectionsFrom.get(address) ?? 0;
-        if (connections >= connectionsPerAddress) {
+        const network = networkKey(address);
+        if (
+            (connectionsFrom.get(address) ?? 0) >= connectionsPerAddress ||
+            (connectionsFromNetwork.get(network) ?? 0) >= connectionsPerNetwork
+        ) {
             refuse(socket, "429 Too Many Requests");
             return;
         }
@@ -1098,7 +1389,8 @@ export function createRelay(limits = {}) {
             refuse(socket, "503 Service Unavailable");
             return;
         }
-        connectionsFrom.set(address, connections + 1);
+        addCount(connectionsFrom, address, 1);
+        addCount(connectionsFromNetwork, network, 1);
         socket.write(
             "HTTP/1.1 101 Switching Protocols\r\n" +
                 "Upgrade: websocket\r\n" +
@@ -1116,6 +1408,7 @@ export function createRelay(limits = {}) {
             room: undefined,
             connection: undefined,
             address,
+            network,
             lastActive: Date.now(),
             upSecond: 0,
             upsThisSecond: 0,
@@ -1126,17 +1419,15 @@ export function createRelay(limits = {}) {
             () => {
                 clients.delete(client);
                 playerNames.delete(client.name);
-                const left = (connectionsFrom.get(address) ?? 1) - 1;
-                if (left > 0) {
-                    connectionsFrom.set(address, left);
-                } else {
-                    connectionsFrom.delete(address);
-                }
+                addCount(connectionsFrom, address, -1);
+                addCount(connectionsFromNetwork, network, -1);
                 leaveRoom(client);
             },
             bytesPerSecond,
         );
         clients.add(client);
+        counters.connections++;
+        counters.peakPlayers = Math.max(counters.peakPlayers, clients.size);
         playerNames.add(client.name);
         // anyMap: the game shows rooms on maps the player hasn't got as locked
         // unless it's on
@@ -1169,7 +1460,7 @@ export function createRelay(limits = {}) {
                 client.connection.close(1001);
             }
         }
-        for (const times of [createdFrom, wrongCodesFrom, joinedFrom]) {
+        for (const times of [createdFrom, wrongCodesFrom, wrongCodesFromNetwork, joinedFrom]) {
             for (const [address, at] of times) {
                 if (at.every((t) => now - t >= 60_000)) {
                     times.delete(address);
@@ -1190,13 +1481,24 @@ export function createRelay(limits = {}) {
                     refuse(socket, "404 Not Found");
                 }
             });
+            const localMetrics = startMetrics(path);
+            server.once("close", stopMetrics);
+            return localMetrics;
         },
         handleUpgrade,
         // Answers a plain GET of path with what's going on, for the game to
         // see co-op's there (from another site too, with VITE_COOP_URL).
         // False for any other request, to go to whatever else serves.
         handleRequest(req, res, path = RELAY_PATH) {
-            if (requestPath(req) !== path || (req.method !== "GET" && req.method !== "HEAD")) {
+            const requestedPath = requestPath(req);
+            if (requestedPath === `${path}/metrics`) {
+                // Never expose metrics through the public server or its proxy.
+                res.setHeader("Cache-Control", "no-store");
+                res.writeHead(404);
+                res.end();
+                return true;
+            }
+            if (requestedPath !== path || (req.method !== "GET" && req.method !== "HEAD")) {
                 return false;
             }
             res.writeHead(200, {
@@ -1205,14 +1507,7 @@ export function createRelay(limits = {}) {
                 "Access-Control-Allow-Origin": "*",
                 "Cross-Origin-Resource-Policy": "cross-origin",
             });
-            res.end(
-                JSON.stringify({
-                    coop: true,
-                    players: clients.size,
-                    rooms: rooms.size,
-                    full: rooms.size >= maxRooms,
-                }),
-            );
+            res.end(JSON.stringify({ coop: true }));
             return true;
         },
         // Closes idle rooms as if it were this time (for the tests)
@@ -1221,6 +1516,7 @@ export function createRelay(limits = {}) {
             clearInterval(pinger);
             clearInterval(sweeper);
             stopCloudflare();
+            stopMetrics();
             for (const client of clients) {
                 client.connection.close(1001);
             }

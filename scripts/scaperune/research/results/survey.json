@@ -1,0 +1,4566 @@
+{
+    "squares": 935,
+    "totalTiles": 3829760,
+    "storedHeightsPct": 94,
+    "slopeCumulativePct": {
+        "0": 66.04,
+        "2": 74.56,
+        "4": 82.97,
+        "8": 90.72,
+        "12": 93.94,
+        "16": 95.91,
+        "24": 98.05,
+        "32": 99.09,
+        "44": 99.64,
+        "64": 99.9,
+        "80": 99.96,
+        "100": 99.98,
+        "127": 100
+    },
+    "walkCumulativePct": {
+        "0": 74.71,
+        "2": 82.11,
+        "4": 89.6,
+        "8": 96.03,
+        "12": 98.12,
+        "16": 99.03,
+        "24": 99.69,
+        "32": 99.89,
+        "44": 99.96,
+        "64": 99.99,
+        "80": 99.99,
+        "100": 100,
+        "127": 100
+    },
+    "steepestSquares": [
+        {
+            "x": 42,
+            "y": 60,
+            "stored": 4093,
+            "steepest": 194,
+            "walkSteepest": 0,
+            "range": [0, 255],
+            "locs": 127
+        },
+        {
+            "x": 45,
+            "y": 56,
+            "stored": 4096,
+            "steepest": 194,
+            "walkSteepest": 65,
+            "range": [0, 210],
+            "locs": 1773
+        },
+        {
+            "x": 42,
+            "y": 59,
+            "stored": 3677,
+            "steepest": 190,
+            "walkSteepest": 35,
+            "range": [0, 255],
+            "locs": 2563
+        },
+        {
+            "x": 39,
+            "y": 54,
+            "stored": 3691,
+            "steepest": 180,
+            "walkSteepest": 93,
+            "range": [0, 249],
+            "locs": 2223
+        },
+        {
+            "x": 43,
+            "y": 56,
+            "stored": 2855,
+            "steepest": 176,
+            "walkSteepest": 41,
+            "range": [0, 234],
+            "locs": 1585
+        },
+        {
+            "x": 44,
+            "y": 56,
+            "stored": 4012,
+            "steepest": 176,
+            "walkSteepest": 22,
+            "range": [18, 226],
+            "locs": 2412
+        },
+        {
+            "x": 44,
+            "y": 57,
+            "stored": 4096,
+            "steepest": 170,
+            "walkSteepest": 30,
+            "range": [28, 234],
+            "locs": 2238
+        },
+        {
+            "x": 45,
+            "y": 57,
+            "stored": 4094,
+            "steepest": 170,
+            "walkSteepest": 19,
+            "range": [28, 255],
+            "locs": 1866
+        },
+        {
+            "x": 55,
+            "y": 55,
+            "stored": 4096,
+            "steepest": 170,
+            "walkSteepest": 170,
+            "range": [0, 170],
+            "locs": 2625
+        },
+        {
+            "x": 45,
+            "y": 55,
+            "stored": 3661,
+            "steepest": 151,
+            "walkSteepest": 43,
+            "range": [0, 194],
+            "locs": 3539
+        },
+        {
+            "x": 38,
+            "y": 54,
+            "stored": 3153,
+            "steepest": 150,
+            "walkSteepest": 29,
+            "range": [0, 229],
+            "locs": 4108
+        },
+        {
+            "x": 24,
+            "y": 63,
+            "stored": 4095,
+            "steepest": 143,
+            "walkSteepest": 5,
+            "range": [0, 255],
+            "locs": 347
+        }
+    ],
+    "walkSteepSquares": [
+        {
+            "x": 55,
+            "y": 55,
+            "stored": 4096,
+            "steepest": 170,
+            "walkSteepest": 170,
+            "range": [0, 170],
+            "locs": 2625
+        },
+        {
+            "x": 43,
+            "y": 58,
+            "stored": 4086,
+            "steepest": 137,
+            "walkSteepest": 137,
+            "range": [0, 222],
+            "locs": 529
+        },
+        {
+            "x": 26,
+            "y": 62,
+            "stored": 4094,
+            "steepest": 117,
+            "walkSteepest": 117,
+            "range": [0, 247],
+            "locs": 139
+        },
+        {
+            "x": 24,
+            "y": 62,
+            "stored": 4095,
+            "steepest": 108,
+            "walkSteepest": 108,
+            "range": [0, 255],
+            "locs": 111
+        },
+        {
+            "x": 39,
+            "y": 54,
+            "stored": 3691,
+            "steepest": 180,
+            "walkSteepest": 93,
+            "range": [0, 249],
+            "locs": 2223
+        },
+        {
+            "x": 23,
+            "y": 61,
+            "stored": 4090,
+            "steepest": 85,
+            "walkSteepest": 85,
+            "range": [0, 255],
+            "locs": 76
+        },
+        {
+            "x": 51,
+            "y": 61,
+            "stored": 4030,
+            "steepest": 84,
+            "walkSteepest": 84,
+            "range": [0, 143],
+            "locs": 2106
+        },
+        {
+            "x": 21,
+            "y": 49,
+            "stored": 3876,
+            "steepest": 80,
+            "walkSteepest": 80,
+            "range": [0, 137],
+            "locs": 1682
+        },
+        {
+            "x": 38,
+            "y": 51,
+            "stored": 2824,
+            "steepest": 89,
+            "walkSteepest": 80,
+            "range": [14, 155],
+            "locs": 2565
+        },
+        {
+            "x": 47,
+            "y": 54,
+            "stored": 4096,
+            "steepest": 79,
+            "walkSteepest": 79,
+            "range": [14, 220],
+            "locs": 2791
+        },
+        {
+            "x": 52,
+            "y": 60,
+            "stored": 4018,
+            "steepest": 76,
+            "walkSteepest": 76,
+            "range": [0, 153],
+            "locs": 1004
+        },
+        {
+            "x": 53,
+            "y": 50,
+            "stored": 3942,
+            "steepest": 90,
+            "walkSteepest": 74,
+            "range": [0, 158],
+            "locs": 1236
+        }
+    ],
+    "rock": [
+        {
+            "key": "325:22",
+            "name": "#325",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 13511,
+            "steep": 2236,
+            "steepShare": 0.17,
+            "blockedFloorShare": 0.23,
+            "rotations": [3390, 3315, 3394, 3412],
+            "squares": [
+                ["46,58", 629],
+                ["27,55", 559],
+                ["49,57", 547]
+            ],
+            "overlays": [
+                [14, 3893],
+                [15, 221],
+                [16, 84]
+            ],
+            "type": 22
+        },
+        {
+            "key": "320:22",
+            "name": "#320",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 8335,
+            "steep": 2106,
+            "steepShare": 0.25,
+            "blockedFloorShare": 0.38,
+            "rotations": [2113, 2079, 2035, 2108],
+            "squares": [
+                ["52,53", 502],
+                ["44,54", 459],
+                ["39,47", 286]
+            ],
+            "overlays": [
+                [22, 3635],
+                [23, 574],
+                [101, 225]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3709:22",
+            "name": "#3709",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 9964,
+            "steep": 1810,
+            "steepShare": 0.18,
+            "blockedFloorShare": 0.38,
+            "rotations": [2526, 2481, 2461, 2496],
+            "squares": [
+                ["45,56", 1516],
+                ["44,56", 1207],
+                ["44,57", 1170]
+            ],
+            "overlays": [
+                [83, 3636],
+                [82, 219],
+                [80, 42]
+            ],
+            "type": 22
+        },
+        {
+            "key": "185:22",
+            "name": "#185",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 6646,
+            "steep": 1758,
+            "steepShare": 0.26,
+            "blockedFloorShare": 0.3,
+            "rotations": [1688, 1712, 1600, 1646],
+            "squares": [
+                ["33,53", 709],
+                ["46,55", 649],
+                ["49,55", 609]
+            ],
+            "overlays": [
+                [14, 3091],
+                [15, 58],
+                [108, 19]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3703:22",
+            "name": "#3703",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 6739,
+            "steep": 1688,
+            "steepShare": 0.25,
+            "blockedFloorShare": 0.5,
+            "rotations": [1644, 1708, 1664, 1723],
+            "squares": [
+                ["44,56", 568],
+                ["43,56", 548],
+                ["20,53", 486]
+            ],
+            "overlays": [
+                [83, 2401],
+                [222, 498],
+                [82, 318]
+            ],
+            "type": 22
+        },
+        {
+            "key": "14483:22",
+            "name": "#14483",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 9719,
+            "steep": 1422,
+            "steepShare": 0.15,
+            "blockedFloorShare": 0.25,
+            "rotations": [2390, 2342, 2505, 2482],
+            "squares": [
+                ["51,57", 1152],
+                ["48,56", 1015],
+                ["46,56", 842]
+            ],
+            "overlays": [
+                [99, 1608],
+                [2, 345],
+                [10, 66]
+            ],
+            "type": 22
+        },
+        {
+            "key": "336:22",
+            "name": "#336",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 11173,
+            "steep": 1293,
+            "steepShare": 0.12,
+            "blockedFloorShare": 0.19,
+            "rotations": [2775, 2788, 2813, 2797],
+            "squares": [
+                ["50,59", 618],
+                ["50,58", 608],
+                ["46,59", 560]
+            ],
+            "overlays": [
+                [10, 1377],
+                [2, 758],
+                [3, 534]
+            ],
+            "type": 22
+        },
+        {
+            "key": "34384:10",
+            "name": "#34384",
+            "size": "1x1",
+            "clip": 1,
+            "contour": 0,
+            "count": 2019,
+            "steep": 1233,
+            "steepShare": 0.61,
+            "blockedFloorShare": 0.02,
+            "rotations": [488, 563, 485, 483],
+            "squares": [
+                ["20,59", 1131],
+                ["20,58", 292],
+                ["21,59", 192]
+            ],
+            "overlays": [[115, 2019]],
+            "type": 10
+        },
+        {
+            "key": "561:22",
+            "name": "#561",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 6929,
+            "steep": 1195,
+            "steepShare": 0.17,
+            "blockedFloorShare": 0.29,
+            "rotations": [1791, 1721, 1727, 1690],
+            "squares": [
+                ["44,59", 1363],
+                ["46,61", 1253],
+                ["46,60", 601]
+            ],
+            "overlays": [
+                [1, 330],
+                [30, 245],
+                [22, 237]
+            ],
+            "type": 22
+        },
+        {
+            "key": "14501:22",
+            "name": "#14501",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 7376,
+            "steep": 1046,
+            "steepShare": 0.14,
+            "blockedFloorShare": 0.12,
+            "rotations": [1926, 1893, 1773, 1784],
+            "squares": [
+                ["47,61", 1068],
+                ["48,61", 1040],
+                ["50,61", 952]
+            ],
+            "overlays": [
+                [11, 643],
+                [132, 67],
+                [2, 15]
+            ],
+            "type": 22
+        },
+        {
+            "key": "11439:22",
+            "name": "#11439",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 3274,
+            "steep": 888,
+            "steepShare": 0.27,
+            "blockedFloorShare": 0.41,
+            "rotations": [819, 804, 815, 836],
+            "squares": [
+                ["50,61", 507],
+                ["19,52", 282],
+                ["23,60", 258]
+            ],
+            "overlays": [
+                [3, 1294],
+                [4, 63],
+                [83, 52]
+            ],
+            "type": 22
+        },
+        {
+            "key": "4343:22",
+            "name": "#4343",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 4778,
+            "steep": 875,
+            "steepShare": 0.18,
+            "blockedFloorShare": 0.38,
+            "rotations": [1194, 1183, 1229, 1172],
+            "squares": [
+                ["38,47", 524],
+                ["34,43", 481],
+                ["36,57", 352]
+            ],
+            "overlays": [
+                [14, 1760],
+                [81, 264],
+                [89, 171]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3614:22",
+            "name": "#3614",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 2046,
+            "steep": 861,
+            "steepShare": 0.42,
+            "blockedFloorShare": 0.54,
+            "rotations": [477, 498, 528, 543],
+            "squares": [
+                ["24,54", 149],
+                ["24,55", 148],
+                ["22,54", 137]
+            ],
+            "overlays": [
+                [185, 853],
+                [106, 541],
+                [81, 401]
+            ],
+            "type": 22
+        },
+        {
+            "key": "321:22",
+            "name": "#321",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1903,
+            "steep": 746,
+            "steepShare": 0.39,
+            "blockedFloorShare": 0.58,
+            "rotations": [474, 479, 476, 474],
+            "squares": [
+                ["48,47", 138],
+                ["49,48", 109],
+                ["46,54", 100]
+            ],
+            "overlays": [
+                [22, 969],
+                [23, 290],
+                [101, 39]
+            ],
+            "type": 22
+        },
+        {
+            "key": "51827:22",
+            "name": "#51827",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 5036,
+            "steep": 714,
+            "steepShare": 0.14,
+            "blockedFloorShare": 0.24,
+            "rotations": [1254, 1245, 1241, 1296],
+            "squares": [
+                ["25,47", 376],
+                ["25,49", 376],
+                ["26,47", 348]
+            ],
+            "overlays": [
+                [80, 1150],
+                [377, 458],
+                [326, 276]
+            ],
+            "type": 22
+        },
+        {
+            "key": "85:0",
+            "name": "#85",
+            "size": "1x1",
+            "clip": 2,
+            "contour": -1,
+            "count": 1694,
+            "steep": 713,
+            "steepShare": 0.42,
+            "blockedFloorShare": 0.58,
+            "rotations": [410, 534, 349, 401],
+            "squares": [
+                ["52,50", 216],
+                ["23,51", 97],
+                ["52,49", 96]
+            ],
+            "overlays": [
+                [60, 208],
+                [99, 148],
+                [77, 127]
+            ],
+            "type": 0
+        },
+        {
+            "key": "333:22",
+            "name": "#333",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 3105,
+            "steep": 666,
+            "steepShare": 0.21,
+            "blockedFloorShare": 0.2,
+            "rotations": [764, 756, 810, 775],
+            "squares": [
+                ["23,58", 342],
+                ["48,60", 292],
+                ["50,59", 278]
+            ],
+            "overlays": [
+                [132, 71],
+                [11, 28],
+                [99, 1]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3949:22",
+            "name": "#3949",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 5865,
+            "steep": 643,
+            "steepShare": 0.11,
+            "blockedFloorShare": 0.14,
+            "rotations": [1521, 1452, 1476, 1416],
+            "squares": [
+                ["26,47", 422],
+                ["50,53", 267],
+                ["48,53", 246]
+            ],
+            "overlays": [
+                [81, 1339],
+                [14, 736],
+                [185, 351]
+            ],
+            "type": 22
+        },
+        {
+            "key": "339:22",
+            "name": "#339",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 4239,
+            "steep": 614,
+            "steepShare": 0.14,
+            "blockedFloorShare": 0.24,
+            "rotations": [1095, 1036, 1066, 1042],
+            "squares": [
+                ["52,53", 644],
+                ["19,55", 540],
+                ["19,56", 338]
+            ],
+            "overlays": [
+                [21, 793],
+                [14, 757],
+                [80, 88]
+            ],
+            "type": 22
+        },
+        {
+            "key": "326:22",
+            "name": "#326",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 2559,
+            "steep": 568,
+            "steepShare": 0.22,
+            "blockedFloorShare": 0.3,
+            "rotations": [613, 632, 645, 669],
+            "squares": [
+                ["39,46", 122],
+                ["20,45", 109],
+                ["27,55", 107]
+            ],
+            "overlays": [
+                [14, 835],
+                [15, 33],
+                [81, 28]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3706:22",
+            "name": "#3706",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1457,
+            "steep": 512,
+            "steepShare": 0.35,
+            "blockedFloorShare": 0.56,
+            "rotations": [379, 360, 366, 352],
+            "squares": [
+                ["45,57", 374],
+                ["37,48", 369],
+                ["44,55", 243]
+            ],
+            "overlays": [
+                [83, 795],
+                [81, 149],
+                [82, 77]
+            ],
+            "type": 22
+        },
+        {
+            "key": "4340:22",
+            "name": "#4340",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 3603,
+            "steep": 489,
+            "steepShare": 0.14,
+            "blockedFloorShare": 0.16,
+            "rotations": [924, 856, 910, 913],
+            "squares": [
+                ["41,57", 1135],
+                ["39,58", 301],
+                ["33,60", 279]
+            ],
+            "overlays": [
+                [88, 496],
+                [119, 146],
+                [81, 105]
+            ],
+            "type": 22
+        },
+        {
+            "key": "42352:10",
+            "name": "#42352",
+            "size": "1x1",
+            "clip": 1,
+            "contour": 0,
+            "count": 684,
+            "steep": 485,
+            "steepShare": 0.71,
+            "blockedFloorShare": 1,
+            "rotations": [167, 176, 163, 178],
+            "squares": [
+                ["23,57", 331],
+                ["23,58", 309],
+                ["24,57", 29]
+            ],
+            "overlays": [
+                [99, 337],
+                [11, 302],
+                [37, 44]
+            ],
+            "type": 10
+        },
+        {
+            "key": "560:22",
+            "name": "#560",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 3183,
+            "steep": 466,
+            "steepShare": 0.15,
+            "blockedFloorShare": 0.26,
+            "rotations": [776, 785, 831, 791],
+            "squares": [
+                ["44,59", 495],
+                ["44,61", 294],
+                ["44,60", 245]
+            ],
+            "overlays": [
+                [82, 159],
+                [22, 121],
+                [247, 76]
+            ],
+            "type": 22
+        },
+        {
+            "key": "5328:22",
+            "name": "#5328",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1402,
+            "steep": 459,
+            "steepShare": 0.33,
+            "blockedFloorShare": 0.4,
+            "rotations": [363, 376, 330, 333],
+            "squares": [
+                ["57,54", 349],
+                ["57,55", 304],
+                ["44,61", 135]
+            ],
+            "overlays": [
+                [222, 354],
+                [102, 310],
+                [82, 140]
+            ],
+            "type": 22
+        },
+        {
+            "key": "48523:22",
+            "name": "#48523",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 526,
+            "steep": 424,
+            "steepShare": 0.81,
+            "blockedFloorShare": 0.93,
+            "rotations": [128, 124, 136, 138],
+            "squares": [
+                ["17,52", 165],
+                ["17,53", 138],
+                ["18,53", 98]
+            ],
+            "overlays": [
+                [222, 504],
+                [442, 2],
+                [272, 1]
+            ],
+            "type": 22
+        },
+        {
+            "key": "319:22",
+            "name": "#319",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1702,
+            "steep": 422,
+            "steepShare": 0.25,
+            "blockedFloorShare": 0.38,
+            "rotations": [458, 460, 403, 381],
+            "squares": [
+                ["46,54", 148],
+                ["52,53", 134],
+                ["43,54", 91]
+            ],
+            "overlays": [
+                [22, 753],
+                [23, 100],
+                [106, 70]
+            ],
+            "type": 22
+        },
+        {
+            "key": "334:22",
+            "name": "#334",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1499,
+            "steep": 404,
+            "steepShare": 0.27,
+            "blockedFloorShare": 0.26,
+            "rotations": [378, 380, 374, 367],
+            "squares": [
+                ["47,60", 164],
+                ["23,58", 151],
+                ["50,59", 143]
+            ],
+            "overlays": [
+                [132, 31],
+                [11, 8],
+                [19, 2]
+            ],
+            "type": 22
+        },
+        {
+            "key": "315:22",
+            "name": "#315",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 2630,
+            "steep": 359,
+            "steepShare": 0.14,
+            "blockedFloorShare": 0.15,
+            "rotations": [642, 698, 673, 617],
+            "squares": [
+                ["46,50", 354],
+                ["58,59", 319],
+                ["44,49", 258]
+            ],
+            "overlays": [
+                [16, 706],
+                [17, 144],
+                [101, 48]
+            ],
+            "type": 22
+        },
+        {
+            "key": "559:22",
+            "name": "#559",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 2614,
+            "steep": 356,
+            "steepShare": 0.14,
+            "blockedFloorShare": 0.34,
+            "rotations": [643, 661, 655, 655],
+            "squares": [
+                ["44,60", 296],
+                ["46,60", 259],
+                ["44,61", 185]
+            ],
+            "overlays": [
+                [247, 128],
+                [3, 97],
+                [171, 44]
+            ],
+            "type": 22
+        },
+        {
+            "key": "332:22",
+            "name": "#332",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1365,
+            "steep": 348,
+            "steepShare": 0.25,
+            "blockedFloorShare": 0.19,
+            "rotations": [335, 348, 340, 342],
+            "squares": [
+                ["23,58", 221],
+                ["47,60", 169],
+                ["48,60", 138]
+            ],
+            "overlays": [
+                [132, 47],
+                [14, 2],
+                [228, 1]
+            ],
+            "type": 22
+        },
+        {
+            "key": "44066:0",
+            "name": "#44066",
+            "size": "1x1",
+            "clip": 0,
+            "contour": -1,
+            "count": 1226,
+            "steep": 347,
+            "steepShare": 0.28,
+            "blockedFloorShare": 0.76,
+            "rotations": [278, 318, 284, 346],
+            "squares": [
+                ["18,53", 224],
+                ["19,48", 160],
+                ["20,47", 144]
+            ],
+            "overlays": [
+                [276, 611],
+                [272, 103],
+                [451, 66]
+            ],
+            "type": 0
+        },
+        {
+            "key": "4342:22",
+            "name": "#4342",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1174,
+            "steep": 327,
+            "steepShare": 0.28,
+            "blockedFloorShare": 0.6,
+            "rotations": [309, 279, 292, 294],
+            "squares": [
+                ["33,44", 231],
+                ["34,43", 85],
+                ["38,47", 74]
+            ],
+            "overlays": [
+                [14, 703],
+                [81, 32],
+                [89, 32]
+            ],
+            "type": 22
+        },
+        {
+            "key": "14482:22",
+            "name": "#14482",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1727,
+            "steep": 319,
+            "steepShare": 0.18,
+            "blockedFloorShare": 0.31,
+            "rotations": [456, 440, 389, 442],
+            "squares": [
+                ["22,58", 215],
+                ["47,56", 203],
+                ["48,56", 193]
+            ],
+            "overlays": [
+                [99, 321],
+                [2, 161],
+                [132, 9]
+            ],
+            "type": 22
+        },
+        {
+            "key": "324:22",
+            "name": "#324",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1542,
+            "steep": 312,
+            "steepShare": 0.2,
+            "blockedFloorShare": 0.29,
+            "rotations": [399, 368, 382, 393],
+            "squares": [
+                ["25,51", 83],
+                ["37,51", 78],
+                ["39,54", 74]
+            ],
+            "overlays": [
+                [14, 527],
+                [15, 18],
+                [16, 10]
+            ],
+            "type": 22
+        },
+        {
+            "key": "14416:10",
+            "name": "#14416",
+            "size": "1x1",
+            "clip": 0,
+            "contour": 0,
+            "count": 1176,
+            "steep": 305,
+            "steepShare": 0.26,
+            "blockedFloorShare": 0.41,
+            "rotations": [278, 332, 262, 304],
+            "squares": [
+                ["23,59", 166],
+                ["24,59", 87],
+                ["48,60", 85]
+            ],
+            "overlays": [
+                [152, 11],
+                [132, 1]
+            ],
+            "type": 10
+        },
+        {
+            "key": "10845:22",
+            "name": "#10845",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1011,
+            "steep": 305,
+            "steepShare": 0.3,
+            "blockedFloorShare": 0.48,
+            "rotations": [258, 246, 256, 251],
+            "squares": [
+                ["52,44", 221],
+                ["52,50", 220],
+                ["27,46", 105]
+            ],
+            "overlays": [
+                [26, 168],
+                [226, 167],
+                [60, 116]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3613:22",
+            "name": "#3613",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 531,
+            "steep": 278,
+            "steepShare": 0.52,
+            "blockedFloorShare": 0.83,
+            "rotations": [135, 142, 131, 123],
+            "squares": [
+                ["22,54", 107],
+                ["22,55", 68],
+                ["24,54", 54]
+            ],
+            "overlays": [
+                [185, 358],
+                [81, 130],
+                [106, 30]
+            ],
+            "type": 22
+        },
+        {
+            "key": "15630:22",
+            "name": "#15630",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 471,
+            "steep": 267,
+            "steepShare": 0.57,
+            "blockedFloorShare": 0.92,
+            "rotations": [122, 112, 115, 122],
+            "squares": [
+                ["58,58", 247],
+                ["27,60", 76],
+                ["58,59", 62]
+            ],
+            "overlays": [
+                [4, 338],
+                [3, 57]
+            ],
+            "type": 22
+        },
+        {
+            "key": "6617:22",
+            "name": "#6617",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 694,
+            "steep": 258,
+            "steepShare": 0.37,
+            "blockedFloorShare": 1,
+            "rotations": [180, 156, 180, 178],
+            "squares": [
+                ["51,43", 268],
+                ["50,45", 258],
+                ["49,42", 168]
+            ],
+            "overlays": [
+                [26, 436],
+                [207, 258]
+            ],
+            "type": 22
+        },
+        {
+            "key": "42097:22",
+            "name": "#42097",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 280,
+            "steep": 256,
+            "steepShare": 0.91,
+            "blockedFloorShare": 1,
+            "rotations": [60, 79, 67, 74],
+            "squares": [
+                ["26,49", 164],
+                ["22,54", 78],
+                ["23,49", 38]
+            ],
+            "overlays": [
+                [14, 242],
+                [222, 38]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3704:22",
+            "name": "#3704",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1080,
+            "steep": 247,
+            "steepShare": 0.23,
+            "blockedFloorShare": 0.44,
+            "rotations": [282, 260, 274, 264],
+            "squares": [
+                ["43,57", 132],
+                ["22,48", 104],
+                ["22,47", 72]
+            ],
+            "overlays": [
+                [83, 208],
+                [222, 92],
+                [82, 76]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3170:22",
+            "name": "#3170",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 996,
+            "steep": 246,
+            "steepShare": 0.25,
+            "blockedFloorShare": 0.37,
+            "rotations": [232, 255, 249, 260],
+            "squares": [
+                ["52,51", 328],
+                ["52,49", 252],
+                ["52,50", 174]
+            ],
+            "overlays": [
+                [77, 294],
+                [227, 128],
+                [196, 13]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3702:22",
+            "name": "#3702",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1176,
+            "steep": 241,
+            "steepShare": 0.2,
+            "blockedFloorShare": 0.55,
+            "rotations": [311, 274, 303, 288],
+            "squares": [
+                ["34,45", 125],
+                ["20,53", 108],
+                ["20,52", 90]
+            ],
+            "overlays": [
+                [83, 531],
+                [222, 50],
+                [82, 29]
+            ],
+            "type": 22
+        },
+        {
+            "key": "48524:22",
+            "name": "#48524",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 289,
+            "steep": 240,
+            "steepShare": 0.83,
+            "blockedFloorShare": 0.95,
+            "rotations": [78, 76, 88, 47],
+            "squares": [
+                ["17,52", 101],
+                ["17,53", 92],
+                ["18,53", 38]
+            ],
+            "overlays": [[222, 284]],
+            "type": 22
+        },
+        {
+            "key": "3615:22",
+            "name": "#3615",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 405,
+            "steep": 230,
+            "steepShare": 0.57,
+            "blockedFloorShare": 0.8,
+            "rotations": [106, 102, 92, 105],
+            "squares": [
+                ["22,55", 80],
+                ["24,57", 39],
+                ["22,54", 31]
+            ],
+            "overlays": [
+                [185, 248],
+                [81, 109],
+                [106, 23]
+            ],
+            "type": 22
+        },
+        {
+            "key": "48525:22",
+            "name": "#48525",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 286,
+            "steep": 223,
+            "steepShare": 0.78,
+            "blockedFloorShare": 0.93,
+            "rotations": [72, 62, 66, 86],
+            "squares": [
+                ["17,52", 102],
+                ["17,53", 74],
+                ["18,53", 49]
+            ],
+            "overlays": [[222, 271]],
+            "type": 22
+        },
+        {
+            "key": "186:22",
+            "name": "#186",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1272,
+            "steep": 219,
+            "steepShare": 0.17,
+            "blockedFloorShare": 0.27,
+            "rotations": [311, 302, 316, 343],
+            "squares": [
+                ["33,53", 130],
+                ["55,53", 127],
+                ["46,55", 101]
+            ],
+            "overlays": [
+                [14, 527],
+                [15, 20],
+                [89, 7]
+            ],
+            "type": 22
+        },
+        {
+            "key": "184:22",
+            "name": "#184",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 806,
+            "steep": 212,
+            "steepShare": 0.26,
+            "blockedFloorShare": 0.39,
+            "rotations": [194, 191, 219, 202],
+            "squares": [
+                ["33,53", 85],
+                ["36,51", 78],
+                ["55,53", 54]
+            ],
+            "overlays": [
+                [14, 357],
+                [108, 6],
+                [15, 5]
+            ],
+            "type": 22
+        },
+        {
+            "key": "48627:22",
+            "name": "#48627",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 404,
+            "steep": 208,
+            "steepShare": 0.51,
+            "blockedFloorShare": 1,
+            "rotations": [97, 112, 95, 100],
+            "squares": [
+                ["18,53", 113],
+                ["17,52", 83],
+                ["19,49", 78]
+            ],
+            "overlays": [
+                [276, 326],
+                [186, 78]
+            ],
+            "type": 22
+        },
+        {
+            "key": "14500:22",
+            "name": "#14500",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1481,
+            "steep": 208,
+            "steepShare": 0.14,
+            "blockedFloorShare": 0.12,
+            "rotations": [342, 383, 357, 399],
+            "squares": [
+                ["47,61", 263],
+                ["48,61", 263],
+                ["24,58", 251]
+            ],
+            "overlays": [
+                [11, 134],
+                [132, 10],
+                [99, 10]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3750:22",
+            "name": "#3750",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1101,
+            "steep": 206,
+            "steepShare": 0.19,
+            "blockedFloorShare": 0.25,
+            "rotations": [244, 276, 289, 292],
+            "squares": [
+                ["26,58", 329],
+                ["25,58", 145],
+                ["38,44", 141]
+            ],
+            "overlays": [
+                [49, 141],
+                [11, 4],
+                [132, 1]
+            ],
+            "type": 22
+        },
+        {
+            "key": "7124:22",
+            "name": "#7124",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 698,
+            "steep": 196,
+            "steepShare": 0.28,
+            "blockedFloorShare": 0.09,
+            "rotations": [176, 169, 176, 177],
+            "squares": [
+                ["21,57", 195],
+                ["21,58", 179],
+                ["49,52", 76]
+            ],
+            "overlays": [
+                [14, 528],
+                [108, 20]
+            ],
+            "type": 22
+        },
+        {
+            "key": "55130:10",
+            "name": "Rockslide",
+            "size": "2x2",
+            "clip": 1,
+            "contour": 0,
+            "count": 596,
+            "steep": 193,
+            "steepShare": 0.32,
+            "blockedFloorShare": 0.5,
+            "rotations": [158, 137, 149, 152],
+            "squares": [
+                ["20,45", 98],
+                ["22,52", 73],
+                ["21,49", 60]
+            ],
+            "overlays": [
+                [14, 284],
+                [442, 20],
+                [6, 7]
+            ],
+            "type": 10
+        },
+        {
+            "key": "14487:22",
+            "name": "#14487",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1354,
+            "steep": 190,
+            "steepShare": 0.14,
+            "blockedFloorShare": 0.24,
+            "rotations": [341, 349, 346, 318],
+            "squares": [
+                ["48,57", 261],
+                ["22,58", 232],
+                ["22,57", 161]
+            ],
+            "overlays": [
+                [99, 225],
+                [2, 33],
+                [229, 17]
+            ],
+            "type": 22
+        },
+        {
+            "key": "1982:0",
+            "name": "#1982",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1230,
+            "steep": 178,
+            "steepShare": 0.14,
+            "blockedFloorShare": 0.14,
+            "rotations": [337, 263, 306, 324],
+            "squares": [
+                ["52,53", 447],
+                ["38,54", 128],
+                ["37,54", 101]
+            ],
+            "overlays": [
+                [14, 138],
+                [21, 113],
+                [11, 15]
+            ],
+            "type": 0
+        },
+        {
+            "key": "57632:9",
+            "name": "#57632",
+            "size": "1x1",
+            "clip": 1,
+            "contour": 0,
+            "count": 179,
+            "steep": 175,
+            "steepShare": 0.98,
+            "blockedFloorShare": 0.98,
+            "rotations": [46, 45, 47, 41],
+            "squares": [
+                ["20,50", 118],
+                ["19,50", 34],
+                ["20,51", 27]
+            ],
+            "overlays": [[442, 179]],
+            "type": 9
+        },
+        {
+            "key": "5325:22",
+            "name": "#5325",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 713,
+            "steep": 174,
+            "steepShare": 0.24,
+            "blockedFloorShare": 0.4,
+            "rotations": [206, 197, 182, 128],
+            "squares": [
+                ["56,55", 237],
+                ["57,54", 235],
+                ["44,60", 233]
+            ],
+            "overlays": [
+                [107, 253],
+                [82, 237],
+                [505, 1]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3501:10",
+            "name": "#3501",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1339,
+            "steep": 173,
+            "steepShare": 0.13,
+            "blockedFloorShare": 0.08,
+            "rotations": [353, 332, 320, 334],
+            "squares": [
+                ["54,52", 317],
+                ["53,52", 244],
+                ["54,53", 146]
+            ],
+            "overlays": [
+                [7, 103],
+                [6, 4]
+            ],
+            "type": 10
+        },
+        {
+            "key": "11933:10",
+            "name": "Rockslide",
+            "size": "2x2",
+            "clip": 1,
+            "contour": 0,
+            "count": 408,
+            "steep": 172,
+            "steepShare": 0.42,
+            "blockedFloorShare": 0.76,
+            "rotations": [104, 103, 99, 102],
+            "squares": [
+                ["34,53", 91],
+                ["33,53", 75],
+                ["35,53", 75]
+            ],
+            "overlays": [
+                [14, 304],
+                [41, 6],
+                [6, 3]
+            ],
+            "type": 10
+        },
+        {
+            "key": "11434:10",
+            "name": "Rockslide",
+            "size": "2x2",
+            "clip": 2,
+            "contour": 0,
+            "count": 615,
+            "steep": 161,
+            "steepShare": 0.26,
+            "blockedFloorShare": 0.43,
+            "rotations": [172, 172, 140, 131],
+            "squares": [
+                ["20,52", 78],
+                ["20,53", 51],
+                ["23,60", 51]
+            ],
+            "overlays": [
+                [3, 260],
+                [83, 10],
+                [6, 2]
+            ],
+            "type": 10
+        },
+        {
+            "key": "3718:10",
+            "name": "#3718",
+            "size": "2x2",
+            "clip": 1,
+            "contour": 0,
+            "count": 573,
+            "steep": 160,
+            "steepShare": 0.28,
+            "blockedFloorShare": 0.55,
+            "rotations": [138, 143, 147, 145],
+            "squares": [
+                ["20,53", 99],
+                ["19,52", 81],
+                ["19,53", 72]
+            ],
+            "overlays": [
+                [83, 314],
+                [222, 9],
+                [3, 3]
+            ],
+            "type": 10
+        },
+        {
+            "key": "5327:22",
+            "name": "#5327",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 401,
+            "steep": 155,
+            "steepShare": 0.39,
+            "blockedFloorShare": 0.52,
+            "rotations": [102, 103, 106, 90],
+            "squares": [
+                ["44,61", 80],
+                ["57,54", 68],
+                ["22,51", 58]
+            ],
+            "overlays": [
+                [222, 112],
+                [82, 83],
+                [102, 72]
+            ],
+            "type": 22
+        },
+        {
+            "key": "57476:22",
+            "name": "#57476",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 340,
+            "steep": 153,
+            "steepShare": 0.45,
+            "blockedFloorShare": 1,
+            "rotations": [98, 78, 103, 61],
+            "squares": [
+                ["19,49", 308],
+                ["20,47", 32]
+            ],
+            "overlays": [
+                [187, 308],
+                [276, 32]
+            ],
+            "type": 22
+        },
+        {
+            "key": "85:9",
+            "name": "#85",
+            "size": "1x1",
+            "clip": 2,
+            "contour": -1,
+            "count": 250,
+            "steep": 145,
+            "steepShare": 0.58,
+            "blockedFloorShare": 0.95,
+            "rotations": [79, 59, 49, 63],
+            "squares": [
+                ["47,46", 70],
+                ["23,51", 37],
+                ["45,44", 36]
+            ],
+            "overlays": [
+                [442, 94],
+                [3, 37],
+                [77, 31]
+            ],
+            "type": 9
+        },
+        {
+            "key": "4344:22",
+            "name": "#4344",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1103,
+            "steep": 144,
+            "steepShare": 0.13,
+            "blockedFloorShare": 0.27,
+            "rotations": [267, 274, 275, 287],
+            "squares": [
+                ["38,47", 327],
+                ["37,47", 115],
+                ["36,47", 61]
+            ],
+            "overlays": [
+                [14, 327],
+                [89, 33],
+                [81, 27]
+            ],
+            "type": 22
+        },
+        {
+            "key": "42099:22",
+            "name": "#42099",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 149,
+            "steep": 139,
+            "steepShare": 0.93,
+            "blockedFloorShare": 0.99,
+            "rotations": [34, 39, 38, 38],
+            "squares": [
+                ["26,49", 81],
+                ["22,54", 38],
+                ["23,49", 30]
+            ],
+            "overlays": [
+                [14, 117],
+                [222, 30],
+                [61, 2]
+            ],
+            "type": 22
+        },
+        {
+            "key": "26398:22",
+            "name": "#26398",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 710,
+            "steep": 138,
+            "steepShare": 0.19,
+            "blockedFloorShare": 0.26,
+            "rotations": [175, 181, 177, 177],
+            "squares": [
+                ["45,58", 609],
+                ["25,61", 53],
+                ["18,51", 48]
+            ],
+            "overlays": [
+                [30, 90],
+                [33, 51],
+                [83, 33]
+            ],
+            "type": 22
+        },
+        {
+            "key": "4339:22",
+            "name": "#4339",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 680,
+            "steep": 135,
+            "steepShare": 0.2,
+            "blockedFloorShare": 0.3,
+            "rotations": [171, 176, 162, 171],
+            "squares": [
+                ["41,57", 109],
+                ["30,43", 99],
+                ["39,58", 80]
+            ],
+            "overlays": [
+                [88, 59],
+                [376, 57],
+                [83, 35]
+            ],
+            "type": 22
+        },
+        {
+            "key": "14484:22",
+            "name": "#14484",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 847,
+            "steep": 134,
+            "steepShare": 0.16,
+            "blockedFloorShare": 0.23,
+            "rotations": [211, 197, 205, 234],
+            "squares": [
+                ["48,56", 150],
+                ["51,57", 104],
+                ["46,56", 88]
+            ],
+            "overlays": [
+                [2, 110],
+                [99, 63],
+                [10, 22]
+            ],
+            "type": 22
+        },
+        {
+            "key": "57417:10",
+            "name": "#57417",
+            "size": "1x1",
+            "clip": 2,
+            "contour": -1,
+            "count": 133,
+            "steep": 133,
+            "steepShare": 1,
+            "blockedFloorShare": 1,
+            "rotations": [29, 32, 36, 36],
+            "squares": [
+                ["19,48", 82],
+                ["18,48", 51]
+            ],
+            "overlays": [
+                [276, 107],
+                [272, 26]
+            ],
+            "type": 10
+        },
+        {
+            "key": "44066:2",
+            "name": "#44066",
+            "size": "1x1",
+            "clip": 0,
+            "contour": -1,
+            "count": 275,
+            "steep": 130,
+            "steepShare": 0.47,
+            "blockedFloorShare": 0.8,
+            "rotations": [71, 77, 66, 61],
+            "squares": [
+                ["20,47", 62],
+                ["19,48", 58],
+                ["18,53", 33]
+            ],
+            "overlays": [
+                [276, 202],
+                [114, 12],
+                [326, 5]
+            ],
+            "type": 2
+        },
+        {
+            "key": "1272:22",
+            "name": "#1272",
+            "size": "1x1",
+            "clip": 2,
+            "contour": -1,
+            "count": 1101,
+            "steep": 128,
+            "steepShare": 0.12,
+            "blockedFloorShare": 0.05,
+            "rotations": [287, 258, 271, 285],
+            "squares": [
+                ["54,53", 241],
+                ["54,52", 224],
+                ["53,53", 161]
+            ],
+            "overlays": [
+                [7, 23],
+                [22, 17]
+            ],
+            "type": 22
+        },
+        {
+            "key": "5329:22",
+            "name": "#5329",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 250,
+            "steep": 126,
+            "steepShare": 0.5,
+            "blockedFloorShare": 0.66,
+            "rotations": [68, 68, 66, 48],
+            "squares": [
+                ["44,61", 70],
+                ["22,51", 63],
+                ["57,54", 44]
+            ],
+            "overlays": [
+                [82, 89],
+                [222, 66],
+                [102, 46]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3171:22",
+            "name": "#3171",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 315,
+            "steep": 122,
+            "steepShare": 0.39,
+            "blockedFloorShare": 0.61,
+            "rotations": [84, 80, 78, 73],
+            "squares": [
+                ["52,49", 93],
+                ["52,51", 78],
+                ["52,50", 55]
+            ],
+            "overlays": [
+                [77, 178],
+                [227, 40],
+                [106, 1]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3708:22",
+            "name": "#3708",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 739,
+            "steep": 119,
+            "steepShare": 0.16,
+            "blockedFloorShare": 0.37,
+            "rotations": [190, 177, 192, 180],
+            "squares": [
+                ["44,56", 136],
+                ["44,57", 114],
+                ["45,57", 87]
+            ],
+            "overlays": [
+                [83, 240],
+                [82, 23],
+                [80, 2]
+            ],
+            "type": 22
+        },
+        {
+            "key": "2639:0",
+            "name": "#2639",
+            "size": "1x1",
+            "clip": 2,
+            "contour": -1,
+            "count": 702,
+            "steep": 118,
+            "steepShare": 0.17,
+            "blockedFloorShare": 0.61,
+            "rotations": [168, 202, 136, 196],
+            "squares": [
+                ["48,47", 184],
+                ["20,45", 67],
+                ["17,52", 52]
+            ],
+            "overlays": [
+                [442, 217],
+                [6, 72],
+                [14, 36]
+            ],
+            "type": 0
+        },
+        {
+            "key": "4341:22",
+            "name": "#4341",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 651,
+            "steep": 117,
+            "steepShare": 0.18,
+            "blockedFloorShare": 0.25,
+            "rotations": [165, 159, 170, 157],
+            "squares": [
+                ["41,57", 117],
+                ["32,60", 76],
+                ["39,58", 74]
+            ],
+            "overlays": [
+                [88, 63],
+                [82, 27],
+                [119, 25]
+            ],
+            "type": 22
+        },
+        {
+            "key": "754:22",
+            "name": "#754",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 255,
+            "steep": 110,
+            "steepShare": 0.43,
+            "blockedFloorShare": 0.99,
+            "rotations": [88, 54, 40, 73],
+            "squares": [
+                ["23,60", 90],
+                ["23,49", 37],
+                ["21,54", 30]
+            ],
+            "overlays": [
+                [41, 138],
+                [6, 92],
+                [550, 9]
+            ],
+            "type": 22
+        },
+        {
+            "key": "51826:22",
+            "name": "#51826",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 1002,
+            "steep": 108,
+            "steepShare": 0.11,
+            "blockedFloorShare": 0.28,
+            "rotations": [253, 228, 242, 279],
+            "squares": [
+                ["25,49", 133],
+                ["26,48", 84],
+                ["25,47", 70]
+            ],
+            "overlays": [
+                [80, 235],
+                [326, 142],
+                [226, 84]
+            ],
+            "type": 22
+        },
+        {
+            "key": "4451:0",
+            "name": "#4451",
+            "size": "1x1",
+            "clip": 2,
+            "contour": -1,
+            "count": 753,
+            "steep": 107,
+            "steepShare": 0.14,
+            "blockedFloorShare": 0.37,
+            "rotations": [230, 163, 204, 156],
+            "squares": [
+                ["50,45", 127],
+                ["51,43", 80],
+                ["49,42", 48]
+            ],
+            "overlays": [
+                [26, 126],
+                [207, 107],
+                [571, 75]
+            ],
+            "type": 0
+        },
+        {
+            "key": "42353:10",
+            "name": "#42353",
+            "size": "1x1",
+            "clip": 1,
+            "contour": 0,
+            "count": 289,
+            "steep": 106,
+            "steepShare": 0.37,
+            "blockedFloorShare": 0.97,
+            "rotations": [94, 47, 89, 59],
+            "squares": [
+                ["23,57", 132],
+                ["23,58", 110],
+                ["24,57", 27]
+            ],
+            "overlays": [
+                [99, 134],
+                [11, 109],
+                [37, 44]
+            ],
+            "type": 10
+        },
+        {
+            "key": "3710:22",
+            "name": "#3710",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 666,
+            "steep": 102,
+            "steepShare": 0.15,
+            "blockedFloorShare": 0.38,
+            "rotations": [170, 167, 163, 166],
+            "squares": [
+                ["44,57", 112],
+                ["45,56", 93],
+                ["44,56", 67]
+            ],
+            "overlays": [
+                [83, 204],
+                [82, 42],
+                [14, 2]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3502:10",
+            "name": "#3502",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 757,
+            "steep": 102,
+            "steepShare": 0.13,
+            "blockedFloorShare": 0.12,
+            "rotations": [202, 206, 160, 189],
+            "squares": [
+                ["54,54", 146],
+                ["53,51", 142],
+                ["54,52", 123]
+            ],
+            "overlays": [
+                [7, 78],
+                [6, 2],
+                [22, 2]
+            ],
+            "type": 10
+        },
+        {
+            "key": "11934:10",
+            "name": "Rockslide",
+            "size": "2x2",
+            "clip": 1,
+            "contour": 0,
+            "count": 186,
+            "steep": 99,
+            "steepShare": 0.53,
+            "blockedFloorShare": 0.85,
+            "rotations": [62, 46, 41, 37],
+            "squares": [
+                ["33,53", 52],
+                ["35,53", 48],
+                ["34,53", 26]
+            ],
+            "overlays": [
+                [14, 152],
+                [41, 3],
+                [6, 1]
+            ],
+            "type": 10
+        },
+        {
+            "key": "52795:22",
+            "name": "#52795",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 98,
+            "steep": 98,
+            "steepShare": 1,
+            "blockedFloorShare": 1,
+            "rotations": [28, 22, 28, 20],
+            "squares": [["26,49", 98]],
+            "overlays": [[14, 98]],
+            "type": 22
+        },
+        {
+            "key": "849:10",
+            "name": "Spear wall",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 335,
+            "steep": 92,
+            "steepShare": 0.27,
+            "blockedFloorShare": 0.35,
+            "rotations": [68, 93, 58, 116],
+            "squares": [
+                ["52,50", 80],
+                ["40,49", 72],
+                ["47,56", 60]
+            ],
+            "overlays": [
+                [60, 80],
+                [14, 1]
+            ],
+            "type": 10
+        },
+        {
+            "key": "57249:22",
+            "name": "#57249",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 271,
+            "steep": 91,
+            "steepShare": 0.34,
+            "blockedFloorShare": 0.56,
+            "rotations": [69, 70, 60, 72],
+            "squares": [
+                ["19,49", 180],
+                ["18,48", 56],
+                ["19,48", 33]
+            ],
+            "overlays": [
+                [272, 80],
+                [274, 69],
+                [185, 60]
+            ],
+            "type": 22
+        },
+        {
+            "key": "34385:10",
+            "name": "#34385",
+            "size": "1x1",
+            "clip": 1,
+            "contour": 0,
+            "count": 338,
+            "steep": 87,
+            "steepShare": 0.26,
+            "blockedFloorShare": 0.05,
+            "rotations": [67, 86, 94, 91],
+            "squares": [
+                ["20,59", 189],
+                ["21,59", 41],
+                ["20,58", 38]
+            ],
+            "overlays": [
+                [115, 325],
+                [116, 11]
+            ],
+            "type": 10
+        },
+        {
+            "key": "48623:22",
+            "name": "#48623",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 532,
+            "steep": 86,
+            "steepShare": 0.16,
+            "blockedFloorShare": 1,
+            "rotations": [133, 138, 130, 131],
+            "squares": [
+                ["18,53", 285],
+                ["17,52", 137],
+                ["17,53", 50]
+            ],
+            "overlays": [
+                [276, 500],
+                [187, 32]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3707:22",
+            "name": "#3707",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 292,
+            "steep": 86,
+            "steepShare": 0.29,
+            "blockedFloorShare": 0.42,
+            "rotations": [72, 67, 80, 73],
+            "squares": [
+                ["37,48", 140],
+                ["44,57", 58],
+                ["45,57", 46]
+            ],
+            "overlays": [
+                [83, 126],
+                [82, 10]
+            ],
+            "type": 22
+        },
+        {
+            "key": "18934:22",
+            "name": "#18934",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 247,
+            "steep": 85,
+            "steepShare": 0.34,
+            "blockedFloorShare": 0.62,
+            "rotations": [56, 60, 67, 64],
+            "squares": [
+                ["51,47", 156],
+                ["28,59", 58],
+                ["28,58", 20]
+            ],
+            "overlays": [[26, 154]],
+            "type": 22
+        },
+        {
+            "key": "34347:10",
+            "name": "#34347",
+            "size": "2x2",
+            "clip": 1,
+            "contour": 0,
+            "count": 134,
+            "steep": 84,
+            "steepShare": 0.63,
+            "blockedFloorShare": 0,
+            "rotations": [32, 26, 25, 51],
+            "squares": [
+                ["20,59", 66],
+                ["21,58", 21],
+                ["21,59", 15]
+            ],
+            "overlays": [[115, 134]],
+            "type": 10
+        },
+        {
+            "key": "34372:10",
+            "name": "#34372",
+            "size": "1x1",
+            "clip": 1,
+            "contour": 0,
+            "count": 109,
+            "steep": 84,
+            "steepShare": 0.77,
+            "blockedFloorShare": 1,
+            "rotations": [24, 22, 28, 35],
+            "squares": [["20,59", 109]],
+            "overlays": [[114, 108]],
+            "type": 10
+        },
+        {
+            "key": "57481:22",
+            "name": "#57481",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 95,
+            "steep": 82,
+            "steepShare": 0.86,
+            "blockedFloorShare": 1,
+            "rotations": [20, 33, 20, 22],
+            "squares": [["20,47", 95]],
+            "overlays": [[276, 95]],
+            "type": 22
+        },
+        {
+            "key": "3510:10",
+            "name": "Rotting branch",
+            "size": "1x1",
+            "clip": 0,
+            "contour": -1,
+            "count": 537,
+            "steep": 82,
+            "steepShare": 0.15,
+            "blockedFloorShare": 0.02,
+            "rotations": [136, 128, 140, 133],
+            "squares": [
+                ["54,53", 227],
+                ["53,53", 132],
+                ["54,52", 110]
+            ],
+            "overlays": [[7, 10]],
+            "type": 10
+        },
+        {
+            "key": "11922:10",
+            "name": "Rockslide",
+            "size": "2x2",
+            "clip": 1,
+            "contour": 0,
+            "count": 546,
+            "steep": 81,
+            "steepShare": 0.15,
+            "blockedFloorShare": 0.2,
+            "rotations": [136, 135, 141, 134],
+            "squares": [
+                ["22,49", 85],
+                ["20,52", 78],
+                ["19,53", 54]
+            ],
+            "overlays": [
+                [247, 49],
+                [3, 45],
+                [1, 36]
+            ],
+            "type": 10
+        },
+        {
+            "key": "26396:22",
+            "name": "#26396",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 373,
+            "steep": 81,
+            "steepShare": 0.22,
+            "blockedFloorShare": 0.43,
+            "rotations": [149, 55, 93, 76],
+            "squares": [
+                ["45,58", 364],
+                ["25,61", 9]
+            ],
+            "overlays": [
+                [30, 24],
+                [33, 8]
+            ],
+            "type": 22
+        },
+        {
+            "key": "3705:22",
+            "name": "#3705",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 285,
+            "steep": 81,
+            "steepShare": 0.28,
+            "blockedFloorShare": 0.52,
+            "rotations": [73, 73, 63, 76],
+            "squares": [
+                ["37,48", 73],
+                ["45,57", 50],
+                ["57,52", 45]
+            ],
+            "overlays": [
+                [83, 102],
+                [81, 90],
+                [82, 12]
+            ],
+            "type": 22
+        },
+        {
+            "key": "53541:0",
+            "name": "#53541",
+            "size": "1x1",
+            "clip": 1,
+            "contour": -1,
+            "count": 81,
+            "steep": 81,
+            "steepShare": 1,
+            "blockedFloorShare": 1,
+            "rotations": [32, 12, 26, 11],
+            "squares": [["45,59", 81]],
+            "overlays": [[135, 81]],
+            "type": 0
+        },
+        {
+            "key": "7123:22",
+            "name": "#7123",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 507,
+            "steep": 80,
+            "steepShare": 0.16,
+            "blockedFloorShare": 0.13,
+            "rotations": [104, 159, 105, 139],
+            "squares": [
+                ["49,52", 152],
+                ["20,58", 143],
+                ["22,56", 87]
+            ],
+            "overlays": [
+                [14, 143],
+                [6, 54],
+                [15, 50]
+            ],
+            "type": 22
+        },
+        {
+            "key": "53538:0",
+            "name": "#53538",
+            "size": "1x1",
+            "clip": 1,
+            "contour": -1,
+            "count": 80,
+            "steep": 80,
+            "steepShare": 1,
+            "blockedFloorShare": 1,
+            "rotations": [27, 14, 28, 11],
+            "squares": [["45,59", 80]],
+            "overlays": [[135, 80]],
+            "type": 0
+        },
+        {
+            "key": "15803:22",
+            "name": "#15803",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 324,
+            "steep": 78,
+            "steepShare": 0.24,
+            "blockedFloorShare": 0.47,
+            "rotations": [84, 79, 86, 75],
+            "squares": [
+                ["53,50", 285],
+                ["54,50", 39]
+            ],
+            "overlays": [[11, 141]],
+            "type": 22
+        },
+        {
+            "key": "3950:22",
+            "name": "#3950",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 553,
+            "steep": 76,
+            "steepShare": 0.14,
+            "blockedFloorShare": 0.2,
+            "rotations": [137, 135, 150, 131],
+            "squares": [
+                ["25,54", 83],
+                ["26,57", 45],
+                ["48,53", 34]
+            ],
+            "overlays": [
+                [14, 151],
+                [81, 117],
+                [108, 69]
+            ],
+            "type": 22
+        },
+        {
+            "key": "48631:22",
+            "name": "#48631",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 182,
+            "steep": 75,
+            "steepShare": 0.41,
+            "blockedFloorShare": 1,
+            "rotations": [46, 50, 52, 34],
+            "squares": [
+                ["18,53", 71],
+                ["19,49", 67],
+                ["17,52", 36]
+            ],
+            "overlays": [
+                [276, 115],
+                [187, 67]
+            ],
+            "type": 22
+        },
+        {
+            "key": "6477:10",
+            "name": "Ice chunks",
+            "size": "1x1",
+            "clip": 0,
+            "contour": 0,
+            "count": 297,
+            "steep": 74,
+            "steepShare": 0.25,
+            "blockedFloorShare": 0.32,
+            "rotations": [70, 74, 88, 65],
+            "squares": [
+                ["44,59", 133],
+                ["44,58", 42],
+                ["39,58", 34]
+            ],
+            "overlays": [
+                [83, 31],
+                [30, 17],
+                [120, 14]
+            ],
+            "type": 10
+        },
+        {
+            "key": "11438:22",
+            "name": "#11438",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 632,
+            "steep": 73,
+            "steepShare": 0.12,
+            "blockedFloorShare": 0.29,
+            "rotations": [158, 150, 174, 150],
+            "squares": [
+                ["19,52", 81],
+                ["23,60", 81],
+                ["19,53", 79]
+            ],
+            "overlays": [
+                [3, 191],
+                [10, 9],
+                [2, 7]
+            ],
+            "type": 22
+        },
+        {
+            "key": "316:22",
+            "name": "#316",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 345,
+            "steep": 73,
+            "steepShare": 0.21,
+            "blockedFloorShare": 0.24,
+            "rotations": [77, 91, 81, 96],
+            "squares": [
+                ["46,50", 66],
+                ["44,49", 45],
+                ["45,45", 27]
+            ],
+            "overlays": [
+                [16, 173],
+                [101, 22],
+                [36, 20]
+            ],
+            "type": 22
+        },
+        {
+            "key": "13409:22",
+            "name": "#13409",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 700,
+            "steep": 70,
+            "steepShare": 0.1,
+            "blockedFloorShare": 0.2,
+            "rotations": [149, 173, 206, 172],
+            "squares": [
+                ["25,45", 421],
+                ["38,44", 195],
+                ["33,55", 38]
+            ],
+            "overlays": [
+                [80, 237],
+                [332, 123],
+                [93, 3]
+            ],
+            "type": 22
+        },
+        {
+            "key": "7128:22",
+            "name": "#7128",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 85,
+            "steep": 70,
+            "steepShare": 0.82,
+            "blockedFloorShare": 0.32,
+            "rotations": [20, 20, 21, 24],
+            "squares": [
+                ["51,52", 48],
+                ["49,52", 36],
+                ["50,52", 1]
+            ],
+            "overlays": [[14, 85]],
+            "type": 22
+        },
+        {
+            "key": "18277:22",
+            "name": "#18277",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 137,
+            "steep": 64,
+            "steepShare": 0.47,
+            "blockedFloorShare": 0.83,
+            "rotations": [28, 41, 29, 39],
+            "squares": [
+                ["38,49", 126],
+                ["42,51", 8],
+                ["20,59", 3]
+            ],
+            "overlays": [
+                [22, 116],
+                [82, 8],
+                [106, 1]
+            ],
+            "type": 22
+        },
+        {
+            "key": "42098:22",
+            "name": "#42098",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 78,
+            "steep": 64,
+            "steepShare": 0.82,
+            "blockedFloorShare": 0.99,
+            "rotations": [20, 18, 20, 20],
+            "squares": [
+                ["22,54", 36],
+                ["26,49", 22],
+                ["23,49", 20]
+            ],
+            "overlays": [
+                [14, 49],
+                [222, 20],
+                [61, 9]
+            ],
+            "type": 22
+        },
+        {
+            "key": "34938:10",
+            "name": "Spear wall",
+            "size": "2x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 64,
+            "steep": 64,
+            "steepShare": 1,
+            "blockedFloorShare": 1,
+            "rotations": [24, 8, 24, 8],
+            "squares": [["52,50", 64]],
+            "overlays": [[60, 64]],
+            "type": 10
+        },
+        {
+            "key": "4605:10",
+            "name": "#4605",
+            "size": "2x2",
+            "clip": 1,
+            "contour": 0,
+            "count": 398,
+            "steep": 63,
+            "steepShare": 0.16,
+            "blockedFloorShare": 0.29,
+            "rotations": [113, 81, 102, 102],
+            "squares": [
+                ["22,50", 52],
+                ["23,49", 45],
+                ["22,47", 35]
+            ],
+            "overlays": [
+                [222, 79],
+                [82, 16],
+                [376, 9]
+            ],
+            "type": 10
+        },
+        {
+            "key": "11428:10",
+            "name": "Rockslide",
+            "size": "2x2",
+            "clip": 1,
+            "contour": 0,
+            "count": 386,
+            "steep": 63,
+            "steepShare": 0.16,
+            "blockedFloorShare": 0.54,
+            "rotations": [93, 102, 99, 92],
+            "squares": [
+                ["27,60", 91],
+                ["22,58", 47],
+                ["21,59", 40]
+            ],
+            "overlays": [
+                [99, 31],
+                [222, 24],
+                [132, 7]
+            ],
+            "type": 10
+        },
+        {
+            "key": "18278:22",
+            "name": "#18278",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 164,
+            "steep": 62,
+            "steepShare": 0.38,
+            "blockedFloorShare": 0.84,
+            "rotations": [24, 43, 41, 56],
+            "squares": [
+                ["38,49", 142],
+                ["20,59", 12],
+                ["42,51", 10]
+            ],
+            "overlays": [
+                [22, 133],
+                [106, 1]
+            ],
+            "type": 22
+        },
+        {
+            "key": "59727:10",
+            "name": "#59727",
+            "size": "1x1",
+            "clip": 2,
+            "contour": -1,
+            "count": 62,
+            "steep": 62,
+            "steepShare": 1,
+            "blockedFloorShare": 1,
+            "rotations": [20, 0, 20, 22],
+            "squares": [["32,42", 62]],
+            "overlays": [[308, 62]],
+            "type": 10
+        },
+        {
+            "key": "11435:10",
+            "name": "Rockslide",
+            "size": "2x2",
+            "clip": 2,
+            "contour": 0,
+            "count": 229,
+            "steep": 61,
+            "steepShare": 0.27,
+            "blockedFloorShare": 0.46,
+            "rotations": [51, 48, 64, 66],
+            "squares": [
+                ["20,52", 28],
+                ["19,52", 22],
+                ["19,53", 20]
+            ],
+            "overlays": [
+                [3, 91],
+                [83, 4],
+                [6, 4]
+            ],
+            "type": 10
+        },
+        {
+            "key": "38848:0",
+            "name": "#38848",
+            "size": "1x1",
+            "clip": 2,
+            "contour": -1,
+            "count": 417,
+            "steep": 61,
+            "steepShare": 0.15,
+            "blockedFloorShare": 0.22,
+            "rotations": [113, 114, 89, 101],
+            "squares": [
+                ["58,52", 50],
+                ["44,56", 44],
+                ["42,54", 36]
+            ],
+            "overlays": [
+                [11, 34],
+                [14, 29],
+                [4, 20]
+            ],
+            "type": 0
+        },
+        {
+            "key": "20051:1",
+            "name": "#20051",
+            "size": "1x1",
+            "clip": 2,
+            "contour": 0,
+            "count": 115,
+            "steep": 61,
+            "steepShare": 0.53,
+            "blockedFloorShare": 0.9,
+            "rotations": [30, 27, 27, 31],
+            "squares": [
+                ["39,47", 104],
+                ["39,46", 7],
+                ["40,47", 3]
+            ],
+            "overlays": [],
+            "type": 1
+        }
+    ],
+    "biomeKits": {
+        "meadow": {
+            "ground": [
+                {
+                    "floor": 48,
+                    "tiles": 180960,
+                    "per100": 43,
+                    "kit": [1257, 1247, 4736, 1258, 4735, 4737, 3549, 9488]
+                },
+                {
+                    "floor": 50,
+                    "tiles": 122404,
+                    "per100": 43,
+                    "kit": [1257, 1258, 1242, 4736, 1241, 51805, 3549, 4735]
+                },
+                {
+                    "floor": 49,
+                    "tiles": 59567,
+                    "per100": 52,
+                    "kit": [4736, 4737, 4735, 4738, 5335, 1258, 1257, 1247]
+                }
+            ],
+            "trail": {
+                "floor": 63,
+                "tiles": 135060,
+                "per100": 35,
+                "kit": [325, 185, 1247, 326, 31778, 4736, 5335, 3549]
+            },
+            "shore": {
+                "floor": 62,
+                "tiles": 59174,
+                "per100": 11,
+                "kit": [729, 730, 728, 3170, 341, 342, 1242, 1243]
+            },
+            "road": {
+                "floor": 22,
+                "tiles": 18107,
+                "per100": 42,
+                "kit": [320, 321, 319, 561, 18278, 560, 18277, 4736]
+            },
+            "rockGround": {
+                "floor": 92,
+                "tiles": 20967,
+                "per100": 49,
+                "kit": [3709, 3703, 11439, 3708, 3710, 4340, 3706, 3702]
+            }
+        },
+        "desert": {
+            "ground": [
+                {
+                    "floor": 62,
+                    "tiles": 59174,
+                    "per100": 11,
+                    "kit": [729, 730, 728, 3170, 341, 342, 1242, 1243]
+                },
+                {
+                    "floor": 61,
+                    "tiles": 56224,
+                    "per100": 13,
+                    "kit": [729, 728, 330, 730, 16823, 46762, 11103, 331]
+                }
+            ],
+            "trail": {
+                "floor": 68,
+                "tiles": 31285,
+                "per100": 34,
+                "kit": [729, 728, 51815, 1243, 730, 51814, 10845, 342]
+            },
+            "shore": {
+                "floor": 129,
+                "tiles": 5199,
+                "per100": 45,
+                "kit": [9487, 18288, 9488, 729, 14501, 18297, 18298, 728]
+            },
+            "road": {
+                "floor": 25,
+                "tiles": 1748,
+                "per100": 20,
+                "kit": [729, 728, 730, 342, 341, 11103, 4736, 7522]
+            },
+            "rockGround": {
+                "floor": 68,
+                "tiles": 31285,
+                "per100": 34,
+                "kit": [729, 728, 51815, 1243, 730, 51814, 10845, 342]
+            }
+        },
+        "swamp": {
+            "ground": [
+                {
+                    "floor": 54,
+                    "tiles": 26905,
+                    "per100": 36,
+                    "kit": [3549, 3548, 20742, 30607, 30610, 2382, 20744, 50947]
+                },
+                {
+                    "floor": 64,
+                    "tiles": 40734,
+                    "per100": 39,
+                    "kit": [330, 4736, 14522, 320, 325, 4735, 3549, 6818]
+                },
+                {
+                    "floor": 49,
+                    "tiles": 59567,
+                    "per100": 52,
+                    "kit": [4736, 4737, 4735, 4738, 5335, 1258, 1257, 1247]
+                }
+            ],
+            "trail": {
+                "floor": 63,
+                "tiles": 135060,
+                "per100": 35,
+                "kit": [325, 185, 1247, 326, 31778, 4736, 5335, 3549]
+            },
+            "shore": {
+                "floor": 64,
+                "tiles": 40734,
+                "per100": 39,
+                "kit": [330, 4736, 14522, 320, 325, 4735, 3549, 6818]
+            },
+            "road": {
+                "floor": 81,
+                "tiles": 14272,
+                "per100": 49,
+                "kit": [3949, 27627, 27626, 3614, 4343, 3948, 51809, 27659]
+            },
+            "rockGround": {
+                "floor": 94,
+                "tiles": 17629,
+                "per100": 38,
+                "kit": [3703, 3709, 11439, 16824, 3704, 16823, 14483, 3702]
+            }
+        },
+        "snow": {
+            "ground": [
+                {
+                    "floor": 58,
+                    "tiles": 80389,
+                    "per100": 16,
+                    "kit": [561, 560, 559, 13412, 13413, 21105, 21651, 26398]
+                },
+                {
+                    "floor": 218,
+                    "tiles": 2053,
+                    "per100": 18,
+                    "kit": [46644, 47520, 46646, 336, 53589, 53590, 46645, 335]
+                },
+                {
+                    "floor": 59,
+                    "tiles": 8451,
+                    "per100": 9,
+                    "kit": [26398, 26396, 26397, 21105, 14495, 3709, 14501, 14499]
+                }
+            ],
+            "trail": {
+                "floor": 58,
+                "tiles": 80389,
+                "per100": 16,
+                "kit": [561, 560, 559, 13412, 13413, 21105, 21651, 26398]
+            },
+            "shore": {
+                "floor": 59,
+                "tiles": 8451,
+                "per100": 9,
+                "kit": [26398, 26396, 26397, 21105, 14495, 3709, 14501, 14499]
+            },
+            "road": {
+                "floor": 82,
+                "tiles": 6633,
+                "per100": 31,
+                "kit": [3703, 5325, 3709, 561, 560, 5328, 5324, 5329]
+            },
+            "rockGround": {
+                "floor": 16,
+                "tiles": 2164,
+                "per100": 13,
+                "kit": [26396, 21105, 26398, 26397, 336, 47520, 21104, 46644]
+            }
+        },
+        "jungle": {
+            "ground": [
+                {
+                    "floor": 48,
+                    "tiles": 180960,
+                    "per100": 43,
+                    "kit": [1257, 1247, 4736, 1258, 4735, 4737, 3549, 9488]
+                },
+                {
+                    "floor": 99,
+                    "tiles": 5690,
+                    "per100": 47,
+                    "kit": [4813, 4812, 4814, 4811, 19829, 4810, 19830, 19831]
+                },
+                {
+                    "floor": 100,
+                    "tiles": 6287,
+                    "per100": 47,
+                    "kit": [4813, 4814, 4810, 4812, 4811, 19830, 19831, 19825]
+                }
+            ],
+            "trail": {
+                "floor": 63,
+                "tiles": 135060,
+                "per100": 35,
+                "kit": [325, 185, 1247, 326, 31778, 4736, 5335, 3549]
+            },
+            "shore": {
+                "floor": 62,
+                "tiles": 59174,
+                "per100": 11,
+                "kit": [729, 730, 728, 3170, 341, 342, 1242, 1243]
+            },
+            "road": {
+                "floor": 80,
+                "tiles": 9335,
+                "per100": 34,
+                "kit": [51827, 13409, 51826, 51805, 3949, 52335, 339, 3614]
+            },
+            "rockGround": {
+                "floor": 97,
+                "tiles": 9503,
+                "per100": 39,
+                "kit": [4340, 3709, 16823, 4341, 16824, 4339, 5325, 16825]
+            }
+        },
+        "tropical": {
+            "ground": [
+                {
+                    "floor": 68,
+                    "tiles": 31285,
+                    "per100": 34,
+                    "kit": [729, 728, 51815, 1243, 730, 51814, 10845, 342]
+                },
+                {
+                    "floor": 52,
+                    "tiles": 33046,
+                    "per100": 43,
+                    "kit": [51805, 51811, 51804, 1243, 51815, 51827, 51810, 51814]
+                },
+                {
+                    "floor": 68,
+                    "tiles": 31285,
+                    "per100": 34,
+                    "kit": [729, 728, 51815, 1243, 730, 51814, 10845, 342]
+                }
+            ],
+            "trail": {
+                "floor": 26,
+                "tiles": 10840,
+                "per100": 49,
+                "kit": [339, 51815, 51827, 51811, 51814, 51810, 51816, 51826]
+            },
+            "shore": {
+                "floor": 62,
+                "tiles": 59174,
+                "per100": 11,
+                "kit": [729, 730, 728, 3170, 341, 342, 1242, 1243]
+            },
+            "road": {
+                "floor": 227,
+                "tiles": 2612,
+                "per100": 18,
+                "kit": [46950, 3170, 3171, 3169, 39627, 16824, 44844, 44845]
+            },
+            "rockGround": {
+                "floor": 223,
+                "tiles": 892,
+                "per100": 31,
+                "kit": [51814, 60200, 729, 60199, 51827, 51815, 60201, 51816]
+            }
+        },
+        "ash": {
+            "ground": [
+                {
+                    "floor": 56,
+                    "tiles": 23459,
+                    "per100": 44,
+                    "kit": [336, 14483, 9488, 14460, 14457, 561, 337, 11439]
+                },
+                {
+                    "floor": 145,
+                    "tiles": 15064,
+                    "per100": 46,
+                    "kit": [14483, 14522, 14482, 14486, 14484, 325, 14485, 336]
+                },
+                {
+                    "floor": 146,
+                    "tiles": 15336,
+                    "per100": 57,
+                    "kit": [14486, 14483, 14572, 14485, 14492, 14487, 14460, 14457]
+                }
+            ],
+            "trail": {
+                "floor": 148,
+                "tiles": 18752,
+                "per100": 51,
+                "kit": [14495, 14494, 14496, 14492, 14457, 14394, 14460, 14486]
+            },
+            "shore": {
+                "floor": 147,
+                "tiles": 17188,
+                "per100": 52,
+                "kit": [14492, 14495, 14491, 14493, 14486, 14601, 14394, 14496]
+            },
+            "road": {
+                "floor": 99,
+                "tiles": 4290,
+                "per100": 73,
+                "kit": [14483, 14482, 14486, 14487, 14394, 14391, 14470, 14390]
+            },
+            "rockGround": {
+                "floor": 148,
+                "tiles": 18752,
+                "per100": 51,
+                "kit": [14495, 14494, 14496, 14492, 14457, 14394, 14460, 14486]
+            }
+        },
+        "autumn": {
+            "ground": [
+                {
+                    "floor": 50,
+                    "tiles": 122404,
+                    "per100": 43,
+                    "kit": [1257, 1258, 1242, 4736, 1241, 51805, 3549, 4735]
+                },
+                {
+                    "floor": 49,
+                    "tiles": 59567,
+                    "per100": 52,
+                    "kit": [4736, 4737, 4735, 4738, 5335, 1258, 1257, 1247]
+                },
+                {
+                    "floor": 64,
+                    "tiles": 40734,
+                    "per100": 39,
+                    "kit": [330, 4736, 14522, 320, 325, 4735, 3549, 6818]
+                }
+            ],
+            "trail": {
+                "floor": 67,
+                "tiles": 12281,
+                "per100": 50,
+                "kit": [9488, 4735, 9486, 9487, 4343, 3549, 7210, 4737]
+            },
+            "shore": {
+                "floor": 64,
+                "tiles": 40734,
+                "per100": 39,
+                "kit": [330, 4736, 14522, 320, 325, 4735, 3549, 6818]
+            },
+            "road": {
+                "floor": 81,
+                "tiles": 14272,
+                "per100": 49,
+                "kit": [3949, 27627, 27626, 3614, 4343, 3948, 51809, 27659]
+            },
+            "rockGround": {
+                "floor": 92,
+                "tiles": 20967,
+                "per100": 49,
+                "kit": [3709, 3703, 11439, 3708, 3710, 4340, 3706, 3702]
+            }
+        },
+        "deadlands": {
+            "ground": [
+                {
+                    "floor": 97,
+                    "tiles": 9503,
+                    "per100": 39,
+                    "kit": [4340, 3709, 16823, 4341, 16824, 4339, 5325, 16825]
+                },
+                {
+                    "floor": 96,
+                    "tiles": 21057,
+                    "per100": 47,
+                    "kit": [5336, 5335, 31778, 5337, 4343, 5338, 41433, 31777]
+                },
+                {
+                    "floor": 92,
+                    "tiles": 20967,
+                    "per100": 49,
+                    "kit": [3709, 3703, 11439, 3708, 3710, 4340, 3706, 3702]
+                }
+            ],
+            "trail": {
+                "floor": 97,
+                "tiles": 9503,
+                "per100": 39,
+                "kit": [4340, 3709, 16823, 4341, 16824, 4339, 5325, 16825]
+            },
+            "shore": {
+                "floor": 96,
+                "tiles": 21057,
+                "per100": 47,
+                "kit": [5336, 5335, 31778, 5337, 4343, 5338, 41433, 31777]
+            },
+            "road": {
+                "floor": 110,
+                "tiles": 300,
+                "per100": 45,
+                "kit": [20778, 20777, 20743, 20779, 20735, 20736, 5336, 61260]
+            },
+            "rockGround": {
+                "floor": 94,
+                "tiles": 17629,
+                "per100": 38,
+                "kit": [3703, 3709, 11439, 16824, 3704, 16823, 14483, 3702]
+            }
+        },
+        "elven": {
+            "ground": [
+                {
+                    "floor": 48,
+                    "tiles": 180960,
+                    "per100": 43,
+                    "kit": [1257, 1247, 4736, 1258, 4735, 4737, 3549, 9488]
+                },
+                {
+                    "floor": 50,
+                    "tiles": 122404,
+                    "per100": 43,
+                    "kit": [1257, 1258, 1242, 4736, 1241, 51805, 3549, 4735]
+                },
+                {
+                    "floor": 49,
+                    "tiles": 59567,
+                    "per100": 52,
+                    "kit": [4736, 4737, 4735, 4738, 5335, 1258, 1257, 1247]
+                }
+            ],
+            "trail": {
+                "floor": 67,
+                "tiles": 12281,
+                "per100": 50,
+                "kit": [9488, 4735, 9486, 9487, 4343, 3549, 7210, 4737]
+            },
+            "shore": {
+                "floor": 64,
+                "tiles": 40734,
+                "per100": 39,
+                "kit": [330, 4736, 14522, 320, 325, 4735, 3549, 6818]
+            },
+            "road": {
+                "floor": 106,
+                "tiles": 5519,
+                "per100": 28,
+                "kit": [3614, 320, 3949, 319, 5335, 3950, 3613, 18298]
+            },
+            "rockGround": {
+                "floor": 92,
+                "tiles": 20967,
+                "per100": 49,
+                "kit": [3709, 3703, 11439, 3708, 3710, 4340, 3706, 3702]
+            }
+        },
+        "fairy": {
+            "ground": [
+                {
+                    "floor": 143,
+                    "tiles": 481,
+                    "per100": 65,
+                    "kit": [3935, 3936, 3548, 5337, 5338, 50945, 5336, 5335]
+                },
+                {
+                    "floor": 144,
+                    "tiles": 207,
+                    "per100": 48,
+                    "kit": [3548, 3547, 5337, 3935, 5335, 5338, 5336, 3934]
+                },
+                {
+                    "floor": 143,
+                    "tiles": 481,
+                    "per100": 65,
+                    "kit": [3935, 3936, 3548, 5337, 5338, 50945, 5336, 5335]
+                }
+            ],
+            "trail": {
+                "floor": 144,
+                "tiles": 207,
+                "per100": 48,
+                "kit": [3548, 3547, 5337, 3935, 5335, 5338, 5336, 3934]
+            },
+            "shore": {
+                "floor": 144,
+                "tiles": 207,
+                "per100": 48,
+                "kit": [3548, 3547, 5337, 3935, 5335, 5338, 5336, 3934]
+            },
+            "road": {
+                "floor": 83,
+                "tiles": 26379,
+                "per100": 36,
+                "kit": [3709, 3703, 3706, 3702, 3708, 3704, 3710, 54432]
+            },
+            "rockGround": {
+                "floor": 144,
+                "tiles": 207,
+                "per100": 48,
+                "kit": [3548, 3547, 5337, 3935, 5335, 5338, 5336, 3934]
+            }
+        },
+        "darkwood": {
+            "ground": [
+                { "floor": 235, "tiles": 0, "per100": 0, "kit": [] },
+                { "floor": 234, "tiles": 0, "per100": 0, "kit": [] },
+                { "floor": 239, "tiles": 0, "per100": 0, "kit": [] }
+            ],
+            "trail": { "floor": 240, "tiles": 0, "per100": 0, "kit": [] },
+            "shore": { "floor": 240, "tiles": 0, "per100": 0, "kit": [] },
+            "road": {
+                "floor": 72,
+                "tiles": 951,
+                "per100": 6,
+                "kit": [47436, 47437, 47438, 47439, 12931]
+            },
+            "rockGround": { "floor": 241, "tiles": 0, "per100": 0, "kit": [] }
+        },
+        "astral": {
+            "ground": [
+                {
+                    "floor": 99,
+                    "tiles": 5690,
+                    "per100": 47,
+                    "kit": [4813, 4812, 4814, 4811, 19829, 4810, 19830, 19831]
+                },
+                {
+                    "floor": 51,
+                    "tiles": 3647,
+                    "per100": 26,
+                    "kit": [4737, 4738, 4735, 4736, 1257, 1247, 4813, 4814]
+                },
+                {
+                    "floor": 48,
+                    "tiles": 180960,
+                    "per100": 43,
+                    "kit": [1257, 1247, 4736, 1258, 4735, 4737, 3549, 9488]
+                }
+            ],
+            "trail": {
+                "floor": 67,
+                "tiles": 12281,
+                "per100": 50,
+                "kit": [9488, 4735, 9486, 9487, 4343, 3549, 7210, 4737]
+            },
+            "shore": {
+                "floor": 55,
+                "tiles": 10026,
+                "per100": 26,
+                "kit": [336, 11439, 14483, 21651, 4735, 11437, 11436, 561]
+            },
+            "road": { "floor": 12, "tiles": 1249, "per100": 3, "kit": [1248, 756, 1257, 1862] },
+            "rockGround": {
+                "floor": 55,
+                "tiles": 10026,
+                "per100": 26,
+                "kit": [336, 11439, 14483, 21651, 4735, 11437, 11436, 561]
+            }
+        }
+    },
+    "rockOverlays": [
+        {
+            "floor": 83,
+            "tiles": 26379,
+            "per100": 36,
+            "kit": [3709, 3703, 3706, 3702, 3708, 3704, 3710, 54432]
+        },
+        {
+            "floor": 85,
+            "tiles": 8634,
+            "per100": 2,
+            "kit": [20751, 12931, 2159, 20750, 2173, 2174, 18274, 1247]
+        },
+        {
+            "floor": 2,
+            "tiles": 10650,
+            "per100": 28,
+            "kit": [336, 14483, 50398, 14482, 561, 14484, 14486, 337]
+        },
+        {
+            "floor": 3,
+            "tiles": 9185,
+            "per100": 34,
+            "kit": [11439, 336, 11438, 11440, 559, 48516, 13412, 15630]
+        },
+        {
+            "floor": 99,
+            "tiles": 4290,
+            "per100": 73,
+            "kit": [14483, 14482, 14486, 14487, 14394, 14391, 14470, 14390]
+        },
+        {
+            "floor": 115,
+            "tiles": 4487,
+            "per100": 20,
+            "kit": [34413, 34414, 34416, 20743, 34355, 14486, 34415, 7123]
+        },
+        {
+            "floor": 132,
+            "tiles": 5079,
+            "per100": 56,
+            "kit": [28513, 28507, 12931, 20751, 28505, 28508, 333, 14501]
+        },
+        {
+            "floor": 82,
+            "tiles": 6633,
+            "per100": 31,
+            "kit": [3703, 5325, 3709, 561, 560, 5328, 5324, 5329]
+        },
+        {
+            "floor": 102,
+            "tiles": 3603,
+            "per100": 34,
+            "kit": [5328, 5204, 2173, 5327, 5205, 2172, 5329, 2174]
+        },
+        {
+            "floor": 26,
+            "tiles": 14738,
+            "per100": 20,
+            "kit": [330, 6617, 729, 10030, 10845, 18934, 331, 329]
+        },
+        {
+            "floor": 106,
+            "tiles": 5519,
+            "per100": 28,
+            "kit": [3614, 320, 3949, 319, 5335, 3950, 3613, 18298]
+        },
+        {
+            "floor": 185,
+            "tiles": 5620,
+            "per100": 47,
+            "kit": [3614, 3613, 3949, 3615, 57470, 3948, 48103, 57249]
+        },
+        {
+            "floor": 14,
+            "tiles": 47517,
+            "per100": 49,
+            "kit": [325, 185, 4343, 25095, 326, 339, 3949, 4342]
+        },
+        {
+            "floor": 11,
+            "tiles": 22630,
+            "per100": 37,
+            "kit": [14495, 14501, 12931, 14498, 14492, 12930, 14497, 336]
+        }
+    ],
+    "decorOnOverlay": [
+        {
+            "floor": 517,
+            "tiles": 209471,
+            "per100": 0,
+            "top": [
+                [59923, 8],
+                [9453, 3],
+                [9454, 2],
+                [16446, 1],
+                [16453, 1],
+                [16412, 1]
+            ]
+        },
+        {
+            "floor": 442,
+            "tiles": 205050,
+            "per100": 1,
+            "top": [
+                [16403, 201],
+                [1243, 164],
+                [16453, 155],
+                [16997, 139],
+                [59923, 117],
+                [16446, 91]
+            ]
+        },
+        {
+            "floor": 451,
+            "tiles": 193104,
+            "per100": 0,
+            "top": [
+                [59923, 47],
+                [59924, 17],
+                [14882, 14],
+                [16403, 9],
+                [16453, 7],
+                [58134, 5]
+            ]
+        },
+        {
+            "floor": 547,
+            "tiles": 156208,
+            "per100": 0,
+            "top": [
+                [21135, 18],
+                [21136, 11],
+                [58136, 2],
+                [21105, 2],
+                [58133, 1],
+                [41009, 1]
+            ]
+        },
+        {
+            "floor": 454,
+            "tiles": 155705,
+            "per100": 0,
+            "top": [
+                [59923, 26],
+                [60419, 18],
+                [16453, 12],
+                [16403, 11],
+                [60420, 11],
+                [60418, 10]
+            ]
+        },
+        {
+            "floor": 448,
+            "tiles": 128848,
+            "per100": 0,
+            "top": [
+                [59923, 31],
+                [16403, 25],
+                [16453, 22],
+                [59924, 11],
+                [269, 8],
+                [7389, 7]
+            ]
+        },
+        {
+            "floor": 487,
+            "tiles": 83398,
+            "per100": 0,
+            "top": [
+                [17677, 1],
+                [17678, 1]
+            ]
+        },
+        {
+            "floor": 445,
+            "tiles": 74564,
+            "per100": 0,
+            "top": [
+                [59923, 64],
+                [16403, 46],
+                [16453, 31],
+                [59924, 19],
+                [14882, 13],
+                [16446, 11]
+            ]
+        },
+        {
+            "floor": 6,
+            "tiles": 49422,
+            "per100": 4,
+            "top": [
+                [3547, 222],
+                [3549, 140],
+                [31778, 111],
+                [50947, 92],
+                [754, 92],
+                [14776, 85]
+            ]
+        },
+        {
+            "floor": 583,
+            "tiles": 48866,
+            "per100": 0,
+            "top": [
+                [16453, 7],
+                [16403, 2],
+                [58136, 1],
+                [16455, 1]
+            ]
+        },
+        {
+            "floor": 14,
+            "tiles": 47517,
+            "per100": 49,
+            "top": [
+                [325, 3893],
+                [185, 3091],
+                [4343, 1760],
+                [25095, 874],
+                [326, 835],
+                [339, 757]
+            ]
+        },
+        {
+            "floor": 520,
+            "tiles": 30580,
+            "per100": 0,
+            "top": [
+                [3547, 12],
+                [30610, 12],
+                [30607, 11],
+                [16403, 9],
+                [16412, 9],
+                [30608, 9]
+            ]
+        },
+        {
+            "floor": 577,
+            "tiles": 27423,
+            "per100": 29,
+            "top": [
+                [60420, 2452],
+                [60419, 2369],
+                [60418, 1446],
+                [60417, 888],
+                [60416, 755],
+                [59119, 56]
+            ]
+        },
+        {
+            "floor": 83,
+            "tiles": 26379,
+            "per100": 36,
+            "top": [
+                [3709, 3636],
+                [3703, 2401],
+                [3706, 795],
+                [3702, 531],
+                [3708, 240],
+                [3704, 208]
+            ]
+        },
+        {
+            "floor": 7,
+            "tiles": 23301,
+            "per100": 17,
+            "top": [
+                [3549, 1403],
+                [20742, 830],
+                [3548, 773],
+                [3547, 448],
+                [20743, 101],
+                [27921, 46]
+            ]
+        },
+        {
+            "floor": 11,
+            "tiles": 22630,
+            "per100": 37,
+            "top": [
+                [14495, 2395],
+                [14501, 643],
+                [12931, 561],
+                [14498, 385],
+                [14492, 347],
+                [12930, 346]
+            ]
+        },
+        {
+            "floor": 505,
+            "tiles": 19779,
+            "per100": 1,
+            "top": [
+                [16007, 21],
+                [16005, 20],
+                [16403, 15],
+                [16008, 14],
+                [16006, 13],
+                [16446, 12]
+            ]
+        },
+        {
+            "floor": 469,
+            "tiles": 19344,
+            "per100": 1,
+            "top": [
+                [60428, 52],
+                [60429, 20],
+                [60427, 19],
+                [60430, 7],
+                [60426, 6],
+                [21948, 2]
+            ]
+        },
+        {
+            "floor": 544,
+            "tiles": 18249,
+            "per100": 0,
+            "top": [
+                [21135, 8],
+                [16406, 1],
+                [16446, 1],
+                [21136, 1],
+                [21105, 1]
+            ]
+        },
+        {
+            "floor": 22,
+            "tiles": 18107,
+            "per100": 42,
+            "top": [
+                [320, 3635],
+                [321, 969],
+                [319, 753],
+                [561, 237],
+                [18278, 133],
+                [560, 121]
+            ]
+        },
+        {
+            "floor": 535,
+            "tiles": 18001,
+            "per100": 1,
+            "top": [
+                [21136, 95],
+                [21135, 61],
+                [16403, 16],
+                [21105, 13],
+                [16453, 10],
+                [16431, 8]
+            ]
+        },
+        { "floor": 529, "tiles": 16454, "per100": 0, "top": [[16412, 1]] },
+        {
+            "floor": 580,
+            "tiles": 15608,
+            "per100": 1,
+            "top": [
+                [16453, 36],
+                [16403, 28],
+                [7389, 4],
+                [2759, 4],
+                [1247, 3],
+                [16412, 1]
+            ]
+        },
+        {
+            "floor": 26,
+            "tiles": 14738,
+            "per100": 20,
+            "top": [
+                [330, 565],
+                [6617, 436],
+                [729, 181],
+                [10030, 173],
+                [10845, 168],
+                [18934, 154]
+            ]
+        },
+        {
+            "floor": 81,
+            "tiles": 14272,
+            "per100": 49,
+            "top": [
+                [3949, 1339],
+                [7517, 505],
+                [27627, 477],
+                [27626, 456],
+                [3614, 401],
+                [4343, 264]
+            ]
+        },
+        {
+            "floor": 10,
+            "tiles": 14162,
+            "per100": 25,
+            "top": [
+                [336, 1377],
+                [335, 250],
+                [1248, 181],
+                [337, 148],
+                [4736, 118],
+                [1247, 112]
+            ]
+        },
+        {
+            "floor": 523,
+            "tiles": 13415,
+            "per100": 0,
+            "top": [
+                [16403, 6],
+                [16454, 2],
+                [3547, 1],
+                [16412, 1],
+                [16404, 1]
+            ]
+        },
+        {
+            "floor": 565,
+            "tiles": 12424,
+            "per100": 24,
+            "top": [
+                [60419, 746],
+                [60420, 705],
+                [60418, 446],
+                [60417, 256],
+                [60416, 208],
+                [59120, 164]
+            ]
+        },
+        {
+            "floor": 514,
+            "tiles": 11642,
+            "per100": 0,
+            "top": [
+                [16403, 3],
+                [9454, 2],
+                [16413, 1],
+                [9453, 1],
+                [16455, 1]
+            ]
+        },
+        {
+            "floor": 526,
+            "tiles": 10873,
+            "per100": 0,
+            "top": [
+                [16412, 2],
+                [16403, 1],
+                [16413, 1],
+                [16404, 1]
+            ]
+        },
+        {
+            "floor": 2,
+            "tiles": 10650,
+            "per100": 28,
+            "top": [
+                [336, 758],
+                [14483, 345],
+                [50398, 280],
+                [14482, 161],
+                [561, 111],
+                [14484, 110]
+            ]
+        },
+        {
+            "floor": 152,
+            "tiles": 10496,
+            "per100": 6,
+            "top": [
+                [16553, 244],
+                [40670, 177],
+                [16390, 144],
+                [16554, 13],
+                [16430, 3],
+                [17030, 2]
+            ]
+        },
+        {
+            "floor": 475,
+            "tiles": 10378,
+            "per100": 1,
+            "top": [
+                [14882, 40],
+                [16453, 18],
+                [16403, 11],
+                [2759, 8],
+                [16437, 3],
+                [17676, 2]
+            ]
+        },
+        {
+            "floor": 80,
+            "tiles": 9335,
+            "per100": 34,
+            "top": [
+                [51827, 1150],
+                [13409, 237],
+                [51826, 235],
+                [51805, 211],
+                [3949, 165],
+                [52335, 95]
+            ]
+        },
+        {
+            "floor": 3,
+            "tiles": 9185,
+            "per100": 34,
+            "top": [
+                [11439, 1294],
+                [336, 534],
+                [11438, 191],
+                [11440, 120],
+                [559, 97],
+                [48516, 91]
+            ]
+        },
+        {
+            "floor": 574,
+            "tiles": 8716,
+            "per100": 33,
+            "top": [
+                [60420, 683],
+                [60419, 674],
+                [60418, 415],
+                [59119, 330],
+                [59120, 326],
+                [60417, 245]
+            ]
+        },
+        {
+            "floor": 85,
+            "tiles": 8634,
+            "per100": 2,
+            "top": [
+                [20751, 32],
+                [12931, 28],
+                [37273, 22],
+                [11479, 16],
+                [2159, 14],
+                [11476, 14]
+            ]
+        },
+        {
+            "floor": 222,
+            "tiles": 8514,
+            "per100": 32,
+            "top": [
+                [48523, 504],
+                [3703, 498],
+                [5328, 354],
+                [48524, 284],
+                [48525, 271],
+                [5327, 112]
+            ]
+        },
+        {
+            "floor": 508,
+            "tiles": 8025,
+            "per100": 0,
+            "top": [
+                [16403, 7],
+                [16412, 3],
+                [16404, 2],
+                [16416, 2],
+                [16446, 2],
+                [16393, 1]
+            ]
+        },
+        {
+            "floor": 538,
+            "tiles": 7091,
+            "per100": 1,
+            "top": [
+                [21136, 28],
+                [21135, 20],
+                [16403, 9],
+                [16453, 4],
+                [16406, 4],
+                [21105, 4]
+            ]
+        }
+    ],
+    "decorOnUnderlay": [
+        {
+            "floor": 48,
+            "tiles": 180960,
+            "per100": 43,
+            "top": [
+                [1257, 6716],
+                [1247, 5389],
+                [4736, 5073],
+                [1258, 4724],
+                [4735, 4346],
+                [4737, 3605]
+            ]
+        },
+        {
+            "floor": 63,
+            "tiles": 135060,
+            "per100": 35,
+            "top": [
+                [325, 6340],
+                [185, 2384],
+                [1247, 1746],
+                [326, 1278],
+                [31778, 1212],
+                [4736, 1184]
+            ]
+        },
+        {
+            "floor": 50,
+            "tiles": 122404,
+            "per100": 43,
+            "top": [
+                [1257, 2610],
+                [1258, 1981],
+                [1242, 1966],
+                [4736, 1770],
+                [1241, 1661],
+                [51805, 1548]
+            ]
+        },
+        {
+            "floor": 58,
+            "tiles": 80389,
+            "per100": 16,
+            "top": [
+                [561, 4436],
+                [560, 2321],
+                [559, 1705],
+                [13412, 1111],
+                [13413, 292],
+                [21105, 254]
+            ]
+        },
+        {
+            "floor": 49,
+            "tiles": 59567,
+            "per100": 52,
+            "top": [
+                [4736, 4641],
+                [4737, 3334],
+                [4735, 3332],
+                [4738, 2243],
+                [5335, 1520],
+                [1258, 925]
+            ]
+        },
+        {
+            "floor": 62,
+            "tiles": 59174,
+            "per100": 11,
+            "top": [
+                [729, 1802],
+                [730, 605],
+                [728, 533],
+                [3170, 358],
+                [341, 311],
+                [342, 198]
+            ]
+        },
+        {
+            "floor": 61,
+            "tiles": 56224,
+            "per100": 13,
+            "top": [
+                [729, 3115],
+                [728, 1020],
+                [330, 611],
+                [730, 432],
+                [16823, 106],
+                [46762, 95]
+            ]
+        },
+        {
+            "floor": 72,
+            "tiles": 42649,
+            "per100": 37,
+            "top": [
+                [333, 2674],
+                [334, 1341],
+                [332, 1203],
+                [14498, 1001],
+                [14495, 946],
+                [336, 777]
+            ]
+        },
+        {
+            "floor": 65,
+            "tiles": 42084,
+            "per100": 26,
+            "top": [
+                [325, 894],
+                [14601, 774],
+                [320, 647],
+                [1257, 591],
+                [185, 434],
+                [1247, 430]
+            ]
+        },
+        {
+            "floor": 64,
+            "tiles": 40734,
+            "per100": 39,
+            "top": [
+                [330, 989],
+                [4736, 803],
+                [14522, 735],
+                [320, 680],
+                [325, 673],
+                [4735, 633]
+            ]
+        },
+        {
+            "floor": 52,
+            "tiles": 33046,
+            "per100": 43,
+            "top": [
+                [51805, 1713],
+                [51811, 1065],
+                [51804, 913],
+                [1243, 850],
+                [51815, 817],
+                [51827, 632]
+            ]
+        },
+        {
+            "floor": 93,
+            "tiles": 31852,
+            "per100": 64,
+            "top": [
+                [6818, 4377],
+                [5335, 2713],
+                [6819, 2685],
+                [6835, 1396],
+                [5336, 1146],
+                [6817, 1052]
+            ]
+        },
+        {
+            "floor": 68,
+            "tiles": 31285,
+            "per100": 34,
+            "top": [
+                [729, 2978],
+                [728, 1364],
+                [51815, 399],
+                [1243, 384],
+                [730, 332],
+                [51814, 305]
+            ]
+        },
+        {
+            "floor": 54,
+            "tiles": 26905,
+            "per100": 36,
+            "top": [
+                [3549, 1923],
+                [3548, 923],
+                [20742, 886],
+                [1272, 738],
+                [30607, 516],
+                [30610, 452]
+            ]
+        },
+        {
+            "floor": 56,
+            "tiles": 23459,
+            "per100": 44,
+            "top": [
+                [336, 3644],
+                [14483, 466],
+                [9488, 381],
+                [14460, 353],
+                [14457, 346],
+                [561, 336]
+            ]
+        },
+        {
+            "floor": 150,
+            "tiles": 22018,
+            "per100": 45,
+            "top": [
+                [14501, 4014],
+                [14498, 1157],
+                [14500, 696],
+                [14502, 620],
+                [14471, 356],
+                [14468, 317]
+            ]
+        },
+        {
+            "floor": 96,
+            "tiles": 21057,
+            "per100": 47,
+            "top": [
+                [5336, 1163],
+                [5335, 760],
+                [31778, 693],
+                [5337, 675],
+                [4343, 635],
+                [5338, 624]
+            ]
+        },
+        {
+            "floor": 92,
+            "tiles": 20967,
+            "per100": 49,
+            "top": [
+                [3709, 4257],
+                [3703, 1183],
+                [11439, 410],
+                [3708, 302],
+                [3710, 272],
+                [4340, 206]
+            ]
+        },
+        {
+            "floor": 57,
+            "tiles": 19830,
+            "per100": 30,
+            "top": [
+                [336, 1592],
+                [14483, 420],
+                [12931, 394],
+                [12930, 227],
+                [337, 187],
+                [14495, 146]
+            ]
+        },
+        {
+            "floor": 148,
+            "tiles": 18752,
+            "per100": 51,
+            "top": [
+                [14495, 4706],
+                [14494, 727],
+                [14496, 706],
+                [14492, 357],
+                [14457, 313],
+                [14394, 299]
+            ]
+        },
+        {
+            "floor": 94,
+            "tiles": 17629,
+            "per100": 38,
+            "top": [
+                [3703, 1027],
+                [3709, 813],
+                [11439, 435],
+                [16824, 253],
+                [3704, 225],
+                [16823, 213]
+            ]
+        },
+        {
+            "floor": 147,
+            "tiles": 17188,
+            "per100": 52,
+            "top": [
+                [14492, 4050],
+                [14495, 1286],
+                [14491, 604],
+                [14493, 593],
+                [14486, 314],
+                [14601, 264]
+            ]
+        },
+        {
+            "floor": 149,
+            "tiles": 16533,
+            "per100": 53,
+            "top": [
+                [14498, 4785],
+                [14497, 645],
+                [14499, 514],
+                [14495, 437],
+                [14471, 415],
+                [14501, 366]
+            ]
+        },
+        {
+            "floor": 103,
+            "tiles": 15846,
+            "per100": 39,
+            "top": [
+                [5338, 680],
+                [3549, 534],
+                [5337, 490],
+                [5336, 489],
+                [5335, 453],
+                [3548, 342]
+            ]
+        },
+        {
+            "floor": 126,
+            "tiles": 15400,
+            "per100": 13,
+            "top": [
+                [729, 554],
+                [330, 361],
+                [11091, 179],
+                [728, 172],
+                [3549, 113],
+                [730, 76]
+            ]
+        },
+        {
+            "floor": 146,
+            "tiles": 15336,
+            "per100": 57,
+            "top": [
+                [14486, 3977],
+                [14483, 1087],
+                [14572, 681],
+                [14485, 628],
+                [14492, 450],
+                [14487, 440]
+            ]
+        },
+        {
+            "floor": 33,
+            "tiles": 15166,
+            "per100": 49,
+            "top": [
+                [5335, 3726],
+                [5338, 1681],
+                [51805, 813],
+                [51804, 270],
+                [5337, 99],
+                [51806, 95]
+            ]
+        },
+        {
+            "floor": 145,
+            "tiles": 15064,
+            "per100": 46,
+            "top": [
+                [14483, 3380],
+                [14522, 708],
+                [14482, 571],
+                [14486, 528],
+                [14484, 337],
+                [325, 186]
+            ]
+        },
+        {
+            "floor": 66,
+            "tiles": 14766,
+            "per100": 47,
+            "top": [
+                [31778, 908],
+                [315, 847],
+                [31777, 466],
+                [55114, 280],
+                [55113, 235],
+                [55112, 214]
+            ]
+        },
+        {
+            "floor": 67,
+            "tiles": 12281,
+            "per100": 50,
+            "top": [
+                [9488, 1117],
+                [4735, 497],
+                [9486, 362],
+                [9487, 297],
+                [4343, 271],
+                [3549, 268]
+            ]
+        },
+        {
+            "floor": 115,
+            "tiles": 11237,
+            "per100": 56,
+            "top": [
+                [3549, 1170],
+                [3548, 901],
+                [5338, 819],
+                [3547, 529],
+                [5335, 436],
+                [5337, 429]
+            ]
+        },
+        {
+            "floor": 26,
+            "tiles": 10840,
+            "per100": 49,
+            "top": [
+                [339, 1368],
+                [51815, 947],
+                [51827, 505],
+                [51811, 420],
+                [51814, 311],
+                [51810, 200]
+            ]
+        },
+        {
+            "floor": 10,
+            "tiles": 10156,
+            "per100": 42,
+            "top": [
+                [14486, 272],
+                [14470, 223],
+                [37716, 222],
+                [37718, 196],
+                [14483, 172],
+                [3750, 164]
+            ]
+        },
+        {
+            "floor": 55,
+            "tiles": 10026,
+            "per100": 26,
+            "top": [
+                [336, 416],
+                [11439, 201],
+                [14483, 198],
+                [21651, 98],
+                [4735, 87],
+                [11437, 83]
+            ]
+        },
+        {
+            "floor": 97,
+            "tiles": 9503,
+            "per100": 39,
+            "top": [
+                [4340, 1192],
+                [3709, 363],
+                [16823, 339],
+                [4341, 205],
+                [16824, 186],
+                [4339, 155]
+            ]
+        },
+        {
+            "floor": 59,
+            "tiles": 8451,
+            "per100": 9,
+            "top": [
+                [26398, 260],
+                [26396, 163],
+                [26397, 148],
+                [21105, 33],
+                [14495, 28],
+                [3709, 20]
+            ]
+        },
+        {
+            "floor": 125,
+            "tiles": 7224,
+            "per100": 1,
+            "top": [
+                [44198, 9],
+                [5336, 4],
+                [14092, 4],
+                [14093, 4],
+                [4303, 3],
+                [44197, 3]
+            ]
+        },
+        {
+            "floor": 25,
+            "tiles": 6785,
+            "per100": 56,
+            "top": [
+                [20742, 1044],
+                [5335, 722],
+                [2382, 655],
+                [5337, 199],
+                [5338, 149],
+                [20743, 148]
+            ]
+        },
+        {
+            "floor": 98,
+            "tiles": 6607,
+            "per100": 38,
+            "top": [
+                [4340, 615],
+                [16823, 270],
+                [3709, 269],
+                [16824, 168],
+                [4341, 164],
+                [16825, 143]
+            ]
+        },
+        {
+            "floor": 100,
+            "tiles": 6287,
+            "per100": 47,
+            "top": [
+                [4813, 276],
+                [4814, 256],
+                [4810, 254],
+                [4812, 240],
+                [4811, 224],
+                [19830, 147]
+            ]
+        }
+    ]
+}

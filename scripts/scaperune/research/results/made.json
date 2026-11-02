@@ -1,0 +1,3156 @@
+{
+    "halloween": {
+        "kind": "made",
+        "size": [192, 192],
+        "height": {
+            "heightRange": [40, 45],
+            "walkableShare": 0.97,
+            "slopeSharePct": {
+                "0-0": 81.5,
+                "1-2": 5.9,
+                "3-4": 12.7,
+                "5-8": 0,
+                "9-12": 0,
+                "13-16": 0,
+                "17-24": 0,
+                "25-32": 0,
+                "33-44": 0,
+                "45-64": 0,
+                "65-255": 0
+            },
+            "walkSlopeSharePct": {
+                "0-0": 83.1,
+                "1-2": 5.9,
+                "3-4": 11,
+                "5-8": 0,
+                "9-12": 0,
+                "13-16": 0,
+                "17-24": 0,
+                "25-32": 0,
+                "33-44": 0,
+                "45-64": 0,
+                "65-255": 0
+            },
+            "walkSlope": { "p50": 0, "p90": 3, "p99": 3, "p999": 4, "max": 4 },
+            "steepest": 4,
+            "sizeX": 192
+        },
+        "ground": {
+            "underlayKinds": 6,
+            "topUnderlays": [
+                [225, 15212],
+                [104, 11708],
+                [11, 8176],
+                [45, 1760],
+                [48, 6],
+                [54, 2]
+            ],
+            "overlayKinds": 10,
+            "overlaySharePct": 28.1,
+            "topOverlays": [
+                [14, 4520],
+                [278, 2870],
+                [427, 2260],
+                [194, 436],
+                [61, 115],
+                [85, 68],
+                [49, 40],
+                [52, 35],
+                [15, 1],
+                [161, 1]
+            ],
+            "shapeSharePct": {
+                "0": 91.1,
+                "1": 1.2,
+                "2": 0.6,
+                "3": 0.7,
+                "4": 0.5,
+                "5": 0.6,
+                "6": 1.4,
+                "7": 1.7,
+                "8": 2.1
+            },
+            "blockedSharePct": 0.1,
+            "paths": [
+                {
+                    "overlay": 14,
+                    "walkTiles": 3769,
+                    "sharePct": 12.3,
+                    "width": { "p25": 2, "p50": 2, "p75": 2, "p95": 2 },
+                    "shapedEdgePct": 0
+                },
+                {
+                    "overlay": 278,
+                    "walkTiles": 2870,
+                    "sharePct": 7.8,
+                    "width": { "p25": 2, "p50": 4, "p75": 5, "p95": 7 },
+                    "shapedEdgePct": 26.82
+                },
+                {
+                    "overlay": 427,
+                    "walkTiles": 2256,
+                    "sharePct": 6.1,
+                    "width": { "p25": 1, "p50": 1, "p75": 1, "p95": 1 },
+                    "shapedEdgePct": 0
+                },
+                {
+                    "overlay": 194,
+                    "walkTiles": 436,
+                    "sharePct": 1.2,
+                    "width": { "p25": 3, "p50": 5, "p75": 7, "p95": 14 },
+                    "shapedEdgePct": 83.33
+                },
+                {
+                    "overlay": 61,
+                    "walkTiles": 115,
+                    "sharePct": 0.3,
+                    "width": { "p25": 5, "p50": 5, "p75": 5, "p95": 5 },
+                    "shapedEdgePct": 0
+                }
+            ]
+        },
+        "objects": {
+            "locsPer100Tiles": 14.24,
+            "groupPer100": {
+                "scenery": 4.43,
+                "ground": 5.19,
+                "wall": 4.58,
+                "diagonal": 0.01,
+                "wallDeco": 0.03
+            },
+            "typeCounts": {
+                "0": 1625,
+                "1": 34,
+                "2": 20,
+                "3": 11,
+                "4": 11,
+                "9": 4,
+                "10": 1625,
+                "11": 9,
+                "22": 1912
+            },
+            "rotationSharePct": {
+                "scenery": [28, 25, 24, 23],
+                "ground": [25, 25, 25, 25],
+                "wall": [25, 26, 24, 26],
+                "diagonal": [25, 0, 0, 75],
+                "wallDeco": [27, 18, 18, 36]
+            },
+            "solidSceneryPer100": 2.55,
+            "softSceneryPer100": 1.89,
+            "scenerySize": { "1": 1538, "2": 92, "3": 4 },
+            "kinds": { "scenery": 92, "ground": 21, "wall": 19, "diagonal": 3, "wallDeco": 6 },
+            "topByGroup": {
+                "scenery": [
+                    ["Jack-O-Lantern:46264", 255],
+                    ["Jack-O-Lantern:46263", 166],
+                    ["Jack-O-Lantern:46272", 166],
+                    ["Jack-O-Lantern:46265", 95],
+                    ["Jack-O-Lantern:46269", 84],
+                    ["Jack-O-Lantern:46266", 81],
+                    ["Jack-O-Lantern:46267", 79],
+                    ["Candles:11473", 73]
+                ],
+                "ground": [
+                    ["Orange pumpkin seedling:55617", 519],
+                    ["#5335:5335", 282],
+                    ["#12931:12931", 265],
+                    ["#3547:3547", 259],
+                    ["#3549:3549", 257],
+                    ["#3548:3548", 246],
+                    ["#39499:39499", 20],
+                    ["#11476:11476", 14]
+                ],
+                "wall": [
+                    ["#39202:39202", 906],
+                    ["Wooden fence:5153", 602],
+                    ["#20774:20774", 59],
+                    ["#20775:20775", 23],
+                    ["#7410:7410", 20],
+                    ["#24371:24371", 19],
+                    ["#39400:39400", 11],
+                    ["#5432:5432", 10]
+                ],
+                "diagonal": [
+                    ["#5432:5432", 2],
+                    ["#24371:24371", 1],
+                    ["#23849:23849", 1]
+                ],
+                "wallDeco": [
+                    ["Lantern:10307", 3],
+                    ["#24902:24902", 3],
+                    ["#24901:24901", 2],
+                    ["#24903:24903", 1],
+                    ["#24905:24905", 1],
+                    ["#24906:24906", 1]
+                ]
+            },
+            "props": {
+                "count": 1597,
+                "per100": 4.33,
+                "againstWallPct": 8,
+                "indoorsPct": 3,
+                "clusterP50": 1,
+                "clusterP90": 2,
+                "clusterMax": 60,
+                "singletonsPct": 89
+            },
+            "trees": {
+                "count": 37,
+                "per100": 0.1,
+                "nearestP25": 7.6,
+                "nearestP50": 8.6,
+                "nearestP75": 11
+            },
+            "walkableTiles": 35728,
+            "sizeY": 192
+        },
+        "towns": {
+            "buildings": 3,
+            "smallIndoorBits": 0,
+            "indoorSharePct": 0.4,
+            "areaQ": [36, 40, 68, 68],
+            "longSideQ": [6, 8, 10, 10],
+            "shortSideQ": [5, 6, 7, 7],
+            "fillQ": [1, 1, 1, 1],
+            "gapQ": [23, 23, 99, 99],
+            "streetQ": [0, 0, 0, 0],
+            "wallLocs": 87,
+            "wallKinds": 14,
+            "wallKindsFor90Pct": 8,
+            "diagonalWallPct": 1.1,
+            "topWalls": [
+                ["#24371:24371", 20],
+                ["#7410:7410", 16],
+                ["#39400:39400", 11],
+                ["#24376:24376", 8],
+                ["#39202:39202", 8],
+                ["#39399:39399", 6]
+            ],
+            "indoorFloors": [
+                [85, 68],
+                [49, 40],
+                [52, 35],
+                [161, 1]
+            ],
+            "furniturePer100Indoor": 87.5,
+            "topFurniture": [
+                ["#39499", 20],
+                ["#11476", 14],
+                ["#20751", 13],
+                ["#11477", 6],
+                ["Table", 6],
+                ["#20750", 5],
+                ["#11475", 4],
+                ["#33458", 4],
+                ["#39405", 4],
+                ["#39473", 4]
+            ],
+            "upperIndoorTiles": [68, 0, 0],
+            "roofLocs": 370,
+            "roofKinds": 12,
+            "wallSidesUnused": false,
+            "sizeY": 192
+        },
+        "pacing": {
+            "screens": 684,
+            "objectsOnScreen": { "p10": 9, "p50": 33, "p90": 59 },
+            "kindsOnScreen": { "p10": 6, "p50": 9, "p90": 16 },
+            "emptyScreensPct": 5.1,
+            "tilesFromAnything": { "p50": 2, "p90": 4, "max": 8 },
+            "openGroundPct": 0.1,
+            "iconsPer10k": 1.1,
+            "iconGapP50": 3.6,
+            "topIcons": [
+                ["#2733", 1],
+                ["#2745", 1],
+                ["#2771", 1],
+                ["#2772", 1]
+            ],
+            "landmarksPer10k": 1.1,
+            "landmarkGapP50": 110,
+            "topLandmarks": [
+                ["Mausoleum", 2],
+                ["#39161", 1],
+                ["Table", 1]
+            ],
+            "slopeUnused": false,
+            "sizeX": 192,
+            "sizeY": 192,
+            "indoor": 144
+        },
+        "faces": {
+            "faces24up": 0,
+            "dropQ": [0, 0, 0, 0],
+            "lengthQ": [0, 0, 0],
+            "perTileQ": [0, 0, 0],
+            "blockedPct": 0,
+            "endStepQ": [0, 0],
+            "flatEndsPct": 0,
+            "steepTiles": 0,
+            "steepWithLocPct": 0,
+            "steepOverlaidPct": 0,
+            "steepBlockedFlagPct": 0,
+            "steepOverlays": [],
+            "onSteep": []
+        },
+        "enclosures": {
+            "enclosures": 0,
+            "areaQ": [0, 0, 0, 0],
+            "freeWallSharePct": 95,
+            "freeWallsPer100": 4.35,
+            "topFreeWalls": [
+                ["#39202:39202", 898],
+                ["Wooden fence:5153", 602],
+                ["#20774:20774", 59],
+                ["#20775:20775", 23],
+                ["#5432:5432", 10],
+                ["#24379:24379", 4]
+            ],
+            "sizeY": 192
+        },
+        "rings": {
+            "centre": [31, 127],
+            "rings": [
+                {
+                    "tiles": 1024,
+                    "indoorPct": 1,
+                    "wallsPer100": 2.9,
+                    "propsPer100": 4.7,
+                    "treesPer100": 0.5,
+                    "decorPer100": 5.2
+                },
+                {
+                    "tiles": 3072,
+                    "indoorPct": 1,
+                    "wallsPer100": 5.3,
+                    "propsPer100": 4.6,
+                    "treesPer100": 0.1,
+                    "decorPer100": 5.5
+                },
+                {
+                    "tiles": 3584,
+                    "indoorPct": 2,
+                    "wallsPer100": 4.2,
+                    "propsPer100": 4.6,
+                    "treesPer100": 0.1,
+                    "decorPer100": 5.5
+                },
+                {
+                    "tiles": 4608,
+                    "indoorPct": 0,
+                    "wallsPer100": 1.8,
+                    "propsPer100": 3.1,
+                    "treesPer100": 0.1,
+                    "decorPer100": 5
+                },
+                {
+                    "tiles": 3952,
+                    "indoorPct": 0,
+                    "wallsPer100": 3.3,
+                    "propsPer100": 2.9,
+                    "treesPer100": 0.1,
+                    "decorPer100": 4.4
+                },
+                {
+                    "tiles": 4368,
+                    "indoorPct": 0,
+                    "wallsPer100": 3.9,
+                    "propsPer100": 4.3,
+                    "treesPer100": 0,
+                    "decorPer100": 4.6
+                }
+            ]
+        },
+        "decor": {
+            "pathSlopeQ": [0, 3, 4, 4],
+            "decorKinds": 6,
+            "decorContouredPct": 72,
+            "decorByPathDistance": [5, 5, 5, 4, 4, 5, 5],
+            "propsByPathDistance": [0, 51, 6, 3, 3, 3, 3],
+            "tilesByPathDistance": [9446, 1595, 1500, 1480, 1456, 1403, 1350]
+        },
+        "underlays": {
+            "pieces": 35,
+            "areaP50": 199,
+            "areaP90": 2352,
+            "boundaryPer100": 14,
+            "kindsIn16": [1, 2, 3]
+        },
+        "shore": {
+            "waterSharePct": 0,
+            "edgeTiles": 0,
+            "shapedEdgePct": 0,
+            "bankRiseQ": [0, 0, 0],
+            "onShorePer100Edge": 0,
+            "topOnShore": []
+        },
+        "plazas": [],
+        "fronts": { "doors": 0, "doorRotations": [0, 0, 0, 0], "doorToPathQ": [0, 0, 0] },
+        "sight": { "viewQ": [7, 19, 33, 33] },
+        "aprons": {
+            "ringTiles": 216,
+            "ringOverlayPct": 0,
+            "ringTopOverlays": [],
+            "ringDecorPer100": 3,
+            "ringPropsPer100": 4.6,
+            "indoorOverlayPct": 100,
+            "indoorTopOverlays": [
+                [85, 68],
+                [49, 40],
+                [52, 35],
+                [161, 1]
+            ]
+        },
+        "rims": {
+            "foot": {
+                "tiles": 0,
+                "flatPct": 0,
+                "overlayPct": 0,
+                "decorPer100": 0,
+                "propsPer100": 0,
+                "wallsPer100": 0,
+                "topProps": []
+            },
+            "top": {
+                "tiles": 0,
+                "flatPct": 0,
+                "overlayPct": 0,
+                "decorPer100": 0,
+                "propsPer100": 0,
+                "wallsPer100": 0,
+                "topProps": []
+            }
+        }
+    },
+    "scaperune_meadow": {
+        "kind": "made",
+        "size": [128, 128],
+        "height": {
+            "heightRange": [6, 126],
+            "walkableShare": 0.41,
+            "slopeSharePct": {
+                "0-0": 54.8,
+                "1-2": 13.7,
+                "3-4": 9.8,
+                "5-8": 8.8,
+                "9-12": 12.4,
+                "13-16": 0.1,
+                "17-24": 0.1,
+                "25-32": 0.3,
+                "33-44": 0,
+                "45-64": 0,
+                "65-255": 0.1
+            },
+            "walkSlopeSharePct": {
+                "0-0": 15.1,
+                "1-2": 23.2,
+                "3-4": 18.8,
+                "5-8": 17.2,
+                "9-12": 25.6,
+                "13-16": 0,
+                "17-24": 0,
+                "25-32": 0.1,
+                "33-44": 0,
+                "45-64": 0,
+                "65-255": 0
+            },
+            "walkSlope": { "p50": 4, "p90": 10, "p99": 11, "p999": 30, "max": 30 },
+            "steepest": 109,
+            "sizeX": 128
+        },
+        "ground": {
+            "underlayKinds": 5,
+            "topUnderlays": [
+                [62, 8826],
+                [50, 2344],
+                [49, 2321],
+                [48, 2235],
+                [63, 658]
+            ],
+            "overlayKinds": 6,
+            "overlaySharePct": 56.4,
+            "topOverlays": [
+                [6, 8557],
+                [22, 404],
+                [14, 120],
+                [5, 102],
+                [81, 48],
+                [61, 3]
+            ],
+            "shapeSharePct": {
+                "0": 93.5,
+                "1": 0.3,
+                "2": 0.6,
+                "3": 0.6,
+                "4": 0.6,
+                "5": 0.7,
+                "6": 2.8,
+                "7": 0.4,
+                "8": 0.5
+            },
+            "blockedSharePct": 52.1,
+            "paths": [
+                {
+                    "overlay": 6,
+                    "walkTiles": 116,
+                    "sharePct": 52.2,
+                    "width": { "p25": 10, "p50": 13, "p75": 17, "p95": 20 },
+                    "shapedEdgePct": 97.09
+                },
+                {
+                    "overlay": 22,
+                    "walkTiles": 404,
+                    "sharePct": 2.5,
+                    "width": { "p25": 3, "p50": 4, "p75": 5, "p95": 9 },
+                    "shapedEdgePct": 74.67
+                }
+            ]
+        },
+        "objects": {
+            "locsPer100Tiles": 15.09,
+            "groupPer100": {
+                "ground": 10.87,
+                "diagonal": 0.04,
+                "wall": 1.09,
+                "scenery": 2.44,
+                "wallDeco": 0.64
+            },
+            "typeCounts": {
+                "0": 138,
+                "1": 6,
+                "2": 20,
+                "3": 15,
+                "4": 45,
+                "5": 60,
+                "9": 7,
+                "10": 399,
+                "11": 1,
+                "22": 1781
+            },
+            "rotationSharePct": {
+                "ground": [24, 25, 26, 25],
+                "diagonal": [57, 14, 14, 14],
+                "wall": [28, 23, 26, 22],
+                "scenery": [24, 27, 21, 28],
+                "wallDeco": [18, 30, 27, 25]
+            },
+            "solidSceneryPer100": 1.74,
+            "softSceneryPer100": 0.7,
+            "scenerySize": { "1": 195, "2": 153, "3": 51, "6": 1 },
+            "kinds": { "ground": 24, "diagonal": 2, "wall": 19, "scenery": 52, "wallDeco": 21 },
+            "topByGroup": {
+                "ground": [
+                    ["#4737:4737", 419],
+                    ["#4736:4736", 418],
+                    ["#4738:4738", 414],
+                    ["#4735:4735", 409],
+                    ["#3949:3949", 25],
+                    ["#325:325", 20],
+                    ["#926:926", 20],
+                    ["#326:326", 12]
+                ],
+                "diagonal": [
+                    ["#44603:44603", 5],
+                    ["#980:980", 2]
+                ],
+                "wall": [
+                    ["#1631:1631", 56],
+                    ["#1902:1902", 23],
+                    ["#436:436", 20],
+                    ["#44603:44603", 15],
+                    ["#6966:6966", 14],
+                    ["#980:980", 11],
+                    ["#981:981", 9],
+                    ["#444:444", 5]
+                ],
+                "scenery": [
+                    ["Tree:1278", 68],
+                    ["Tree:1276", 53],
+                    ["Oak tree:10820", 51],
+                    ["Flower:1187", 42],
+                    ["Daisies:1189", 39],
+                    ["Flower:1188", 30],
+                    ["Rock:5605", 16],
+                    ["Boulder:10790", 13]
+                ],
+                "wallDeco": [
+                    ["#3475:3475", 24],
+                    ["#1843:1843", 12],
+                    ["#3474:3474", 12],
+                    ["#6964:6964", 9],
+                    ["#1873:1873", 8],
+                    ["#6963:6963", 5],
+                    ["#440:440", 5],
+                    ["#1821:1821", 4]
+                ]
+            },
+            "props": {
+                "count": 227,
+                "per100": 1.39,
+                "againstWallPct": 24,
+                "indoorsPct": 23,
+                "clusterP50": 1,
+                "clusterP90": 4,
+                "clusterMax": 23,
+                "singletonsPct": 72
+            },
+            "trees": {
+                "count": 173,
+                "per100": 1.06,
+                "nearestP25": 3.2,
+                "nearestP50": 3.6,
+                "nearestP75": 4.2
+            },
+            "walkableTiles": 6745,
+            "sizeY": 128
+        },
+        "towns": {
+            "buildings": 6,
+            "smallIndoorBits": 0,
+            "indoorSharePct": 1.6,
+            "areaQ": [30, 30, 48, 102],
+            "longSideQ": [6, 6, 8, 12],
+            "shortSideQ": [5, 5, 6, 10],
+            "fillQ": [1, 1, 1, 1],
+            "gapQ": [6, 7, 14, 14],
+            "streetQ": [21, 28, 28, 28],
+            "wallLocs": 138,
+            "wallKinds": 16,
+            "wallKindsFor90Pct": 9,
+            "diagonalWallPct": 0,
+            "topWalls": [
+                ["#1631:1631", 56],
+                ["#1902:1902", 21],
+                ["#436:436", 17],
+                ["#6966:6966", 14],
+                ["#1624:1624", 4],
+                ["#1625:1625", 4]
+            ],
+            "indoorFloors": [
+                [14, 120],
+                [5, 102],
+                [81, 48]
+            ],
+            "furniturePer100Indoor": 61.1,
+            "topFurniture": [
+                ["#3949", 25],
+                ["#325", 20],
+                ["#926", 20],
+                ["#326", 12],
+                ["#925", 12],
+                ["Standing torch", 8],
+                ["Stool", 7],
+                ["Crate", 7],
+                ["Church pew", 6],
+                ["#3948", 5]
+            ],
+            "upperIndoorTiles": [31, 0, 0],
+            "roofLocs": 224,
+            "roofKinds": 8,
+            "wallSidesUnused": false,
+            "sizeY": 128
+        },
+        "pacing": {
+            "screens": 148,
+            "objectsOnScreen": { "p10": 11, "p50": 30, "p90": 69 },
+            "kindsOnScreen": { "p10": 5, "p50": 12, "p90": 24 },
+            "emptyScreensPct": 2.7,
+            "tilesFromAnything": { "p50": 1, "p90": 3, "max": 7 },
+            "openGroundPct": 0,
+            "iconsPer10k": 2.4,
+            "iconGapP50": 5,
+            "topIcons": [
+                ["#2752", 1],
+                ["#33161", 1],
+                ["#42758", 1],
+                ["#2743", 1]
+            ],
+            "landmarksPer10k": 31.7,
+            "landmarkGapP50": 5.8,
+            "topLandmarks": [
+                ["Oak tree", 51],
+                ["#60444", 1]
+            ],
+            "slopeUnused": false,
+            "sizeX": 128,
+            "sizeY": 128,
+            "indoor": 270
+        },
+        "faces": {
+            "faces24up": 389,
+            "dropQ": [50, 80, 109, 109],
+            "lengthQ": [5, 8, 11],
+            "perTileQ": [8.4, 9.6, 30],
+            "blockedPct": 28,
+            "endStepQ": [4, 7],
+            "flatEndsPct": 41,
+            "steepTiles": 83,
+            "steepWithLocPct": 8,
+            "steepOverlaidPct": 24,
+            "steepBlockedFlagPct": 95,
+            "steepOverlays": [
+                [6, 16],
+                [61, 3],
+                [22, 1]
+            ],
+            "onSteep": [
+                ["#44603:44603:t0:s1x1:c-1", 2, [2, 0, 0, 0]],
+                ["#1619:1619:t10:s1x1:c-1", 1, [0, 1, 0, 0]],
+                ["#3008:3008:t10:s1x1:c-1", 1, [0, 1, 0, 0]],
+                ["#3011:3011:t10:s1x1:c-1", 1, [0, 1, 0, 0]],
+                ["#3012:3012:t10:s1x1:c-1", 1, [0, 0, 0, 1]],
+                ["#3013:3013:t10:s1x1:c-1", 1, [0, 0, 0, 1]]
+            ]
+        },
+        "enclosures": {
+            "enclosures": 0,
+            "areaQ": [0, 0, 0, 0],
+            "freeWallSharePct": 23,
+            "freeWallsPer100": 0.25,
+            "topFreeWalls": [
+                ["#44603:44603", 15],
+                ["#980:980", 11],
+                ["#981:981", 9],
+                ["#436:436", 3],
+                ["#1902:1902", 2],
+                ["#444:444", 1]
+            ],
+            "sizeY": 128
+        },
+        "rings": {
+            "centre": [82, 52],
+            "rings": [
+                {
+                    "tiles": 1024,
+                    "indoorPct": 6,
+                    "wallsPer100": 3.4,
+                    "propsPer100": 2,
+                    "treesPer100": 2.4,
+                    "decorPer100": 19.8
+                },
+                {
+                    "tiles": 3072,
+                    "indoorPct": 6,
+                    "wallsPer100": 3,
+                    "propsPer100": 3.5,
+                    "treesPer100": 2,
+                    "decorPer100": 23.4
+                },
+                {
+                    "tiles": 4832,
+                    "indoorPct": 1,
+                    "wallsPer100": 0.6,
+                    "propsPer100": 1,
+                    "treesPer100": 0.9,
+                    "decorPer100": 7.8
+                },
+                {
+                    "tiles": 3716,
+                    "indoorPct": 0,
+                    "wallsPer100": 0.6,
+                    "propsPer100": 1.4,
+                    "treesPer100": 1.1,
+                    "decorPer100": 12.4
+                },
+                {
+                    "tiles": 3356,
+                    "indoorPct": 0,
+                    "wallsPer100": 0,
+                    "propsPer100": 0,
+                    "treesPer100": 0.1,
+                    "decorPer100": 0.6
+                },
+                {
+                    "tiles": 384,
+                    "indoorPct": 0,
+                    "wallsPer100": 0,
+                    "propsPer100": 0,
+                    "treesPer100": 0,
+                    "decorPer100": 0
+                }
+            ]
+        },
+        "decor": {
+            "pathSlopeQ": [1, 3, 30, 30],
+            "decorKinds": 8,
+            "decorContouredPct": 100,
+            "decorByPathDistance": [1, 24, 27, 27, 26, 26, 29],
+            "propsByPathDistance": [4, 3, 2, 5, 5, 5, 6],
+            "tilesByPathDistance": [523, 394, 470, 465, 449, 438, 436]
+        },
+        "underlays": {
+            "pieces": 61,
+            "areaP50": 22,
+            "areaP90": 556,
+            "boundaryPer100": 27,
+            "kindsIn16": [1, 3, 4]
+        },
+        "shore": {
+            "waterSharePct": 52.2,
+            "edgeTiles": 523,
+            "shapedEdgePct": 75,
+            "bankRiseQ": [20, 37, 90],
+            "onShorePer100Edge": 30,
+            "topOnShore": [
+                ["#4735:t22", 40],
+                ["#4736:t22", 35],
+                ["#4737:t22", 30],
+                ["#4738:t22", 28],
+                ["Flower:t10", 9],
+                ["Daisies:t10", 4],
+                ["#320:t22", 1],
+                ["#980:t0", 1]
+            ]
+        },
+        "plazas": [],
+        "fronts": { "doors": 0, "doorRotations": [0, 0, 0, 0], "doorToPathQ": [0, 0, 0] },
+        "sight": { "viewQ": [2, 5, 11, 26] },
+        "aprons": {
+            "ringTiles": 416,
+            "ringOverlayPct": 7,
+            "ringTopOverlays": [[22, 30]],
+            "ringDecorPer100": 19,
+            "ringPropsPer100": 1.9,
+            "indoorOverlayPct": 100,
+            "indoorTopOverlays": [
+                [14, 120],
+                [5, 102],
+                [81, 48]
+            ]
+        },
+        "rims": {
+            "foot": {
+                "tiles": 4,
+                "flatPct": 0,
+                "overlayPct": 0,
+                "decorPer100": 25,
+                "propsPer100": 25,
+                "wallsPer100": 0,
+                "topProps": [["Flower", 1]]
+            },
+            "top": {
+                "tiles": 40,
+                "flatPct": 33,
+                "overlayPct": 5,
+                "decorPer100": 8,
+                "propsPer100": 0,
+                "wallsPer100": 3,
+                "topProps": []
+            }
+        }
+    },
+    "scaperune_alpine": {
+        "kind": "made",
+        "size": [192, 192],
+        "height": {
+            "heightRange": [16, 255],
+            "walkableShare": 0.66,
+            "slopeSharePct": {
+                "0-0": 9.6,
+                "1-2": 22.7,
+                "3-4": 19.6,
+                "5-8": 14,
+                "9-12": 20.5,
+                "13-16": 2.7,
+                "17-24": 5,
+                "25-32": 2.8,
+                "33-44": 1.5,
+                "45-64": 1.1,
+                "65-255": 0.5
+            },
+            "walkSlopeSharePct": {
+                "0-0": 5.9,
+                "1-2": 27.1,
+                "3-4": 23.7,
+                "5-8": 16.5,
+                "9-12": 26.7,
+                "13-16": 0,
+                "17-24": 0,
+                "25-32": 0.1,
+                "33-44": 0,
+                "45-64": 0,
+                "65-255": 0
+            },
+            "walkSlope": { "p50": 4, "p90": 10, "p99": 11, "p999": 12, "max": 30 },
+            "steepest": 158,
+            "sizeX": 192
+        },
+        "ground": {
+            "underlayKinds": 7,
+            "topUnderlays": [
+                [58, 9187],
+                [48, 7716],
+                [50, 7492],
+                [49, 5845],
+                [92, 3889],
+                [63, 1893],
+                [62, 842]
+            ],
+            "overlayKinds": 4,
+            "overlaySharePct": 22.3,
+            "topOverlays": [
+                [20, 5021],
+                [6, 2088],
+                [22, 1098],
+                [14, 30]
+            ],
+            "shapeSharePct": {
+                "0": 64.8,
+                "1": 3.4,
+                "2": 3.5,
+                "3": 3.9,
+                "4": 3,
+                "5": 4.3,
+                "6": 7.5,
+                "7": 5.1,
+                "8": 4.5
+            },
+            "blockedSharePct": 26.9,
+            "paths": [
+                {
+                    "overlay": 20,
+                    "walkTiles": 915,
+                    "sharePct": 13.6,
+                    "width": { "p25": 4, "p50": 5, "p75": 6, "p95": 10 },
+                    "shapedEdgePct": 99.55
+                },
+                {
+                    "overlay": 6,
+                    "walkTiles": 157,
+                    "sharePct": 5.7,
+                    "width": { "p25": 7, "p50": 10, "p75": 10, "p95": 11 },
+                    "shapedEdgePct": 96.4
+                },
+                {
+                    "overlay": 22,
+                    "walkTiles": 1098,
+                    "sharePct": 3,
+                    "width": { "p25": 3, "p50": 3, "p75": 4, "p95": 6 },
+                    "shapedEdgePct": 67.43
+                }
+            ]
+        },
+        "objects": {
+            "locsPer100Tiles": 18.78,
+            "groupPer100": {
+                "ground": 13.16,
+                "diagonal": 0.06,
+                "wall": 0.32,
+                "scenery": 5.2,
+                "wallDeco": 0.03
+            },
+            "typeCounts": {
+                "0": 85,
+                "1": 6,
+                "2": 4,
+                "3": 24,
+                "5": 12,
+                "9": 21,
+                "10": 1914,
+                "11": 3,
+                "22": 4853
+            },
+            "rotationSharePct": {
+                "ground": [25, 25, 25, 25],
+                "diagonal": [57, 14, 14, 14],
+                "wall": [36, 13, 36, 14],
+                "scenery": [25, 26, 25, 25],
+                "wallDeco": [0, 25, 25, 50]
+            },
+            "solidSceneryPer100": 4.22,
+            "softSceneryPer100": 0.98,
+            "scenerySize": { "1": 1373, "2": 416, "3": 126, "4": 1, "6": 1 },
+            "kinds": { "ground": 13, "diagonal": 2, "wall": 7, "scenery": 44, "wallDeco": 4 },
+            "topByGroup": {
+                "ground": [
+                    ["#4736:4736", 1139],
+                    ["#4737:4737", 1098],
+                    ["#4735:4735", 1071],
+                    ["#4738:4738", 1041],
+                    ["#11439:11439", 262],
+                    ["#3614:3614", 209],
+                    ["#336:336", 12],
+                    ["#320:320", 6]
+                ],
+                "diagonal": [
+                    ["#44603:44603", 15],
+                    ["#980:980", 6]
+                ],
+                "wall": [
+                    ["#44603:44603", 45],
+                    ["#980:980", 33],
+                    ["#981:981", 24],
+                    ["#1631:1631", 14],
+                    ["#1624:1624", 1],
+                    ["#1625:1625", 1],
+                    ["#1626:1626", 1]
+                ],
+                "scenery": [
+                    ["#60437:60437", 239],
+                    ["#60436:60436", 235],
+                    ["#60438:60438", 232],
+                    ["#60439:60439", 202],
+                    ["Tree:1278", 175],
+                    ["Tree:1276", 159],
+                    ["Daisies:1189", 124],
+                    ["Flower:1187", 122]
+                ],
+                "wallDeco": [
+                    ["#3475:3475", 6],
+                    ["#1843:1843", 3],
+                    ["#1873:1873", 2],
+                    ["#1821:1821", 1]
+                ]
+            },
+            "props": {
+                "count": 1459,
+                "per100": 3.96,
+                "againstWallPct": 4,
+                "indoorsPct": 0,
+                "clusterP50": 1,
+                "clusterP90": 6,
+                "clusterMax": 46,
+                "singletonsPct": 53
+            },
+            "trees": {
+                "count": 458,
+                "per100": 1.24,
+                "nearestP25": 3.2,
+                "nearestP50": 3.6,
+                "nearestP75": 4.5
+            },
+            "walkableTiles": 24213,
+            "sizeY": 192
+        },
+        "towns": {
+            "buildings": 1,
+            "smallIndoorBits": 0,
+            "indoorSharePct": 0.1,
+            "areaQ": [30, 30, 30, 30],
+            "longSideQ": [6, 6, 6, 6],
+            "shortSideQ": [5, 5, 5, 5],
+            "fillQ": [1, 1, 1, 1],
+            "gapQ": [99, 99, 99, 99],
+            "streetQ": [0, 0, 0, 0],
+            "wallLocs": 17,
+            "wallKinds": 4,
+            "wallKindsFor90Pct": 3,
+            "diagonalWallPct": 0,
+            "topWalls": [
+                ["#1631:1631", 14],
+                ["#1624:1624", 1],
+                ["#1625:1625", 1],
+                ["#1626:1626", 1]
+            ],
+            "indoorFloors": [[14, 30]],
+            "furniturePer100Indoor": 53.3,
+            "topFurniture": [
+                ["#325", 5],
+                ["#326", 3],
+                ["Standing torch", 2],
+                ["Boxes", 1],
+                ["Charred bones", 1],
+                ["Stool", 1],
+                ["Spit roast", 1],
+                ["#10627", 1],
+                ["Crate", 1]
+            ],
+            "upperIndoorTiles": [0, 0, 0],
+            "roofLocs": 8,
+            "roofKinds": 1,
+            "wallSidesUnused": false,
+            "sizeY": 192
+        },
+        "pacing": {
+            "screens": 530,
+            "objectsOnScreen": { "p10": 13, "p50": 23, "p90": 34 },
+            "kindsOnScreen": { "p10": 5, "p50": 8, "p90": 11 },
+            "emptyScreensPct": 2.1,
+            "tilesFromAnything": { "p50": 2, "p90": 4, "max": 10 },
+            "openGroundPct": 0.5,
+            "iconsPer10k": 0,
+            "iconGapP50": 0,
+            "topIcons": [],
+            "landmarksPer10k": 34.7,
+            "landmarkGapP50": 6.4,
+            "topLandmarks": [
+                ["Oak tree", 121],
+                ["Waterfall", 2],
+                ["#60444", 1],
+                ["Cave Entrance", 1],
+                ["Barracuda shipwreck", 1],
+                ["Fisherman's shipwreck", 1],
+                ["Mercenary shipwreck", 1]
+            ],
+            "slopeUnused": false,
+            "sizeX": 192,
+            "sizeY": 192,
+            "indoor": 30
+        },
+        "faces": {
+            "faces24up": 2215,
+            "dropQ": [72, 152, 199, 237],
+            "lengthQ": [4, 8, 18],
+            "perTileQ": [9.5, 16.8, 38],
+            "blockedPct": 69,
+            "endStepQ": [5, 8],
+            "flatEndsPct": 18,
+            "steepTiles": 4186,
+            "steepWithLocPct": 18,
+            "steepOverlaidPct": 76,
+            "steepBlockedFlagPct": 100,
+            "steepOverlays": [
+                [20, 3123],
+                [6, 41],
+                [22, 5]
+            ],
+            "onSteep": [
+                ["#60437:60437:t10:s1x1:c-1", 194, [58, 48, 39, 49]],
+                ["#60438:60438:t10:s1x1:c-1", 191, [39, 52, 54, 46]],
+                ["#60436:60436:t10:s1x1:c-1", 188, [33, 52, 50, 53]],
+                ["#60439:60439:t10:s1x1:c-1", 173, [55, 37, 30, 51]],
+                ["#44603:44603:t0:s1x1:c-1", 6, [6, 0, 0, 0]],
+                ["#1619:1619:t10:s1x1:c-1", 3, [0, 3, 0, 0]],
+                ["#3008:3008:t10:s1x1:c-1", 3, [0, 3, 0, 0]],
+                ["#3011:3011:t10:s1x1:c-1", 3, [0, 3, 0, 0]],
+                ["#3012:3012:t10:s1x1:c-1", 3, [0, 0, 0, 3]],
+                ["#3013:3013:t10:s1x1:c-1", 3, [0, 0, 0, 3]],
+                ["Cave Entrance:2123:t10:s3x2:c-1", 1, [1, 0, 0, 0]]
+            ]
+        },
+        "enclosures": {
+            "enclosures": 0,
+            "areaQ": [0, 0, 0, 0],
+            "freeWallSharePct": 86,
+            "freeWallsPer100": 0.28,
+            "topFreeWalls": [
+                ["#44603:44603", 45],
+                ["#980:980", 33],
+                ["#981:981", 24]
+            ],
+            "sizeY": 192
+        },
+        "rings": {
+            "centre": [55, 95],
+            "rings": [
+                {
+                    "tiles": 992,
+                    "indoorPct": 3,
+                    "wallsPer100": 1.7,
+                    "propsPer100": 2.4,
+                    "treesPer100": 3.1,
+                    "decorPer100": 21.6
+                },
+                {
+                    "tiles": 3040,
+                    "indoorPct": 0,
+                    "wallsPer100": 0,
+                    "propsPer100": 3.1,
+                    "treesPer100": 1.3,
+                    "decorPer100": 13.3
+                },
+                {
+                    "tiles": 5088,
+                    "indoorPct": 0,
+                    "wallsPer100": 0.2,
+                    "propsPer100": 4.5,
+                    "treesPer100": 0.5,
+                    "decorPer100": 9.3
+                },
+                {
+                    "tiles": 5993,
+                    "indoorPct": 0,
+                    "wallsPer100": 0.6,
+                    "propsPer100": 4.3,
+                    "treesPer100": 1.7,
+                    "decorPer100": 15.9
+                },
+                {
+                    "tiles": 6352,
+                    "indoorPct": 0,
+                    "wallsPer100": 0.4,
+                    "propsPer100": 4.4,
+                    "treesPer100": 1.1,
+                    "decorPer100": 13.1
+                },
+                {
+                    "tiles": 7376,
+                    "indoorPct": 0,
+                    "wallsPer100": 0,
+                    "propsPer100": 3.8,
+                    "treesPer100": 1.2,
+                    "decorPer100": 12.7
+                }
+            ]
+        },
+        "decor": {
+            "pathSlopeQ": [4, 10, 12, 30],
+            "decorKinds": 10,
+            "decorContouredPct": 100,
+            "decorByPathDistance": [1, 19, 19, 17, 20, 20, 22],
+            "propsByPathDistance": [3, 19, 8, 6, 8, 9, 9],
+            "tilesByPathDistance": [2170, 1812, 1789, 1672, 1556, 1445, 1280]
+        },
+        "underlays": {
+            "pieces": 284,
+            "areaP50": 18,
+            "areaP90": 341,
+            "boundaryPer100": 50,
+            "kindsIn16": [3, 4, 5]
+        },
+        "shore": {
+            "waterSharePct": 5.7,
+            "edgeTiles": 498,
+            "shapedEdgePct": 83,
+            "bankRiseQ": [24, 71, 149],
+            "onShorePer100Edge": 28,
+            "topOnShore": [
+                ["#4737:t22", 17],
+                ["#4738:t22", 16],
+                ["#4736:t22", 16],
+                ["#4735:t22", 15],
+                ["#60437:t10", 12],
+                ["#60436:t10", 10],
+                ["#60439:t10", 9],
+                ["#60438:t10", 7]
+            ]
+        },
+        "plazas": [],
+        "fronts": { "doors": 0, "doorRotations": [0, 0, 0, 0], "doorToPathQ": [0, 0, 0] },
+        "sight": { "viewQ": [3, 7, 13, 29] },
+        "aprons": {
+            "ringTiles": 60,
+            "ringOverlayPct": 10,
+            "ringTopOverlays": [[22, 6]],
+            "ringDecorPer100": 25,
+            "ringPropsPer100": 0,
+            "indoorOverlayPct": 100,
+            "indoorTopOverlays": [[14, 30]]
+        },
+        "rims": {
+            "foot": {
+                "tiles": 769,
+                "flatPct": 12,
+                "overlayPct": 66,
+                "decorPer100": 3,
+                "propsPer100": 0,
+                "wallsPer100": 0,
+                "topProps": [["Flower", 1]]
+            },
+            "top": {
+                "tiles": 624,
+                "flatPct": 11,
+                "overlayPct": 29,
+                "decorPer100": 5,
+                "propsPer100": 0,
+                "wallsPer100": 0,
+                "topProps": [["Daisies", 1]]
+            }
+        }
+    },
+    "scaperune_jungle": {
+        "kind": "made",
+        "size": [128, 128],
+        "height": {
+            "heightRange": [23, 100],
+            "walkableShare": 0.57,
+            "slopeSharePct": {
+                "0-0": 15,
+                "1-2": 55.9,
+                "3-4": 17.9,
+                "5-8": 7.2,
+                "9-12": 3.5,
+                "13-16": 0.2,
+                "17-24": 0.3,
+                "25-32": 0.1,
+                "33-44": 0,
+                "45-64": 0,
+                "65-255": 0
+            },
+            "walkSlopeSharePct": {
+                "0-0": 10.2,
+                "1-2": 57.5,
+                "3-4": 18.8,
+                "5-8": 9.2,
+                "9-12": 4.2,
+                "13-16": 0.1,
+                "17-24": 0.1,
+                "25-32": 0,
+                "33-44": 0,
+                "45-64": 0,
+                "65-255": 0
+            },
+            "walkSlope": { "p50": 2, "p90": 6, "p99": 10, "p999": 15, "max": 20 },
+            "steepest": 43,
+            "sizeX": 128
+        },
+        "ground": {
+            "underlayKinds": 4,
+            "topUnderlays": [
+                [48, 6076],
+                [99, 4890],
+                [100, 4566],
+                [63, 852]
+            ],
+            "overlayKinds": 2,
+            "overlaySharePct": 11.6,
+            "topOverlays": [
+                [442, 1412],
+                [80, 485]
+            ],
+            "shapeSharePct": {
+                "0": 75.7,
+                "1": 1.1,
+                "2": 2.8,
+                "3": 2.6,
+                "4": 2.3,
+                "5": 1.9,
+                "6": 11,
+                "7": 1.2,
+                "8": 1.4
+            },
+            "blockedSharePct": 13.6,
+            "paths": [
+                {
+                    "overlay": 442,
+                    "walkTiles": 89,
+                    "sharePct": 8.6,
+                    "width": { "p25": 10, "p50": 10, "p75": 10, "p95": 10 },
+                    "shapedEdgePct": 100
+                },
+                {
+                    "overlay": 80,
+                    "walkTiles": 485,
+                    "sharePct": 3,
+                    "width": { "p25": 3, "p50": 3, "p75": 4, "p95": 6 },
+                    "shapedEdgePct": 63.46
+                }
+            ]
+        },
+        "objects": {
+            "locsPer100Tiles": 42.64,
+            "groupPer100": { "wall": 0.2, "ground": 32.26, "scenery": 10.19 },
+            "typeCounts": { "0": 32, "10": 1669, "22": 5285 },
+            "rotationSharePct": {
+                "wall": [50, 0, 50, 0],
+                "ground": [24, 26, 25, 25],
+                "scenery": [25, 26, 25, 24]
+            },
+            "solidSceneryPer100": 8.17,
+            "softSceneryPer100": 2.01,
+            "scenerySize": { "1": 845, "2": 597, "3": 226, "4": 1 },
+            "kinds": { "wall": 1, "ground": 15, "scenery": 30 },
+            "topByGroup": {
+                "wall": [["#2639:2639", 32]],
+                "ground": [
+                    ["#1229:1229", 688],
+                    ["#1225:1225", 679],
+                    ["#1242:1242", 661],
+                    ["#1228:1228", 661],
+                    ["#1226:1226", 648],
+                    ["#1241:1241", 648],
+                    ["#1224:1224", 643],
+                    ["#1243:1243", 631]
+                ],
+                "scenery": [
+                    ["Jungle tree:4818", 168],
+                    ["Tree:13703", 160],
+                    ["Tropical tree:1326", 154],
+                    ["Tree:53188", 135],
+                    ["Tree:51762", 133],
+                    ["Tree:1304", 129],
+                    ["Tropical tree:57513", 125],
+                    ["Plants:57541", 97]
+                ]
+            },
+            "props": {
+                "count": 415,
+                "per100": 2.53,
+                "againstWallPct": 1,
+                "indoorsPct": 0,
+                "clusterP50": 1,
+                "clusterP90": 5,
+                "clusterMax": 15,
+                "singletonsPct": 59
+            },
+            "trees": {
+                "count": 1254,
+                "per100": 7.65,
+                "nearestP25": 1.4,
+                "nearestP50": 2,
+                "nearestP75": 2.8
+            },
+            "walkableTiles": 9330,
+            "sizeY": 128
+        },
+        "towns": {
+            "buildings": 0,
+            "smallIndoorBits": 0,
+            "indoorSharePct": 0,
+            "areaQ": [0, 0, 0, 0],
+            "longSideQ": [0, 0, 0, 0],
+            "shortSideQ": [0, 0, 0, 0],
+            "fillQ": [0, 0, 0, 0],
+            "gapQ": [0, 0, 0, 0],
+            "streetQ": [0, 0, 0, 0],
+            "wallLocs": 0,
+            "wallKinds": 0,
+            "wallKindsFor90Pct": 0,
+            "diagonalWallPct": 0,
+            "topWalls": [],
+            "indoorFloors": [],
+            "furniturePer100Indoor": 0,
+            "topFurniture": [],
+            "upperIndoorTiles": [0, 0, 0],
+            "roofLocs": 0,
+            "roofKinds": 0,
+            "wallSidesUnused": false,
+            "sizeY": 128
+        },
+        "pacing": {
+            "screens": 221,
+            "objectsOnScreen": { "p10": 22, "p50": 37, "p90": 56 },
+            "kindsOnScreen": { "p10": 11, "p50": 14, "p90": 16 },
+            "emptyScreensPct": 0,
+            "tilesFromAnything": { "p50": 1, "p90": 2, "max": 6 },
+            "openGroundPct": 0,
+            "iconsPer10k": 0,
+            "iconGapP50": 0,
+            "topIcons": [],
+            "landmarksPer10k": 138.5,
+            "landmarkGapP50": 4,
+            "topLandmarks": [
+                ["Tropical tree", 218],
+                ["Plant", 3],
+                ["#48686", 2],
+                ["#48687", 2],
+                ["Mysterious statue", 1],
+                ["Fisherman's shipwreck", 1]
+            ],
+            "slopeUnused": false,
+            "sizeX": 128,
+            "sizeY": 128,
+            "indoor": 0
+        },
+        "faces": {
+            "faces24up": 130,
+            "dropQ": [35, 55, 71, 71],
+            "lengthQ": [3, 6, 7],
+            "perTileQ": [8.3, 9.7, 24],
+            "blockedPct": 49,
+            "endStepQ": [3, 7],
+            "flatEndsPct": 49,
+            "steepTiles": 67,
+            "steepWithLocPct": 12,
+            "steepOverlaidPct": 63,
+            "steepBlockedFlagPct": 100,
+            "steepOverlays": [[442, 42]],
+            "onSteep": [["#2639:2639:t0:s1x1:c-1", 8, [4, 0, 4, 0]]]
+        },
+        "enclosures": {
+            "enclosures": 0,
+            "areaQ": [0, 0, 0, 0],
+            "freeWallSharePct": 100,
+            "freeWallsPer100": 0.2,
+            "topFreeWalls": [["#2639:2639", 32]],
+            "sizeY": 128
+        },
+        "rings": { "rings": [] },
+        "decor": {
+            "pathSlopeQ": [1, 3, 20, 20],
+            "decorKinds": 15,
+            "decorContouredPct": 100,
+            "decorByPathDistance": [3, 36, 41, 42, 46, 51, 54],
+            "propsByPathDistance": [2, 2, 6, 8, 8, 11, 13],
+            "tilesByPathDistance": [574, 398, 419, 416, 407, 398, 375]
+        },
+        "underlays": {
+            "pieces": 91,
+            "areaP50": 16,
+            "areaP90": 639,
+            "boundaryPer100": 44,
+            "kindsIn16": [2, 3, 4]
+        },
+        "shore": {
+            "waterSharePct": 8.6,
+            "edgeTiles": 289,
+            "shapedEdgePct": 84,
+            "bankRiseQ": [16, 29, 35],
+            "onShorePer100Edge": 52,
+            "topOnShore": [
+                ["#1229:t22", 21],
+                ["#1225:t22", 18],
+                ["#1226:t22", 17],
+                ["#1224:t22", 17],
+                ["#1241:t22", 14],
+                ["#1242:t22", 13],
+                ["#2639:t0", 12],
+                ["#1228:t22", 12]
+            ]
+        },
+        "plazas": [],
+        "fronts": { "doors": 0, "doorRotations": [0, 0, 0, 0], "doorToPathQ": [0, 0, 0] },
+        "sight": { "viewQ": [2, 5, 10, 21] },
+        "aprons": {
+            "ringTiles": 0,
+            "ringOverlayPct": 0,
+            "ringTopOverlays": [],
+            "ringDecorPer100": 0,
+            "ringPropsPer100": 0,
+            "indoorOverlayPct": 0,
+            "indoorTopOverlays": []
+        },
+        "rims": {
+            "foot": {
+                "tiles": 7,
+                "flatPct": 0,
+                "overlayPct": 0,
+                "decorPer100": 71,
+                "propsPer100": 0,
+                "wallsPer100": 0,
+                "topProps": []
+            },
+            "top": {
+                "tiles": 29,
+                "flatPct": 0,
+                "overlayPct": 0,
+                "decorPer100": 14,
+                "propsPer100": 0,
+                "wallsPer100": 0,
+                "topProps": []
+            }
+        }
+    },
+    "scaperune_autumn": {
+        "kind": "made",
+        "size": [128, 128],
+        "height": {
+            "heightRange": [16, 119],
+            "walkableShare": 0.55,
+            "slopeSharePct": {
+                "0-0": 17.1,
+                "1-2": 34.3,
+                "3-4": 28.4,
+                "5-8": 10.9,
+                "9-12": 8.8,
+                "13-16": 0.2,
+                "17-24": 0.3,
+                "25-32": 0.1,
+                "33-44": 0,
+                "45-64": 0,
+                "65-255": 0
+            },
+            "walkSlopeSharePct": {
+                "0-0": 10.2,
+                "1-2": 36.7,
+                "3-4": 28.1,
+                "5-8": 12.7,
+                "9-12": 12.1,
+                "13-16": 0.1,
+                "17-24": 0.1,
+                "25-32": 0,
+                "33-44": 0,
+                "45-64": 0,
+                "65-255": 0
+            },
+            "walkSlope": { "p50": 3, "p90": 9, "p99": 11, "p999": 15, "max": 20 },
+            "steepest": 30,
+            "sizeX": 128
+        },
+        "ground": {
+            "underlayKinds": 4,
+            "topUnderlays": [
+                [64, 6183],
+                [49, 4693],
+                [50, 4595],
+                [67, 913]
+            ],
+            "overlayKinds": 2,
+            "overlaySharePct": 13.4,
+            "topOverlays": [
+                [6, 1657],
+                [81, 539]
+            ],
+            "shapeSharePct": {
+                "0": 76.2,
+                "1": 0.8,
+                "2": 2.8,
+                "3": 2.5,
+                "4": 2.5,
+                "5": 2.1,
+                "6": 8.2,
+                "7": 2.2,
+                "8": 2.6
+            },
+            "blockedSharePct": 14.8,
+            "paths": [
+                {
+                    "overlay": 6,
+                    "walkTiles": 95,
+                    "sharePct": 10.1,
+                    "width": { "p25": 10, "p50": 10, "p75": 10, "p95": 12 },
+                    "shapedEdgePct": 100
+                },
+                {
+                    "overlay": 81,
+                    "walkTiles": 539,
+                    "sharePct": 3.3,
+                    "width": { "p25": 3, "p50": 3, "p75": 4, "p95": 6 },
+                    "shapedEdgePct": 72.45
+                }
+            ]
+        },
+        "objects": {
+            "locsPer100Tiles": 27.99,
+            "groupPer100": { "wall": 0.2, "ground": 18.11, "scenery": 9.69 },
+            "typeCounts": { "0": 32, "10": 1587, "22": 2967 },
+            "rotationSharePct": {
+                "wall": [50, 0, 50, 0],
+                "ground": [24, 25, 26, 25],
+                "scenery": [24, 26, 25, 25]
+            },
+            "solidSceneryPer100": 8.23,
+            "softSceneryPer100": 1.45,
+            "scenerySize": { "1": 372, "2": 1210, "3": 4, "6": 1 },
+            "kinds": { "wall": 1, "ground": 12, "scenery": 19 },
+            "topByGroup": {
+                "wall": [["#2639:2639", 32]],
+                "ground": [
+                    ["#51814:51814", 617],
+                    ["#51815:51815", 599],
+                    ["#325:325", 582],
+                    ["#51811:51811", 573],
+                    ["#51813:51813", 570],
+                    ["#51827:51827", 10],
+                    ["#55315:55315", 6],
+                    ["#3949:3949", 2]
+                ],
+                "scenery": [
+                    ["Maple tree:40754", 546],
+                    ["Maple tree:10832", 278],
+                    ["Tree:1276", 258],
+                    ["Sunflower:51086", 122],
+                    ["Sunflowers:51822", 116],
+                    ["Plant:42400", 102],
+                    ["Plant:42401", 102],
+                    ["#60440:60440", 21]
+                ]
+            },
+            "props": {
+                "count": 505,
+                "per100": 3.08,
+                "againstWallPct": 1,
+                "indoorsPct": 0,
+                "clusterP50": 1,
+                "clusterP90": 6,
+                "clusterMax": 37,
+                "singletonsPct": 55
+            },
+            "trees": {
+                "count": 1082,
+                "per100": 6.6,
+                "nearestP25": 2,
+                "nearestP50": 2,
+                "nearestP75": 3
+            },
+            "walkableTiles": 9058,
+            "sizeY": 128
+        },
+        "towns": {
+            "buildings": 0,
+            "smallIndoorBits": 0,
+            "indoorSharePct": 0,
+            "areaQ": [0, 0, 0, 0],
+            "longSideQ": [0, 0, 0, 0],
+            "shortSideQ": [0, 0, 0, 0],
+            "fillQ": [0, 0, 0, 0],
+            "gapQ": [0, 0, 0, 0],
+            "streetQ": [0, 0, 0, 0],
+            "wallLocs": 0,
+            "wallKinds": 0,
+            "wallKindsFor90Pct": 0,
+            "diagonalWallPct": 0,
+            "topWalls": [],
+            "indoorFloors": [],
+            "furniturePer100Indoor": 0,
+            "topFurniture": [],
+            "upperIndoorTiles": [0, 0, 0],
+            "roofLocs": 0,
+            "roofKinds": 0,
+            "wallSidesUnused": false,
+            "sizeY": 128
+        },
+        "pacing": {
+            "screens": 204,
+            "objectsOnScreen": { "p10": 20, "p50": 32, "p90": 50 },
+            "kindsOnScreen": { "p10": 6, "p50": 8, "p90": 9 },
+            "emptyScreensPct": 0,
+            "tilesFromAnything": { "p50": 1, "p90": 3, "max": 7 },
+            "openGroundPct": 0,
+            "iconsPer10k": 0,
+            "iconGapP50": 0,
+            "topIcons": [],
+            "landmarksPer10k": 3.1,
+            "landmarkGapP50": 4,
+            "topLandmarks": [
+                ["#48686", 2],
+                ["#48687", 2],
+                ["#60444", 1]
+            ],
+            "slopeUnused": false,
+            "sizeX": 128,
+            "sizeY": 128,
+            "indoor": 0
+        },
+        "faces": {
+            "faces24up": 242,
+            "dropQ": [53, 77, 94, 103],
+            "lengthQ": [6, 7, 10],
+            "perTileQ": [8.8, 10.3, 17.5],
+            "blockedPct": 38,
+            "endStepQ": [2, 7],
+            "flatEndsPct": 51,
+            "steepTiles": 60,
+            "steepWithLocPct": 13,
+            "steepOverlaidPct": 60,
+            "steepBlockedFlagPct": 100,
+            "steepOverlays": [[6, 36]],
+            "onSteep": [["#2639:2639:t0:s1x1:c-1", 8, [4, 0, 4, 0]]]
+        },
+        "enclosures": {
+            "enclosures": 0,
+            "areaQ": [0, 0, 0, 0],
+            "freeWallSharePct": 100,
+            "freeWallsPer100": 0.2,
+            "topFreeWalls": [["#2639:2639", 32]],
+            "sizeY": 128
+        },
+        "rings": { "rings": [] },
+        "decor": {
+            "pathSlopeQ": [1, 3, 20, 20],
+            "decorKinds": 12,
+            "decorContouredPct": 100,
+            "decorByPathDistance": [3, 20, 25, 24, 27, 34, 34],
+            "propsByPathDistance": [2, 8, 7, 12, 12, 15, 13],
+            "tilesByPathDistance": [634, 384, 395, 389, 383, 389, 397]
+        },
+        "underlays": {
+            "pieces": 93,
+            "areaP50": 14,
+            "areaP90": 628,
+            "boundaryPer100": 47,
+            "kindsIn16": [3, 3, 4]
+        },
+        "shore": {
+            "waterSharePct": 10.1,
+            "edgeTiles": 303,
+            "shapedEdgePct": 81,
+            "bankRiseQ": [21, 38, 44],
+            "onShorePer100Edge": 38,
+            "topOnShore": [
+                ["#51811:t22", 21],
+                ["#325:t22", 18],
+                ["#51814:t22", 17],
+                ["#2639:t0", 12],
+                ["#51813:t22", 11],
+                ["#51815:t22", 10],
+                ["Plant:t10", 6],
+                ["Sunflower:t10", 5]
+            ]
+        },
+        "plazas": [],
+        "fronts": { "doors": 0, "doorRotations": [0, 0, 0, 0], "doorToPathQ": [0, 0, 0] },
+        "sight": { "viewQ": [2, 5, 10, 23] },
+        "aprons": {
+            "ringTiles": 0,
+            "ringOverlayPct": 0,
+            "ringTopOverlays": [],
+            "ringDecorPer100": 0,
+            "ringPropsPer100": 0,
+            "indoorOverlayPct": 0,
+            "indoorTopOverlays": []
+        },
+        "rims": {
+            "foot": {
+                "tiles": 8,
+                "flatPct": 0,
+                "overlayPct": 0,
+                "decorPer100": 38,
+                "propsPer100": 0,
+                "wallsPer100": 0,
+                "topProps": []
+            },
+            "top": {
+                "tiles": 28,
+                "flatPct": 0,
+                "overlayPct": 0,
+                "decorPer100": 7,
+                "propsPer100": 0,
+                "wallsPer100": 0,
+                "topProps": []
+            }
+        }
+    },
+    "scaperune_vardhelm": {
+        "kind": "made",
+        "size": [192, 256],
+        "height": {
+            "heightRange": [16, 249],
+            "walkableShare": 0.49,
+            "slopeSharePct": {
+                "0-0": 41.5,
+                "1-2": 26.6,
+                "3-4": 10,
+                "5-8": 8.7,
+                "9-12": 3.9,
+                "13-16": 1.1,
+                "17-24": 3.6,
+                "25-32": 2.4,
+                "33-44": 1.6,
+                "45-64": 0.5,
+                "65-255": 0.1
+            },
+            "walkSlopeSharePct": {
+                "0-0": 57.5,
+                "1-2": 25.5,
+                "3-4": 6.3,
+                "5-8": 8.8,
+                "9-12": 1.8,
+                "13-16": 0,
+                "17-24": 0,
+                "25-32": 0.1,
+                "33-44": 0,
+                "45-64": 0,
+                "65-255": 0
+            },
+            "walkSlope": { "p50": 0, "p90": 5, "p99": 10, "p999": 12, "max": 30 },
+            "steepest": 100,
+            "sizeX": 192
+        },
+        "ground": {
+            "underlayKinds": 16,
+            "topUnderlays": [
+                [59, 13067],
+                [218, 5376],
+                [48, 4749],
+                [100, 4727],
+                [92, 2932],
+                [58, 2696],
+                [172, 2672],
+                [52, 2439]
+            ],
+            "overlayKinds": 16,
+            "overlaySharePct": 28.4,
+            "topOverlays": [
+                [20, 6037],
+                [6, 3825],
+                [22, 1162],
+                [12, 731],
+                [171, 561],
+                [174, 518],
+                [14, 248],
+                [123, 194],
+                [8, 170],
+                [33, 131]
+            ],
+            "shapeSharePct": {
+                "0": 75.9,
+                "1": 1.3,
+                "2": 2.2,
+                "3": 2.3,
+                "4": 1.8,
+                "5": 1.9,
+                "6": 9.6,
+                "7": 2.2,
+                "8": 2.7,
+                "9": 0,
+                "10": 0
+            },
+            "blockedSharePct": 46.3,
+            "paths": [
+                {
+                    "overlay": 20,
+                    "walkTiles": 1035,
+                    "sharePct": 12.3,
+                    "width": { "p25": 5, "p50": 6, "p75": 7, "p95": 12 },
+                    "shapedEdgePct": 89.89
+                },
+                {
+                    "overlay": 6,
+                    "walkTiles": 165,
+                    "sharePct": 7.8,
+                    "width": { "p25": 9, "p50": 10, "p75": 13, "p95": 19 },
+                    "shapedEdgePct": 92.86
+                },
+                {
+                    "overlay": 22,
+                    "walkTiles": 1012,
+                    "sharePct": 2.4,
+                    "width": { "p25": 3, "p50": 3, "p75": 4, "p95": 8 },
+                    "shapedEdgePct": 67.27
+                },
+                {
+                    "overlay": 12,
+                    "walkTiles": 731,
+                    "sharePct": 1.5,
+                    "width": { "p25": 2, "p50": 3, "p75": 4, "p95": 5 },
+                    "shapedEdgePct": 41.35
+                },
+                {
+                    "overlay": 174,
+                    "walkTiles": 513,
+                    "sharePct": 1.1,
+                    "width": { "p25": 2, "p50": 3, "p75": 3, "p95": 10 },
+                    "shapedEdgePct": 43.98
+                }
+            ]
+        },
+        "objects": {
+            "locsPer100Tiles": 18.7,
+            "groupPer100": {
+                "ground": 11.47,
+                "diagonal": 0.14,
+                "wall": 2.85,
+                "scenery": 3.61,
+                "wallDeco": 0.59,
+                "roof": 0.02
+            },
+            "typeCounts": {
+                "0": 1183,
+                "1": 113,
+                "2": 46,
+                "3": 59,
+                "4": 187,
+                "5": 85,
+                "6": 3,
+                "7": 8,
+                "8": 7,
+                "9": 71,
+                "10": 1724,
+                "11": 51,
+                "18": 12,
+                "22": 5640
+            },
+            "rotationSharePct": {
+                "ground": [35, 21, 23, 22],
+                "diagonal": [23, 18, 23, 37],
+                "wall": [22, 25, 22, 30],
+                "scenery": [51, 16, 18, 15],
+                "wallDeco": [27, 23, 21, 30],
+                "roof": [0, 50, 0, 50]
+            },
+            "solidSceneryPer100": 2.58,
+            "softSceneryPer100": 1.03,
+            "scenerySize": { "1": 1004, "2": 253, "3": 512, "4": 2, "5": 2, "6": 2 },
+            "kinds": {
+                "ground": 65,
+                "diagonal": 8,
+                "wall": 62,
+                "scenery": 185,
+                "wallDeco": 49,
+                "roof": 3
+            },
+            "topByGroup": {
+                "ground": [
+                    ["#4737:4737", 856],
+                    ["#4738:4738", 838],
+                    ["#4736:4736", 813],
+                    ["#4735:4735", 793],
+                    ["#11439:11439", 379],
+                    ["#3614:3614", 338],
+                    ["#561:561", 266],
+                    ["#559:559", 262]
+                ],
+                "diagonal": [
+                    ["#26089:26089", 16],
+                    ["#44603:44603", 15],
+                    ["#24260:24260", 12],
+                    ["#4246:4246", 8],
+                    ["#57681:57681", 7],
+                    ["#980:980", 6],
+                    ["#1911:1911", 5],
+                    ["#26092:26092", 2]
+                ],
+                "wall": [
+                    ["#1911:1911", 330],
+                    ["#980:980", 193],
+                    ["#26089:26089", 92],
+                    ["#4246:4246", 80],
+                    ["#1902:1902", 79],
+                    ["#25890:25890", 67],
+                    ["#24260:24260", 50],
+                    ["#24188:24188", 48]
+                ],
+                "scenery": [
+                    ["Potato:312", 146],
+                    ["Evergreen tree:1318", 107],
+                    ["Tree:1332", 96],
+                    ["Tree:1331", 89],
+                    ["Tree:1330", 87],
+                    ["Wheat:15507", 76],
+                    ["Wheat:15506", 63],
+                    ["Wheat:15508", 61]
+                ],
+                "wallDeco": [
+                    ["#14881:14881", 28],
+                    ["#24173:24173", 19],
+                    ["#3475:3475", 18],
+                    ["#24275:24275", 18],
+                    ["#196:196", 18],
+                    ["#3474:3474", 12],
+                    ["#26108:26108", 12],
+                    ["#440:440", 10]
+                ],
+                "roof": [
+                    ["#26088:26088", 6],
+                    ["#26087:26087", 4],
+                    ["#26085:26085", 2]
+                ]
+            },
+            "props": {
+                "count": 1195,
+                "per100": 2.43,
+                "againstWallPct": 44,
+                "indoorsPct": 28,
+                "clusterP50": 1,
+                "clusterP90": 7,
+                "clusterMax": 203,
+                "singletonsPct": 71
+            },
+            "trees": {
+                "count": 580,
+                "per100": 1.18,
+                "nearestP25": 4.1,
+                "nearestP50": 4.5,
+                "nearestP75": 5
+            },
+            "walkableTiles": 24117,
+            "sizeY": 256
+        },
+        "towns": {
+            "buildings": 20,
+            "smallIndoorBits": 0,
+            "indoorSharePct": 3.7,
+            "areaQ": [30, 48, 102, 530],
+            "longSideQ": [7, 8, 12, 28],
+            "shortSideQ": [5, 6, 11, 25],
+            "fillQ": [0.9, 1, 1, 1],
+            "gapQ": [8, 9, 11, 72],
+            "streetQ": [9, 11, 15, 28],
+            "wallLocs": 789,
+            "wallKinds": 59,
+            "wallKindsFor90Pct": 24,
+            "diagonalWallPct": 6.3,
+            "topWalls": [
+                ["#26089:26089", 108],
+                ["#4246:4246", 88],
+                ["#24260:24260", 62],
+                ["#25890:25890", 52],
+                ["#1911:1911", 45],
+                ["#1631:1631", 42]
+            ],
+            "indoorFloors": [
+                [171, 561],
+                [14, 248],
+                [123, 194],
+                [8, 170],
+                [33, 131]
+            ],
+            "furniturePer100Indoor": 63.2,
+            "topFurniture": [
+                ["#25598", 101],
+                ["#25597", 84],
+                ["#39499", 60],
+                ["#325", 57],
+                ["Chair", 55],
+                ["#3949", 50],
+                ["#320", 50],
+                ["#336", 42],
+                ["#926", 34],
+                ["Suit of armour", 33]
+            ],
+            "upperIndoorTiles": [1121, 490, 152],
+            "roofLocs": 1124,
+            "roofKinds": 29,
+            "wallSidesUnused": false,
+            "sizeY": 256
+        },
+        "pacing": {
+            "screens": 576,
+            "objectsOnScreen": { "p10": 4, "p50": 21, "p90": 102 },
+            "kindsOnScreen": { "p10": 3, "p50": 7, "p90": 29 },
+            "emptyScreensPct": 21.5,
+            "tilesFromAnything": { "p50": 2, "p90": 4, "max": 11 },
+            "openGroundPct": 1,
+            "iconsPer10k": 2.4,
+            "iconGapP50": 18.2,
+            "topIcons": [
+                ["#2743", 3],
+                ["#2752", 1],
+                ["#33161", 1],
+                ["#42758", 1],
+                ["#2771", 1],
+                ["#42715", 1],
+                ["#42731", 1],
+                ["#2772", 1]
+            ],
+            "landmarksPer10k": 105.4,
+            "landmarkGapP50": 4.5,
+            "topLandmarks": [
+                ["Tree", 272],
+                ["Evergreen tree", 184],
+                ["Oak tree", 30],
+                ["Waterfall", 13],
+                ["Bed", 6],
+                ["Staircase", 3],
+                ["Table", 2],
+                ["#39161", 2]
+            ],
+            "slopeUnused": false,
+            "sizeX": 192,
+            "sizeY": 256,
+            "indoor": 1822
+        },
+        "faces": {
+            "faces24up": 1619,
+            "dropQ": [78, 147, 173, 208],
+            "lengthQ": [4, 7, 13],
+            "perTileQ": [9.7, 22.8, 35],
+            "blockedPct": 96,
+            "endStepQ": [5, 30],
+            "flatEndsPct": 25,
+            "steepTiles": 4187,
+            "steepWithLocPct": 2,
+            "steepOverlaidPct": 97,
+            "steepBlockedFlagPct": 100,
+            "steepOverlays": [
+                [20, 4000],
+                [6, 36],
+                [61, 9],
+                [22, 9],
+                [12, 1]
+            ],
+            "onSteep": [
+                ["Potato:312:t10:s1x1:c-1", 31, [31, 0, 0, 0]],
+                ["#980:980:t0:s1x1:c0", 22, [4, 0, 4, 14]],
+                ["#1911:1911:t0:s1x1:c-1", 19, [0, 19, 0, 0]],
+                ["#44603:44603:t0:s1x1:c-1", 6, [0, 0, 0, 6]],
+                ["Waterfall:26499:t10:s3x2:c-1", 6, [6, 0, 0, 0]],
+                ["#1619:1619:t10:s1x1:c-1", 3, [3, 0, 0, 0]],
+                ["#3008:3008:t10:s1x1:c-1", 3, [3, 0, 0, 0]],
+                ["#3011:3011:t10:s1x1:c-1", 3, [3, 0, 0, 0]],
+                ["#3012:3012:t10:s1x1:c-1", 3, [0, 0, 3, 0]],
+                ["#3013:3013:t10:s1x1:c-1", 3, [0, 0, 3, 0]],
+                ["Waterfall:51484:t10:s3x3:c0", 2, [2, 0, 0, 0]],
+                ["#1867:1867:t10:s1x1:c-1", 2, [2, 0, 0, 0]]
+            ]
+        },
+        "enclosures": {
+            "enclosures": 3,
+            "areaQ": [96, 140, 288, 288],
+            "freeWallSharePct": 47,
+            "freeWallsPer100": 1.35,
+            "topFreeWalls": [
+                ["#1911:1911", 290],
+                ["#980:980", 193],
+                ["#1902:1902", 58],
+                ["#44603:44603", 45],
+                ["#981:981", 25],
+                ["#25890:25890", 15]
+            ],
+            "sizeY": 256
+        },
+        "rings": {
+            "centre": [122, 187],
+            "rings": [
+                {
+                    "tiles": 1024,
+                    "indoorPct": 9,
+                    "wallsPer100": 9.7,
+                    "propsPer100": 5.4,
+                    "treesPer100": 0.8,
+                    "decorPer100": 13.2
+                },
+                {
+                    "tiles": 3072,
+                    "indoorPct": 4,
+                    "wallsPer100": 4.3,
+                    "propsPer100": 2.1,
+                    "treesPer100": 0.6,
+                    "decorPer100": 9
+                },
+                {
+                    "tiles": 5120,
+                    "indoorPct": 10,
+                    "wallsPer100": 6,
+                    "propsPer100": 5.1,
+                    "treesPer100": 0.7,
+                    "decorPer100": 11.8
+                },
+                {
+                    "tiles": 7168,
+                    "indoorPct": 8,
+                    "wallsPer100": 4.7,
+                    "propsPer100": 2.8,
+                    "treesPer100": 1,
+                    "decorPer100": 10.1
+                },
+                {
+                    "tiles": 5817,
+                    "indoorPct": 1,
+                    "wallsPer100": 2.4,
+                    "propsPer100": 0.8,
+                    "treesPer100": 1.5,
+                    "decorPer100": 12.2
+                },
+                {
+                    "tiles": 5024,
+                    "indoorPct": 3,
+                    "wallsPer100": 1.6,
+                    "propsPer100": 1.6,
+                    "treesPer100": 0.7,
+                    "decorPer100": 15
+                }
+            ]
+        },
+        "decor": {
+            "pathSlopeQ": [0, 6, 12, 30],
+            "decorKinds": 16,
+            "decorContouredPct": 100,
+            "decorByPathDistance": [1, 18, 20, 20, 20, 22, 23],
+            "propsByPathDistance": [2, 2, 3, 3, 4, 4, 5],
+            "tilesByPathDistance": [3472, 2601, 2308, 2040, 1808, 1585, 1427]
+        },
+        "underlays": {
+            "pieces": 529,
+            "areaP50": 5,
+            "areaP90": 267,
+            "boundaryPer100": 47,
+            "kindsIn16": [2, 4, 7]
+        },
+        "shore": {
+            "waterSharePct": 7.8,
+            "edgeTiles": 648,
+            "shapedEdgePct": 85,
+            "bankRiseQ": [15, 43, 120],
+            "onShorePer100Edge": 19,
+            "topOnShore": [
+                ["#4736:t22", 21],
+                ["#4735:t22", 16],
+                ["#4737:t22", 16],
+                ["#4738:t22", 14],
+                ["Waterfall:t10", 7],
+                ["#559:t22", 5],
+                ["Flower:t10", 4],
+                ["#3614:t22", 4]
+            ]
+        },
+        "plazas": [],
+        "fronts": { "doors": 0, "doorRotations": [0, 0, 0, 0], "doorToPathQ": [0, 0, 0] },
+        "sight": { "viewQ": [3, 7, 15, 33] },
+        "aprons": {
+            "ringTiles": 1776,
+            "ringOverlayPct": 6,
+            "ringTopOverlays": [
+                [22, 65],
+                [20, 19],
+                [174, 8],
+                [12, 4]
+            ],
+            "ringDecorPer100": 9,
+            "ringPropsPer100": 5.7,
+            "indoorOverlayPct": 97,
+            "indoorTopOverlays": [
+                [171, 561],
+                [14, 248],
+                [123, 194],
+                [8, 170]
+            ]
+        },
+        "rims": {
+            "foot": {
+                "tiles": 670,
+                "flatPct": 31,
+                "overlayPct": 96,
+                "decorPer100": 0,
+                "propsPer100": 0,
+                "wallsPer100": 0,
+                "topProps": []
+            },
+            "top": {
+                "tiles": 135,
+                "flatPct": 33,
+                "overlayPct": 72,
+                "decorPer100": 0,
+                "propsPer100": 0,
+                "wallsPer100": 6,
+                "topProps": []
+            }
+        }
+    },
+    "scaperune_kalua": {
+        "kind": "made",
+        "size": [256, 192],
+        "height": {
+            "heightRange": [6, 232],
+            "walkableShare": 0.42,
+            "slopeSharePct": {
+                "0-0": 58.3,
+                "1-2": 11.6,
+                "3-4": 15.2,
+                "5-8": 6.4,
+                "9-12": 4.4,
+                "13-16": 1.3,
+                "17-24": 1.9,
+                "25-32": 0.8,
+                "33-44": 0.2,
+                "45-64": 0,
+                "65-255": 0
+            },
+            "walkSlopeSharePct": {
+                "0-0": 24.2,
+                "1-2": 23.1,
+                "3-4": 31.1,
+                "5-8": 12.5,
+                "9-12": 8.8,
+                "13-16": 0.1,
+                "17-24": 0.1,
+                "25-32": 0,
+                "33-44": 0,
+                "45-64": 0,
+                "65-255": 0
+            },
+            "walkSlope": { "p50": 3, "p90": 8, "p99": 11, "p999": 20, "max": 30 },
+            "steepest": 48,
+            "sizeX": 256
+        },
+        "ground": {
+            "underlayKinds": 15,
+            "topUnderlays": [
+                [62, 24856],
+                [147, 6983],
+                [155, 4759],
+                [97, 2455],
+                [99, 2254],
+                [63, 1853],
+                [48, 1664],
+                [100, 1570]
+            ],
+            "overlayKinds": 11,
+            "overlaySharePct": 62.1,
+            "topOverlays": [
+                [442, 21961],
+                [32, 2929],
+                [19, 1860],
+                [80, 1318],
+                [84, 1214],
+                [52, 910],
+                [16, 265],
+                [101, 34],
+                [20, 32],
+                [61, 3]
+            ],
+            "shapeSharePct": {
+                "0": 89.4,
+                "1": 1.2,
+                "2": 1.1,
+                "3": 1.3,
+                "4": 0.9,
+                "5": 1.1,
+                "6": 3.3,
+                "7": 0.9,
+                "8": 0.9,
+                "9": 0,
+                "11": 0
+            },
+            "blockedSharePct": 52.2,
+            "paths": [
+                {
+                    "overlay": 442,
+                    "walkTiles": 296,
+                    "sharePct": 44.7,
+                    "width": { "p25": 10, "p50": 11, "p75": 19, "p95": 36 },
+                    "shapedEdgePct": 100
+                },
+                {
+                    "overlay": 32,
+                    "walkTiles": 1249,
+                    "sharePct": 6,
+                    "width": { "p25": 4, "p50": 5, "p75": 6, "p95": 7 },
+                    "shapedEdgePct": 86.42
+                },
+                {
+                    "overlay": 19,
+                    "walkTiles": 113,
+                    "sharePct": 3.8,
+                    "width": { "p25": 8, "p50": 11, "p75": 13, "p95": 14 },
+                    "shapedEdgePct": 97
+                },
+                {
+                    "overlay": 80,
+                    "walkTiles": 1314,
+                    "sharePct": 2.7,
+                    "width": { "p25": 3, "p50": 3, "p75": 4, "p95": 8 },
+                    "shapedEdgePct": 60.14
+                },
+                {
+                    "overlay": 84,
+                    "walkTiles": 596,
+                    "sharePct": 2.5,
+                    "width": { "p25": 8, "p50": 27, "p75": 32, "p95": 32 },
+                    "shapedEdgePct": 0
+                },
+                {
+                    "overlay": 52,
+                    "walkTiles": 626,
+                    "sharePct": 1.9,
+                    "width": { "p25": 5, "p50": 7, "p75": 16, "p95": 23 },
+                    "shapedEdgePct": 0
+                }
+            ]
+        },
+        "objects": {
+            "locsPer100Tiles": 10.93,
+            "groupPer100": {
+                "ground": 5.18,
+                "diagonal": 0.21,
+                "wall": 1.38,
+                "scenery": 4.13,
+                "wallDeco": 0.02
+            },
+            "typeCounts": {
+                "0": 565,
+                "1": 50,
+                "2": 13,
+                "3": 52,
+                "5": 8,
+                "9": 105,
+                "10": 2027,
+                "11": 3,
+                "22": 2547
+            },
+            "rotationSharePct": {
+                "ground": [24, 26, 26, 24],
+                "diagonal": [28, 25, 23, 25],
+                "wall": [27, 22, 27, 24],
+                "scenery": [30, 29, 20, 20],
+                "wallDeco": [25, 25, 0, 50]
+            },
+            "solidSceneryPer100": 3.76,
+            "softSceneryPer100": 0.37,
+            "scenerySize": {
+                "1": 1236,
+                "2": 437,
+                "3": 332,
+                "4": 13,
+                "5": 2,
+                "6": 8,
+                "7": 1,
+                "9": 1
+            },
+            "kinds": { "ground": 62, "diagonal": 6, "wall": 16, "scenery": 164, "wallDeco": 1 },
+            "topByGroup": {
+                "ground": [
+                    ["#51810:51810", 132],
+                    ["#3171:3171", 131],
+                    ["#729:729", 128],
+                    ["#1229:1229", 127],
+                    ["Cracked shells:57983", 126],
+                    ["#1226:1226", 126],
+                    ["Seaweed Pile:30797", 124],
+                    ["#51811:51811", 123]
+                ],
+                "diagonal": [
+                    ["#3586:3586", 51],
+                    ["#1616:1616", 40],
+                    ["Rotten village fence:9025", 6],
+                    ["#44603:44603", 5],
+                    ["#980:980", 2],
+                    ["#3597:3597", 1]
+                ],
+                "wall": [
+                    ["Rotten village fence:9025", 275],
+                    ["#1616:1616", 123],
+                    ["#3586:3586", 112],
+                    ["#2639:2639", 64],
+                    ["#1855:1855", 35],
+                    ["#4804:4804", 18],
+                    ["#44603:44603", 15],
+                    ["#980:980", 11]
+                ],
+                "scenery": [
+                    ["Waterfall:26499", 289],
+                    ["#60438:60438", 181],
+                    ["#60436:60436", 101],
+                    ["#60437:60437", 91],
+                    ["#60439:60439", 89],
+                    ["Dead tree:1289", 53],
+                    ["#60440:60440", 45],
+                    ["Palm:58542", 45]
+                ],
+                "wallDeco": [["#197:197", 8]]
+            },
+            "props": {
+                "count": 1577,
+                "per100": 3.21,
+                "againstWallPct": 6,
+                "indoorsPct": 4,
+                "clusterP50": 1,
+                "clusterP90": 5,
+                "clusterMax": 38,
+                "singletonsPct": 58
+            },
+            "trees": {
+                "count": 453,
+                "per100": 0.92,
+                "nearestP25": 2.2,
+                "nearestP50": 3,
+                "nearestP75": 4.1
+            },
+            "walkableTiles": 20588,
+            "sizeY": 192
+        },
+        "towns": {
+            "buildings": 10,
+            "smallIndoorBits": 0,
+            "indoorSharePct": 1.5,
+            "areaQ": [25, 25, 25, 431],
+            "longSideQ": [5, 5, 5, 25],
+            "shortSideQ": [5, 5, 5, 24],
+            "fillQ": [1, 1, 1, 1],
+            "gapQ": [8, 8, 12, 91],
+            "streetQ": [3, 7, 11, 27],
+            "wallLocs": 357,
+            "wallKinds": 11,
+            "wallKindsFor90Pct": 4,
+            "diagonalWallPct": 24.4,
+            "topWalls": [
+                ["#3586:3586", 149],
+                ["#1616:1616", 142],
+                ["#1855:1855", 28],
+                ["Rotten village fence:9025", 14],
+                ["#4804:4804", 12],
+                ["#3587:3587", 3]
+            ],
+            "indoorFloors": [
+                [84, 398],
+                [16, 265],
+                [20, 32],
+                [101, 25],
+                [42, 1]
+            ],
+            "furniturePer100Indoor": 26.2,
+            "topFurniture": [
+                ["#315", 61],
+                ["Bed", 16],
+                ["#325", 14],
+                ["#316", 11],
+                ["Bookcase", 10],
+                ["Stool", 8],
+                ["#314", 7],
+                ["Pot", 7],
+                ["Pots", 6],
+                ["#4836", 5]
+            ],
+            "upperIndoorTiles": [471, 65, 0],
+            "roofLocs": 431,
+            "roofKinds": 3,
+            "wallSidesUnused": false,
+            "sizeY": 192
+        },
+        "pacing": {
+            "screens": 493,
+            "objectsOnScreen": { "p10": 18, "p50": 34, "p90": 58 },
+            "kindsOnScreen": { "p10": 10, "p50": 16, "p90": 23 },
+            "emptyScreensPct": 0.6,
+            "tilesFromAnything": { "p50": 1, "p90": 3, "max": 7 },
+            "openGroundPct": 0,
+            "iconsPer10k": 0.4,
+            "iconGapP50": 150.8,
+            "topIcons": [
+                ["#42745", 1],
+                ["#2752", 1]
+            ],
+            "landmarksPer10k": 72.6,
+            "landmarkGapP50": 4,
+            "topLandmarks": [
+                ["Waterfall", 291],
+                ["Smoke", 6],
+                ["Tropical tree", 6],
+                ["Fishing boat", 5],
+                ["#48686", 4],
+                ["#48687", 4],
+                ["#60444", 4],
+                ["Plant", 4]
+            ],
+            "slopeUnused": false,
+            "sizeX": 256,
+            "sizeY": 192,
+            "indoor": 721
+        },
+        "faces": {
+            "faces24up": 1078,
+            "dropQ": [43, 63, 89, 96],
+            "lengthQ": [3, 5, 11],
+            "perTileQ": [9.6, 16, 30],
+            "blockedPct": 75,
+            "endStepQ": [4, 7],
+            "flatEndsPct": 26,
+            "steepTiles": 1670,
+            "steepWithLocPct": 20,
+            "steepOverlaidPct": 96,
+            "steepBlockedFlagPct": 100,
+            "steepOverlays": [
+                [32, 1117],
+                [52, 261],
+                [84, 118],
+                [442, 78],
+                [19, 26]
+            ],
+            "onSteep": [
+                ["#60438:60438:t10:s1x1:c-1", 87, [20, 16, 25, 26]],
+                ["#60436:60436:t10:s1x1:c-1", 84, [23, 24, 21, 16]],
+                ["#60437:60437:t10:s1x1:c-1", 74, [23, 22, 16, 13]],
+                ["#60439:60439:t10:s1x1:c-1", 71, [14, 19, 18, 20]],
+                ["#2639:2639:t0:s1x1:c-1", 16, [4, 4, 4, 4]],
+                ["#44603:44603:t0:s1x1:c-1", 2, [0, 0, 0, 2]],
+                ["#1619:1619:t10:s1x1:c-1", 1, [1, 0, 0, 0]],
+                ["#3008:3008:t10:s1x1:c-1", 1, [1, 0, 0, 0]],
+                ["#3011:3011:t10:s1x1:c-1", 1, [1, 0, 0, 0]],
+                ["#3012:3012:t10:s1x1:c-1", 1, [0, 0, 1, 0]],
+                ["#3013:3013:t10:s1x1:c-1", 1, [0, 0, 1, 0]],
+                ["Cave entrance:17209:t10:s3x2:c0", 1, [1, 0, 0, 0]],
+                ["Support:16951:t10:s1x1:c-1", 1, [1, 0, 0, 0]],
+                ["Full fishing net:392:t10:s1x1:c-1", 1, [1, 0, 0, 0]]
+            ]
+        },
+        "enclosures": {
+            "enclosures": 1,
+            "areaQ": [38, 38, 38, 38],
+            "freeWallSharePct": 60,
+            "freeWallsPer100": 0.83,
+            "topFreeWalls": [
+                ["Rotten village fence:9025", 263],
+                ["#2639:2639", 64],
+                ["#1616:1616", 21],
+                ["#44603:44603", 15],
+                ["#980:980", 11],
+                ["#981:981", 8]
+            ],
+            "sizeY": 192
+        },
+        "rings": {
+            "centre": [170, 91],
+            "rings": [
+                {
+                    "tiles": 1024,
+                    "indoorPct": 0,
+                    "wallsPer100": 0,
+                    "propsPer100": 4.7,
+                    "treesPer100": 3.2,
+                    "decorPer100": 7.4
+                },
+                {
+                    "tiles": 3072,
+                    "indoorPct": 0,
+                    "wallsPer100": 1.7,
+                    "propsPer100": 4.2,
+                    "treesPer100": 1.7,
+                    "decorPer100": 8
+                },
+                {
+                    "tiles": 5120,
+                    "indoorPct": 1,
+                    "wallsPer100": 1,
+                    "propsPer100": 5.5,
+                    "treesPer100": 1.7,
+                    "decorPer100": 7
+                },
+                {
+                    "tiles": 7168,
+                    "indoorPct": 3,
+                    "wallsPer100": 1.4,
+                    "propsPer100": 4.2,
+                    "treesPer100": 1.3,
+                    "decorPer100": 8.4
+                },
+                {
+                    "tiles": 9216,
+                    "indoorPct": 3,
+                    "wallsPer100": 1,
+                    "propsPer100": 4.1,
+                    "treesPer100": 1,
+                    "decorPer100": 6.1
+                },
+                {
+                    "tiles": 8434,
+                    "indoorPct": 0,
+                    "wallsPer100": 0.1,
+                    "propsPer100": 1.6,
+                    "treesPer100": 0.5,
+                    "decorPer100": 2.1
+                }
+            ]
+        },
+        "decor": {
+            "pathSlopeQ": [1, 9, 12, 30],
+            "decorKinds": 46,
+            "decorContouredPct": 99,
+            "decorByPathDistance": [1, 12, 14, 15, 14, 16, 17],
+            "propsByPathDistance": [1, 19, 10, 12, 11, 11, 9],
+            "tilesByPathDistance": [4204, 2341, 2394, 2172, 1953, 1612, 1204]
+        },
+        "underlays": {
+            "pieces": 211,
+            "areaP50": 11,
+            "areaP90": 195,
+            "boundaryPer100": 20,
+            "kindsIn16": [1, 2, 5]
+        },
+        "shore": {
+            "waterSharePct": 44.7,
+            "edgeTiles": 1494,
+            "shapedEdgePct": 69,
+            "bankRiseQ": [11, 18, 56],
+            "onShorePer100Edge": 25,
+            "topOnShore": [
+                ["Waterfall:t10", 144],
+                ["Cracked shells:t22", 31],
+                ["#2639:t0", 24],
+                ["#729:t22", 22],
+                ["Seaweed Pile:t22", 21],
+                ["#51810:t22", 19],
+                ["#51811:t22", 17],
+                ["#60438:t10", 15]
+            ]
+        },
+        "plazas": [
+            {
+                "r": 4,
+                "around": ["Bamboo Stool", "Bamboo Ladder", "Pot", "Pot", "Bookcase", "Pot"]
+            },
+            { "r": 4, "around": ["Light Jungle", "Medium Jungle", "Jungle Plant", "#60438"] },
+            {
+                "r": 4,
+                "around": [
+                    "Corpse",
+                    "Pile of bricks",
+                    "Jungle tree",
+                    "Jungle tree",
+                    "Jungle Flower",
+                    "Jungle Flower"
+                ]
+            },
+            { "r": 4, "around": ["Brazier", "Brazier", "Jungle plant", "Rockslide"] }
+        ],
+        "fronts": { "doors": 0, "doorRotations": [0, 0, 0, 0], "doorToPathQ": [0, 0, 0] },
+        "sight": { "viewQ": [2, 5, 9, 21] },
+        "aprons": {
+            "ringTiles": 860,
+            "ringOverlayPct": 73,
+            "ringTopOverlays": [
+                [84, 295],
+                [52, 280],
+                [80, 33],
+                [442, 9]
+            ],
+            "ringDecorPer100": 5,
+            "ringPropsPer100": 5.1,
+            "indoorOverlayPct": 100,
+            "indoorTopOverlays": [
+                [84, 398],
+                [16, 265],
+                [20, 32],
+                [101, 25]
+            ]
+        },
+        "rims": {
+            "foot": {
+                "tiles": 509,
+                "flatPct": 17,
+                "overlayPct": 82,
+                "decorPer100": 1,
+                "propsPer100": 0,
+                "wallsPer100": 0,
+                "topProps": [["Plant", 1]]
+            },
+            "top": {
+                "tiles": 829,
+                "flatPct": 54,
+                "overlayPct": 90,
+                "decorPer100": 0,
+                "propsPer100": 0,
+                "wallsPer100": 31,
+                "topProps": []
+            }
+        }
+    },
+    "scaperune_ysmar": {
+        "kind": "made",
+        "size": [256, 256],
+        "height": {
+            "heightRange": [0, 255],
+            "walkableShare": 0.41,
+            "slopeSharePct": {
+                "0-0": 47.3,
+                "1-2": 24.4,
+                "3-4": 2.5,
+                "5-8": 4.1,
+                "9-12": 2.7,
+                "13-16": 3.6,
+                "17-24": 4.6,
+                "25-32": 3.3,
+                "33-44": 3.5,
+                "45-64": 3,
+                "65-255": 1
+            },
+            "walkSlopeSharePct": {
+                "0-0": 37.2,
+                "1-2": 51.5,
+                "3-4": 4.1,
+                "5-8": 6.3,
+                "9-12": 0.8,
+                "13-16": 0,
+                "17-24": 0,
+                "25-32": 0,
+                "33-44": 0,
+                "45-64": 0,
+                "65-255": 0
+            },
+            "walkSlope": { "p50": 1, "p90": 3, "p99": 8, "p999": 12, "max": 30 },
+            "steepest": 152,
+            "sizeX": 256
+        },
+        "ground": {
+            "underlayKinds": 19,
+            "topUnderlays": [
+                [139, 22821],
+                [94, 6619],
+                [92, 4852],
+                [97, 4713],
+                [23, 3846],
+                [143, 3532],
+                [28, 3147],
+                [144, 2102]
+            ],
+            "overlayKinds": 9,
+            "overlaySharePct": 59.8,
+            "topOverlays": [
+                [39, 14962],
+                [12, 7771],
+                [32, 7713],
+                [20, 6322],
+                [568, 989],
+                [331, 518],
+                [106, 366],
+                [83, 301],
+                [19, 231]
+            ],
+            "shapeSharePct": {
+                "0": 75.6,
+                "1": 2.2,
+                "2": 2.8,
+                "3": 2.9,
+                "4": 2.6,
+                "5": 2.7,
+                "6": 4.8,
+                "7": 3.2,
+                "8": 3.1
+            },
+            "blockedSharePct": 53.4,
+            "paths": [
+                {
+                    "overlay": 12,
+                    "walkTiles": 6116,
+                    "sharePct": 11.9,
+                    "width": { "p25": 8, "p50": 13, "p75": 20, "p95": 62 },
+                    "shapedEdgePct": 40.08
+                },
+                {
+                    "overlay": 20,
+                    "walkTiles": 280,
+                    "sharePct": 9.6,
+                    "width": { "p25": 3, "p50": 4, "p75": 4, "p95": 6 },
+                    "shapedEdgePct": 100
+                },
+                {
+                    "overlay": 568,
+                    "walkTiles": 68,
+                    "sharePct": 1.5,
+                    "width": { "p25": 10, "p50": 10, "p75": 12, "p95": 15 },
+                    "shapedEdgePct": 100
+                },
+                {
+                    "overlay": 331,
+                    "walkTiles": 39,
+                    "sharePct": 0.8,
+                    "width": { "p25": 5, "p50": 9, "p75": 11, "p95": 20 },
+                    "shapedEdgePct": 100
+                },
+                {
+                    "overlay": 106,
+                    "walkTiles": 360,
+                    "sharePct": 0.6,
+                    "width": { "p25": 4, "p50": 5, "p75": 5, "p95": 6 },
+                    "shapedEdgePct": 53.65
+                },
+                {
+                    "overlay": 83,
+                    "walkTiles": 301,
+                    "sharePct": 0.5,
+                    "width": { "p25": 4, "p50": 5, "p75": 5, "p95": 6 },
+                    "shapedEdgePct": 85.5
+                },
+                {
+                    "overlay": 19,
+                    "walkTiles": 59,
+                    "sharePct": 0.4,
+                    "width": { "p25": 2, "p50": 4, "p75": 5, "p95": 5 },
+                    "shapedEdgePct": 100
+                }
+            ]
+        },
+        "objects": {
+            "locsPer100Tiles": 7.62,
+            "groupPer100": { "ground": 5.59, "scenery": 1.58, "wall": 0.45 },
+            "typeCounts": { "0": 277, "2": 7, "3": 9, "10": 1036, "22": 3662 },
+            "rotationSharePct": {
+                "ground": [25, 25, 25, 25],
+                "scenery": [35, 22, 23, 20],
+                "wall": [34, 12, 10, 43]
+            },
+            "solidSceneryPer100": 1.52,
+            "softSceneryPer100": 0.06,
+            "scenerySize": {
+                "1": 682,
+                "2": 189,
+                "3": 90,
+                "4": 24,
+                "5": 12,
+                "6": 27,
+                "7": 7,
+                "8": 1,
+                "9": 3,
+                "10": 1
+            },
+            "kinds": { "ground": 36, "scenery": 114, "wall": 9 },
+            "topByGroup": {
+                "ground": [
+                    ["#3547:3547", 307],
+                    ["#3548:3548", 283],
+                    ["#3549:3549", 257],
+                    ["#12055:12055", 122],
+                    ["#12054:12054", 122],
+                    ["Wheat:15506", 119],
+                    ["#12052:12052", 118],
+                    ["#12053:12053", 116]
+                ],
+                "scenery": [
+                    ["Grave marker:401", 41],
+                    ["#12077:12077", 39],
+                    ["#60438:60438", 37],
+                    ["Tree:3886", 37],
+                    ["Gravestone:404", 35],
+                    ["Mushroom torch:12005", 34],
+                    ["Small gravestone:400", 34],
+                    ["Mushroom torch:12006", 33]
+                ],
+                "wall": [
+                    ["#1902:1902", 239],
+                    ["#39400:39400", 18],
+                    ["#36255:36255", 9],
+                    ["#20980:20980", 7],
+                    ["#39399:39399", 7],
+                    ["#39202:39202", 5],
+                    ["#36247:36247", 5],
+                    ["#36257:36257", 2]
+                ]
+            },
+            "props": {
+                "count": 799,
+                "per100": 1.22,
+                "againstWallPct": 1,
+                "indoorsPct": 0,
+                "clusterP50": 1,
+                "clusterP90": 3,
+                "clusterMax": 29,
+                "singletonsPct": 70
+            },
+            "trees": {
+                "count": 237,
+                "per100": 0.36,
+                "nearestP25": 3.2,
+                "nearestP50": 4.2,
+                "nearestP75": 6.3
+            },
+            "walkableTiles": 26761,
+            "sizeY": 256
+        },
+        "towns": {
+            "buildings": 0,
+            "smallIndoorBits": 0,
+            "indoorSharePct": 0,
+            "areaQ": [0, 0, 0, 0],
+            "longSideQ": [0, 0, 0, 0],
+            "shortSideQ": [0, 0, 0, 0],
+            "fillQ": [0, 0, 0, 0],
+            "gapQ": [0, 0, 0, 0],
+            "streetQ": [0, 0, 0, 0],
+            "wallLocs": 0,
+            "wallKinds": 0,
+            "wallKindsFor90Pct": 0,
+            "diagonalWallPct": 0,
+            "topWalls": [],
+            "indoorFloors": [],
+            "furniturePer100Indoor": 0,
+            "topFurniture": [],
+            "upperIndoorTiles": [0, 0, 0],
+            "roofLocs": 0,
+            "roofKinds": 0,
+            "wallSidesUnused": false,
+            "sizeY": 256
+        },
+        "pacing": {
+            "screens": 616,
+            "objectsOnScreen": { "p10": 4, "p50": 14, "p90": 24 },
+            "kindsOnScreen": { "p10": 3, "p50": 7, "p90": 11 },
+            "emptyScreensPct": 19.2,
+            "tilesFromAnything": { "p50": 2, "p90": 4, "max": 8 },
+            "openGroundPct": 0.1,
+            "iconsPer10k": 0,
+            "iconGapP50": 0,
+            "topIcons": [],
+            "landmarksPer10k": 25.2,
+            "landmarkGapP50": 6.4,
+            "topLandmarks": [
+                ["Darkwood tree", 20],
+                ["Bloodwood tree", 14],
+                ["Spine mushroom", 12],
+                ["#49341", 12],
+                ["Tree", 12],
+                ["Bones", 10],
+                ["Arcane crystal", 9],
+                ["Mushroom tree", 9]
+            ],
+            "slopeUnused": false,
+            "sizeX": 256,
+            "sizeY": 256,
+            "indoor": 0
+        },
+        "faces": {
+            "faces24up": 4520,
+            "dropQ": [101, 177, 204, 223],
+            "lengthQ": [4, 7, 17],
+            "perTileQ": [12.5, 25.7, 49.5],
+            "blockedPct": 99,
+            "endStepQ": [4, 11],
+            "flatEndsPct": 44,
+            "steepTiles": 10670,
+            "steepWithLocPct": 0,
+            "steepOverlaidPct": 99,
+            "steepBlockedFlagPct": 100,
+            "steepOverlays": [
+                [20, 5286],
+                [32, 4606],
+                [12, 601],
+                [568, 27],
+                [331, 17]
+            ],
+            "onSteep": [
+                ["#4016:4016:t10:s1x1:c-1", 4, [2, 0, 2, 0]],
+                ["#4021:4021:t10:s1x1:c-1", 4, [2, 0, 2, 0]],
+                ["Gravestone:404:t10:s1x1:c-1", 4, [4, 0, 0, 0]],
+                ["#1902:1902:t0:s1x1:c-1", 4, [1, 0, 0, 3]],
+                ["Gravestone:405:t10:s1x1:c-1", 3, [3, 0, 0, 0]],
+                ["Elven lamp:3918:t10:s1x1:c-1", 2, [0, 2, 0, 0]],
+                ["#39202:39202:t0:s1x1:c-1", 2, [1, 0, 0, 1]],
+                ["Small gravestone:400:t10:s1x1:c-1", 2, [2, 0, 0, 0]],
+                ["Priest Statue:38449:t10:s3x3:c0", 2, [2, 0, 0, 0]],
+                ["Knight Statue:38428:t10:s3x3:c0", 1, [1, 0, 0, 0]],
+                ["#3548:3548:t22:s1x1:c0", 1, [1, 0, 0, 0]],
+                ["#60420:60420:t22:s1x1:c-1", 1, [1, 0, 0, 0]],
+                ["#60419:60419:t22:s1x1:c-1", 1, [0, 0, 1, 0]],
+                ["#60423:60423:t22:s1x1:c-1", 1, [0, 0, 1, 0]]
+            ]
+        },
+        "enclosures": {
+            "enclosures": 2,
+            "areaQ": [144, 144, 144, 144],
+            "freeWallSharePct": 100,
+            "freeWallsPer100": 0.45,
+            "topFreeWalls": [
+                ["#1902:1902", 239],
+                ["#39400:39400", 18],
+                ["#36255:36255", 9],
+                ["#20980:20980", 7],
+                ["#39399:39399", 7],
+                ["#39202:39202", 5]
+            ],
+            "sizeY": 256
+        },
+        "rings": { "rings": [] },
+        "decor": {
+            "pathSlopeQ": [0, 2, 10, 30],
+            "decorKinds": 36,
+            "decorContouredPct": 72,
+            "decorByPathDistance": [0, 12, 13, 16, 20, 22, 23],
+            "propsByPathDistance": [0, 4, 2, 4, 4, 6, 6],
+            "tilesByPathDistance": [7223, 1621, 1724, 1669, 1634, 1544, 1435]
+        },
+        "underlays": {
+            "pieces": 440,
+            "areaP50": 16,
+            "areaP90": 232,
+            "boundaryPer100": 48,
+            "kindsIn16": [2, 4, 5]
+        },
+        "shore": {
+            "waterSharePct": 0,
+            "edgeTiles": 0,
+            "shapedEdgePct": 0,
+            "bankRiseQ": [0, 0, 0],
+            "onShorePer100Edge": 0,
+            "topOnShore": []
+        },
+        "plazas": [
+            { "r": 8, "around": ["#45886", "#45887", "#61250", "#61250", "#61250", "#60438"] },
+            { "r": 6, "around": ["#48332"] },
+            { "r": 5, "around": ["Pillar"] },
+            { "r": 5, "around": ["#61250", "Knight Statue", "Priest Statue"] },
+            { "r": 5, "around": [] },
+            { "r": 5, "around": ["#48333"] }
+        ],
+        "fronts": { "doors": 0, "doorRotations": [0, 0, 0, 0], "doorToPathQ": [0, 0, 0] },
+        "sight": { "viewQ": [3, 6, 12, 30] },
+        "aprons": {
+            "ringTiles": 0,
+            "ringOverlayPct": 0,
+            "ringTopOverlays": [],
+            "ringDecorPer100": 0,
+            "ringPropsPer100": 0,
+            "indoorOverlayPct": 0,
+            "indoorTopOverlays": []
+        },
+        "rims": {
+            "foot": {
+                "tiles": 445,
+                "flatPct": 90,
+                "overlayPct": 74,
+                "decorPer100": 8,
+                "propsPer100": 0,
+                "wallsPer100": 0,
+                "topProps": [["#4014", 2]]
+            },
+            "top": {
+                "tiles": 1691,
+                "flatPct": 71,
+                "overlayPct": 39,
+                "decorPer100": 1,
+                "propsPer100": 0,
+                "wallsPer100": 7,
+                "topProps": []
+            }
+        }
+    }
+}

@@ -339,6 +339,38 @@
     white-space: nowrap;
 }
 
+/* A revive under way: the fill is the teammates' green over the dark */
+.ui-party-revive {
+    background: #333;
+}
+
+.ui-party-revive .ui-party-fill {
+    background: #00a050;
+}
+
+/* Just revived: nothing can hurt them for a while */
+.ui-party-immune .ui-party-name {
+    color: #c8ffe0;
+}
+
+/* Down, or reviving someone: under the waiting note's spot */
+.ui-revive {
+    position: absolute;
+    top: 136px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 6px 16px;
+    color: var(--ui-yellow);
+    /* As wide as its line, and wrapping on a phone narrower than it */
+    width: max-content;
+    max-width: calc(100% - 32px);
+    text-align: center;
+}
+
+.ui-revive-bar {
+    margin-top: 4px;
+}
+
 /* Co-op's menu: the run carries on behind it, so it's not darkened */
 .ui-modal.ui-modal-clear {
     background: transparent;

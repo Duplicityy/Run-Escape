@@ -15,17 +15,24 @@ import {
 } from "../../mapviewer/worker/SpriteDataLoader";
 import { pixelRatio } from "../../util/DeviceUtil";
 
+// A failed batch is tried again after this long, a second longer each time,
+// this many times in a row
+const ICON_RETRIES = 3;
+const ICON_RETRY_MS = 1000;
+
 // Item icons are drawn in a worker from the item's model and kept as data
 // URLs. Requests made in the same frame go to the worker together. Some icons
 // are interface sprites instead (Piety's prayer icon), padded out to an item
 // icon's size so they line up with the rest.
-class IconCache {
+export class IconCache {
     private workerPool?: RenderDataWorkerPool;
     private readonly urls = new Map<string, string>();
     private readonly waiting = new Map<string, ((url: string) => void)[]>();
     private queued: { objId: number; count: number }[] = [];
     private queuedSprites: number[] = [];
     private flushScheduled = false;
+    // Batches that failed in a row, for how long to wait before trying again
+    private failures = 0;
 
     setWorkerPool(workerPool: RenderDataWorkerPool): void {
         this.workerPool = workerPool;
@@ -110,20 +117,49 @@ class IconCache {
         this.queued = [];
         const spriteIds = this.queuedSprites;
         this.queuedSprites = [];
-        const [icons, sprites] = await Promise.all([
-            requests.length > 0
-                ? workerPool.queueLoad<ItemIconInput, ItemIconData[], ItemIconLoader>(
-                      new ItemIconLoader(),
-                      { requests },
-                  )
-                : [],
-            spriteIds.length > 0
-                ? workerPool.queueLoad<SpriteDataInput, SpriteImage[], SpriteDataLoader>(
-                      new SpriteDataLoader(),
-                      { spriteIds },
-                  )
-                : [],
-        ]);
+        let icons: ItemIconData[];
+        let sprites: SpriteImage[];
+        try {
+            [icons, sprites] = await Promise.all([
+                requests.length > 0
+                    ? workerPool.queueLoad<ItemIconInput, ItemIconData[], ItemIconLoader>(
+                          new ItemIconLoader(),
+                          { requests },
+                      )
+                    : [],
+                spriteIds.length > 0
+                    ? workerPool.queueLoad<SpriteDataInput, SpriteImage[], SpriteDataLoader>(
+                          new SpriteDataLoader(),
+                          { spriteIds },
+                      )
+                    : [],
+            ]);
+        } catch (e) {
+            // Nothing's left waiting on this batch (a worker that failed), so
+            // the next render asks for its icons again; and the icons on
+            // screen now are asked for again in a moment, a few times, so they
+            // don't stay blank until something redraws them
+            console.error("Loading icons failed", e);
+            const again: (() => void)[] = [];
+            for (const { objId, count } of requests) {
+                const key = IconCache.key(objId, count);
+                const callbacks = this.waiting.get(key) ?? [];
+                this.waiting.delete(key);
+                again.push(() => callbacks.forEach((cb) => this.request(objId, count, cb)));
+            }
+            for (const id of spriteIds) {
+                const key = IconCache.spriteKey(id);
+                const callbacks = this.waiting.get(key) ?? [];
+                this.waiting.delete(key);
+                again.push(() => callbacks.forEach((cb) => this.requestSprite(id, cb)));
+            }
+            if (this.failures < ICON_RETRIES) {
+                this.failures++;
+                setTimeout(() => again.forEach((retry) => retry()), ICON_RETRY_MS * this.failures);
+            }
+            return;
+        }
+        this.failures = 0;
         for (const icon of icons) {
             this.resolve(IconCache.key(icon.objId, icon.count), toDataUrl(icon.pixels));
         }

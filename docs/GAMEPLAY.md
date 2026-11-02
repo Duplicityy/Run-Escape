@@ -4,10 +4,11 @@ Everything in the game, map by map and system by system. The [README](../README.
 version and how to run it.
 
 - **WASD** or the arrow keys to move. Weapons fire on their own. **1-4** use your utility items.
-  **Esc** pauses. **Q** shows or hides the quest tracker. The mouse wheel zooms.
+  **Esc** pauses. **Q** shows or hides the quest tracker. **Tab**, or clicking the DPS under the
+  minimap, shows each weapon's damage a second and its total for the run. The mouse wheel zooms.
 - On a touch screen, drag anywhere to move: the stick appears under your thumb. Tap the buttons on
-  screen to pause and use items, with the thumb still on the stick if you like. Phones play
-  sideways, with gear and quests in the pause menu.
+  screen to pause and use items, with the thumb still on the stick if you like. Tap the DPS for each
+  weapon's damage. Phones play sideways, with gear and quests in the pause menu.
 - Enemies drop **bones**; walk near them to collect their experience. Bones lying close together
   gather into one pile worth all of their experience, and it looks the part as it grows: Big
   bones, Dragon bones, Wyvern bones, Lava dragon bones, then Superior dragon bones. Coins gather
@@ -18,7 +19,9 @@ version and how to run it.
   50, 100, 200 and 400, doubling each time.
 - When a run ends, the results screen shows its stats: damage, kills and damage a second for
   each weapon (and the utility items and power-ups that did damage), the biggest hit, damage
-  taken, hitpoints healed and when each boss went down.
+  taken, hitpoints healed and when each boss went down. In co-op it has a page for each player,
+  flipped through with the arrows or the arrow keys, and the party's shared totals under them. A
+  weapon's damage a second counts up to when its player went down or left.
 - You carry at most **4 weapons and 4 passives**, so a build is about what you leave out.
 - **Rarity**, in OSRS drop table terms: every weapon and passive is Common, Uncommon, Rare or
   Very rare, which sets how often it's offered. Every offer also rolls its own rarity: a Common
@@ -179,9 +182,8 @@ version and how to run it.
   Knight's island and its pests, and its bosses are the four portals, which open together behind
   shields that drop one by one.
 - **Hard mode**: the switch beside Endless, open once you've beaten the map (from the start on fun
-  maps), on your own for now rather than in co-op. Enemies have more hitpoints and hit harder, more
-  of them come at once, every elite is two, and bosses enrage at 65% of their hitpoints and attack
-  15% faster. How much tougher depends on the map: the early ones gain the most, as a player who's
+  maps). Enemies have more hitpoints and hit harder, more of them come at once, every elite is two,
+  and bosses enrage at 65% of their hitpoints and attack 15% faster. How much tougher depends on the map: the early ones gain the most, as a player who's
   bought everything walks through them, and the late ones the least. Experience from bones is 10%
   lower, as the bigger crowd drops more, and coins are worth 25% more. It can be endless too, with
   records of its own. A win counts as a win on the map, and turns its tick gold.
@@ -235,7 +237,8 @@ version and how to run it.
   walking up to them sets off what they came for.
     - **Mysterious Old Man** (the likeliest): sells three power-ups, with the run paused while you
       choose. Prices go up by a tenth of the base price for each minute of the run, and with the
-      map's coins. Buying one doesn't delay the next drop.
+      map's coins. Buying one doesn't delay the next drop. In co-op, now and then one of the three
+      is an extra revive instead.
     - **Quiz Master**: three items that go together and one that doesn't, with the run paused. The
       odd one out wins a random power-up.
     - **Genie**: three quarters of a level's experience.
@@ -372,11 +375,13 @@ version and how to run it.
   brew heals a lot and toughens you but weakens your hits; a Zamorak brew is the other way
   round), antidotes (Antidote++ and Sanfew serum cure poison and boss drains and curses, and
   keep them off for a while), a Bonecrusher that pulls in every bone on the ground, chinchompas that blow up
-  everything around you, an Antique lamp worth a level. Copies stack.
+  everything around you, an Antique lamp worth a level. Copies stack. In co-op a rare casket can
+  hold a Prayer cape, an extra revive that's yours the moment you take it.
 - Coins and the odd cooked chicken drop too.
 - Enemies get tougher as the run goes on, gently at first and faster after the first few
   minutes.
-- At 15:00 the map's final boss comes. Kill it to win.
+- At 15:00 the map's final boss comes. Kill it to win, even if you fall in the same instant;
+  once it's won, nothing more can hurt you.
 - **Minimap**: the client's, north up, drawn from the map's own minimap images, with the
   client's yellow dots for enemies (orange for elites), a red one for bosses, and caskets and
   power-ups in their colours. Bosses, caskets and power-ups out of range sit on the rim.
@@ -402,13 +407,13 @@ version and how to run it.
 - **Co-op** (Multiplayer, on the title screen) is a run with up to three friends. Make a room, invite only
   (friends join with its eight-letter code or the invite link) or open to anyone browsing the
   rooms list, or join one. Everyone picks their own adventurer and brings their own skills,
-  Armoury and unlocked items; the host picks the map and endless, and starts once everyone (the
-  host too) is ready, which can be a party of one. The host can open or close the room, kick a
+  Armoury and unlocked items; the host picks the map, endless and hard mode, and starts once
+  everyone (the host too) is ready, which can be a party of one. The host can open or close the room, kick a
   player and disband it. A pasted invite link in the code box leaves just its code. Everyone
   gets a readable name to play under, like "Plucky Chinchompa", and rooms get one too, like "Moonlit
   Crossing". **New name** picks another, any time but during a run.
-    - You can only join a room on a map you've unlocked yourself (and its endless, for an endless
-      room), and the host can only pick maps everyone in the room has, so nobody skips ahead. A
+    - You can only join a room on a map you've unlocked yourself (and its endless or hard mode, for
+      a room on them), and the host can only pick what everyone in the room has, so nobody skips ahead. A
       server can let anyone in instead (`MULTIPLAYER_ANY_MAP`); then a win opens the map it was
       on for a player who hadn't got that far (along with the next), but not the maps before it.
     - The run's **level is shared**: every level up gives each player their own three choices, and
@@ -418,6 +423,12 @@ version and how to run it.
       them and gets what they bring. The Mysterious Old Man's and the Quiz Master's offers are
       theirs to choose from while the run waits, paid for from the shared coins. Ignore the
       Sandwich lady and everyone still standing gets the baguette.
+    - A **boss** comes as a pair, or on hard mode one for each player, each turning up by a
+      different player. Between them the copies have one boss's hitpoints and experience, and its
+      loot drops with the last to fall, so a party fights more bosses rather than bigger ones.
+      Every copy of a final boss must fall to win, or to move an endless run on. Slash Bash and
+      The Mimic's caskets come this way too; Hallowed Night's final fight and Pest Control's
+      portals stay as they are.
     - A **boss's attacks** land on whoever they reach: The Nightmare's bullets, marks, quarters and
       charge, Slash Bash's pools and The Mimic's stomp hurt each player caught in them, and the blast
       once her Sleepwalkers reach her hits everyone. A curse,
@@ -438,9 +449,18 @@ version and how to run it.
       a player, so the last one of four standing faces a crowd made for two and a half.
     - Enemies go for whoever's **nearest**, and pickups fly to whoever's nearest.
     - A player who falls with no ring of life left (it saves you as it does on your own) is
-      **down** and out for the rest of the run, watching a teammate who's still up. The run goes
+      **down**, lying where they fell and watching a teammate who's still up. The run goes
       on while anyone's standing, without waiting on the downed for level ups, and ends when
       everyone's down.
+    - A teammate can **revive** a downed player by standing over them for 5 seconds (the Prayer
+      cape's emote, with a bar filling up over the fallen; stepping away starts over). Each
+      player can be revived once a run, plus once more for each **Prayer cape** they find: a
+      rare casket item, or now and then for sale from the Mysterious Old Man, both only in
+      co-op. They come back with 75% of their hitpoints, then 50%, then 25% for every revive
+      after, and with none left they're down for good. For 5 seconds a revived player can't
+      be hurt, and enemies leave them alone for a teammate instead (unless nobody else is
+      up); food, coins and caskets are theirs to pick up all the while. Level ups the party had while they were down are theirs to choose once they're
+      back.
     - The pause menu doesn't stop a co-op run. Leaving it takes you out of the party; the host
       leaving ends it for everyone.
     - Teammates show with their names in green, an arrow at the edge of the screen when they're out

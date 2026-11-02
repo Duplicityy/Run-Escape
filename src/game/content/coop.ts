@@ -38,6 +38,19 @@ const DAMAGE_PER_PLAYER = 0.1;
 const XP_PER_PLAYER = -0.12;
 const CASKETS_PER_PLAYER = 0.2;
 
+// Bosses come as copies in co-op: a pair on normal mode, one for each player
+// on hard. Between them the copies have one boss's hitpoints and experience,
+// and its loot drops with the last to fall (Sim.spawnBosses), so a party
+// fights more bosses rather than bigger ones. A boss with its own spots
+// (EnemyDef.spawnAt) gets no more than it has free: Pest Control's portals
+// have one each, so they stay single.
+export function bossCopies(players: number, hard: boolean): number {
+    if (players <= 1) {
+        return 1;
+    }
+    return hard ? Math.min(players, MAX_PARTY) : 2;
+}
+
 export function getPartyScale(players: number): PartyScale {
     const extra = Math.max(0, Math.min(players, MAX_PARTY) - 1);
     return {
@@ -49,3 +62,28 @@ export function getPartyScale(players: number): PartyScale {
         caskets: 1 + CASKETS_PER_PLAYER * extra,
     };
 }
+
+// A player who goes down can be brought back by a teammate standing over them
+// (within REVIVE_RANGE tiles) for REVIVE_SECONDS, REVIVES_PER_PLAYER times a
+// run plus any extra revives they've found (Hero.extraRevives), with less of
+// their hitpoints each time (REVIVE_HP, by how many times they've been
+// revived; the last for every time after). Back up, nothing can hurt them and
+// enemies leave them be for REVIVE_IMMUNITY_SECONDS.
+export const REVIVES_PER_PLAYER = 1;
+export const REVIVE_HP = [0.75, 0.5, 0.25];
+export const REVIVE_SECONDS = 5;
+export const REVIVE_RANGE = 1;
+export const REVIVE_IMMUNITY_SECONDS = 5;
+
+// The Prayer cape's skillcape emote, which a reviver performs over the fallen:
+// the player animation and the graphic that goes with it
+export const REVIVE_SEQ = 4979;
+export const REVIVE_SPOTANIM = 829;
+
+// An extra revive comes as a Prayer cape, only in co-op: now and then in a
+// casket (its rarity and REVIVE_CASKET_WEIGHT in Loot.ts say how rarely), or
+// for sale from the Mysterious Old Man, who has one in place of a power-up
+// this often, at this price before the run's inflation
+export const EXTRA_REVIVE_ITEM = "prayer_cape";
+export const OLD_MAN_REVIVE_CHANCE = 0.15;
+export const EXTRA_REVIVE_PRICE = 200;

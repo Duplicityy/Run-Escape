@@ -1,6 +1,7 @@
 import { getInsideTiles } from "./building";
 import { PlacedLoc, TILE_BLOCKED, TileGrid, TileLevel, createTileGrid } from "./format";
 import { smoothField } from "./noise";
+import { Reservations } from "./reservations";
 import { getCoveredShare, getCoveredSides, getOverlayShape } from "./shapes";
 
 export type StampOptions = {
@@ -30,6 +31,12 @@ export type StampOptions = {
 // An overlay, or which one for a tile
 export type OverlayChoice = number | ((x: number, y: number) => number);
 
+// A box of tile corners, both ends in
+type CornerArea = { x0: number; y0: number; x1: number; y1: number };
+
+// How many corners past a mask paintOverlay can reach, with one spare for smoothing's edge
+const OVERLAY_REACH = 3;
+
 function smoothstep(t: number): number {
     return t * t * (3 - 2 * t);
 }
@@ -45,6 +52,8 @@ export class Ground {
     readonly reserved: Uint8Array;
     // Tiles of buildings, walls included. Nothing else goes on these.
     readonly footprint: Uint8Array;
+    // What's spoken for, and by what: see reservations.ts
+    readonly claims: Reservations;
 
     constructor(sizeX: number, sizeY: number) {
         this.sizeX = sizeX;
@@ -53,6 +62,7 @@ export class Ground {
         this.level0 = this.grid.levels[0];
         this.reserved = new Uint8Array(sizeX * sizeY);
         this.footprint = new Uint8Array(sizeX * sizeY);
+        this.claims = new Reservations(sizeX, sizeY, this.reserved);
     }
 
     inside(x: number, y: number): boolean {
@@ -76,20 +86,22 @@ export class Ground {
     // x + y * (sizeX + 1), so edges come out as lines rather than steps of whole
     // tiles (shapes.ts). The overlay can depend on where it is. Blocked also blocks tiles
     // at least half covered, so that collision follows what's drawn. skip leaves tiles
-    // alone. Returns the tiles it touched.
+    // alone. Returns the tiles it touched. Given an area, the field's only that area's corners.
     paintField(
         field: Float32Array,
         overlay: OverlayChoice,
         blocked: boolean,
         skip?: Uint8Array,
+        area: CornerArea = { x0: 0, y0: 0, x1: this.sizeX, y1: this.sizeY },
     ): Uint8Array {
         const { overlays, shapes, rotations, flags } = this.level0;
-        const cornersX = this.sizeX + 1;
+        const { x0, y0, x1, y1 } = area;
+        const cornersX = x1 - x0 + 1;
         const touched = new Uint8Array(this.sizeX * this.sizeY);
-        for (let y = 0; y < this.sizeY; y++) {
-            for (let x = 0; x < this.sizeX; x++) {
+        for (let y = y0; y < y1; y++) {
+            for (let x = x0; x < x1; x++) {
                 const i = this.tile(x, y);
-                const at = x + y * cornersX;
+                const at = x - x0 + (y - y0) * cornersX;
                 const sw = field[at];
                 const se = field[at + 1];
                 const ne = field[at + cornersX + 1];
@@ -121,37 +133,74 @@ export class Ground {
         blocked: boolean,
         skip?: Uint8Array,
     ): Uint8Array {
-        const cornersX = this.sizeX + 1;
-        const field = new Float32Array(cornersX * (this.sizeY + 1));
-        for (let y = 0; y <= this.sizeY; y++) {
-            for (let x = 0; x <= this.sizeX; x++) {
-                let count = 0;
-                for (const [tx, ty] of [
-                    [x - 1, y - 1],
-                    [x, y - 1],
-                    [x - 1, y],
-                    [x, y],
-                ]) {
-                    if (this.inside(tx, ty) && mask[this.tile(tx, ty)]) {
-                        count++;
-                    }
-                }
-                field[x + y * cornersX] = count / 4 - 0.4;
+        const area = this.getMaskArea(mask);
+        if (!area) {
+            return new Uint8Array(this.sizeX * this.sizeY);
+        }
+        const { x0, y0, x1, y1 } = area;
+        const cornersX = x1 - x0 + 1;
+        const cornersY = y1 - y0 + 1;
+        const isSet = (x: number, y: number) => this.inside(x, y) && mask[this.tile(x, y)] !== 0;
+        const field = new Float32Array(cornersX * cornersY);
+        for (let y = y0; y <= y1; y++) {
+            for (let x = x0; x <= x1; x++) {
+                const count =
+                    (isSet(x - 1, y - 1) ? 1 : 0) +
+                    (isSet(x, y - 1) ? 1 : 0) +
+                    (isSet(x - 1, y) ? 1 : 0) +
+                    (isSet(x, y) ? 1 : 0);
+                field[x - x0 + (y - y0) * cornersX] = count / 4 - 0.4;
             }
         }
-        const smoothed = smoothField(field, cornersX, this.sizeY + 1, 1);
-        return this.paintField(smoothed, overlay, blocked, skip);
+        const smoothed = smoothField(field, cornersX, cornersY, 1);
+        return this.paintField(smoothed, overlay, blocked, skip, area);
     }
 
-    // Takes an overlay off tiles, and what blocked them
-    clearOverlay(tiles: Uint8Array): void {
+    // The corners round a mask that can come to anything, as a big map's mask is one small
+    // square: a set tile lifts its own corners, the smoothing those a corner further, and the
+    // tiles on those are all that can be painted. Undefined for an empty mask.
+    private getMaskArea(mask: Uint8Array): CornerArea | undefined {
+        let x0 = this.sizeX;
+        let y0 = this.sizeY;
+        let x1 = -1;
+        let y1 = -1;
+        for (let y = 0; y < this.sizeY; y++) {
+            for (let x = 0; x < this.sizeX; x++) {
+                if (mask[this.tile(x, y)]) {
+                    x0 = Math.min(x0, x);
+                    y0 = Math.min(y0, y);
+                    x1 = Math.max(x1, x);
+                    y1 = Math.max(y1, y);
+                }
+            }
+        }
+        if (x1 < 0) {
+            return undefined;
+        }
+        return {
+            x0: Math.max(x0 - OVERLAY_REACH, 0),
+            y0: Math.max(y0 - OVERLAY_REACH, 0),
+            x1: Math.min(x1 + 1 + OVERLAY_REACH, this.sizeX),
+            y1: Math.min(y1 + 1 + OVERLAY_REACH, this.sizeY),
+        };
+    }
+
+    // Takes an overlay off tiles, as a mask or just one, and what blocked them
+    clearOverlay(tiles: Uint8Array | number): void {
         const { overlays, shapes, rotations, flags } = this.level0;
+        const clear = (i: number) => {
+            overlays[i] = 0;
+            shapes[i] = 0;
+            rotations[i] = 0;
+            flags[i] &= ~TILE_BLOCKED;
+        };
+        if (typeof tiles === "number") {
+            clear(tiles);
+            return;
+        }
         for (let i = 0; i < tiles.length; i++) {
             if (tiles[i]) {
-                overlays[i] = 0;
-                shapes[i] = 0;
-                rotations[i] = 0;
-                flags[i] &= ~TILE_BLOCKED;
+                clear(i);
             }
         }
     }

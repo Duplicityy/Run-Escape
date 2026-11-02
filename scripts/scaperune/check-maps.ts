@@ -4,16 +4,45 @@
 // a building, that a building's road ends at its door, and that a building without one
 // faces the nearest road. And for height: that collision comes from slopes and agrees with
 // the game's, that roads climb smoothly, that buildings stand on flat ground, and that
-// nothing you can walk on is hidden from the camera. Fails if not.
+// nothing you can walk on is hidden from the camera. And that places keep to the flow: nothing on
+// a wall or in front of a gate, and no roads or fences where they don't belong (clashes.ts). And
+// the four rules for the ground: fields are level, roads can be walked, water's flat but at a
+// fall, and falls are seated in their faces. Fails if not.
 //
 //   npx tsx scripts/scaperune/check-maps.ts
 //   ONLY=volcanoes npx tsx scripts/scaperune/check-maps.ts    # the maps whose names match
 import { ArenaGrid } from "../../src/game/core/world/ArenaGrid";
-import { countStranded, getCollisionFlags, getStepGrid } from "../../src/game/scaperune/collision";
-import { TILE_BLOCKED, TILE_BRIDGE, TileGrid } from "../../src/game/scaperune/format";
+import { BIOMES, WATERFALL } from "../../src/game/scaperune/biomes";
+import {
+    BLOOD_WALL_ONLY,
+    CROP_NAME,
+    WATER_OVERLAYS,
+    findBannedLocs,
+} from "../../src/game/scaperune/catalogue";
+import {
+    CITY_WALL_IDS,
+    WALL_SIDES,
+    getGateColumns,
+    getSideInsets,
+    getWallSide,
+} from "../../src/game/scaperune/cityWalls";
+import { describeClashes, findClashes } from "../../src/game/scaperune/clashes";
+import {
+    TileRect,
+    countStranded,
+    findReachable,
+    getCollisionFlags,
+    getStepGrid,
+} from "../../src/game/scaperune/collision";
+import { FALL_MODELS, FALL_ROWS } from "../../src/game/scaperune/falls";
+import {
+    MAP_SQUARE_SIZE,
+    TILE_BLOCKED,
+    TILE_BRIDGE,
+    TileGrid,
+} from "../../src/game/scaperune/format";
 import {
     DEFAULT_SETTINGS,
-    FORD_HALF_WIDTH,
     GeneratedMap,
     GeneratorSettings,
     HEIGHTMAP_SIZE,
@@ -38,6 +67,16 @@ import { getTileSlope } from "../../src/game/scaperune/terrain";
 import { buildRegionData } from "../../src/mapviewer/worker/RegionDataLoader";
 import { addCustomMapSquares } from "../../src/rs/map/CustomMapFileLoader";
 import { createSceneBuilder, createVarManager, loadGameCache } from "../cache/scene-util";
+import { LocMeta, createLocs, cropGrid } from "./research/lib";
+import {
+    findRims,
+    measureHeight,
+    measureObjects,
+    measurePacing,
+    measureSightLines,
+    measureTowns,
+    prepare,
+} from "./research/metrics";
 
 const GENERATED = /^scaperune_(?!palette|prefabs|cliffs)/;
 
@@ -150,6 +189,66 @@ const SWEEP: Partial<GeneratorSettings>[] = [
     { biome: "astral", island: 0.1, waterLevel: 0.5, squaresX: 3, squaresY: 3, rivers: 1 },
     { biome: "autumn", secondBiome: "astral", biomeMix: 0.5, landmarks: 1, squaresX: 3 },
     { rivers: 2, riverWidth: 14, roads: 0 },
+    { towns: 2, townSize: 24, townWalls: 1, buildings: 1, hills: 0.7, squaresX: 3, squaresY: 3 },
+    ...CITY_WALL_IDS.map((wallKit) => ({
+        wallKit,
+        towns: 1,
+        townSize: 26,
+        townWalls: 1,
+        buildings: 1,
+        rivers: 1,
+        squaresX: 3,
+        squaresY: 3,
+    })),
+    {
+        towns: 1,
+        townSize: 34,
+        townWalls: 1,
+        buildings: 1,
+        gardens: 1,
+        landmarks: 1,
+        ruins: 1,
+        roadStyle: "ring",
+        squaresX: 3,
+        squaresY: 3,
+    },
+    {
+        towns: 1,
+        townSize: 40,
+        townWalls: 1,
+        wallKit: "kourend",
+        buildings: 1,
+        gardens: 1,
+        ruins: 1,
+        roadStyle: "spine",
+        rivers: 1,
+        squaresX: 4,
+        squaresY: 3,
+    },
+    { towns: 3, townSize: 18, townWalls: 0.5, buildings: 1, gardens: 1, squaresX: 3, squaresY: 3 },
+    { towns: 0, sites: 1, buildings: 1, gardens: 1, landmarks: 1, squaresX: 3, squaresY: 3 },
+    { towns: 2, townSize: 24, buildings: 1, gardens: 1, roadStyle: "ring", roadWidth: 6 },
+    {
+        towns: 1,
+        townSize: 40,
+        townWalls: 1,
+        sideStreets: 1,
+        buildings: 1,
+        gardens: 1,
+        landmarks: 1,
+        squaresX: 3,
+        squaresY: 3,
+    },
+    { towns: 2, townSize: 30, sideStreets: 1, buildings: 1, rivers: 1, squaresX: 3, squaresY: 3 },
+    {
+        towns: 1,
+        townSize: 40,
+        townWalls: 1,
+        sideStreets: 0,
+        buildings: 1,
+        squaresX: 3,
+        squaresY: 3,
+    },
 ];
 
 // Tiles past the end of a deck that must be whole road, and that must have nothing
@@ -157,6 +256,8 @@ const SWEEP: Partial<GeneratorSettings>[] = [
 // road can join it.
 const ROAD_OFF_DECK = 7;
 const ROAD_ALONE_OFF_DECK = 4;
+// How far a deck's end can be from the road running off it
+const DECK_STEP = 10;
 
 // Problems with the roads off a grid's bridges, and how many ran each way
 function checkBridgeRoads(
@@ -164,6 +265,8 @@ function checkBridgeRoads(
     roadTiles: Uint8Array,
 ): { problems: string[]; ways: number[] } {
     const { sizeX } = grid;
+    const corners = sizeX + 1;
+    const ground = grid.levels[0].heights;
     const deck = new Set<number>();
     grid.levels[1].flags.forEach((flag, i) => {
         if (flag & TILE_BRIDGE) {
@@ -199,6 +302,28 @@ function checkBridgeRoads(
         };
         const [first, last] = eastWest ? [x0, x1] : [y0, y1];
         const [low, high] = eastWest ? [y0, y1] : [x0, x1];
+        // The deck stands clear of what's under it, and comes down to its banks at both ends
+        const corner = (along: number, across: number) =>
+            eastWest ? along + across * corners : across + along * corners;
+        const deckAt = (along: number) => {
+            const at = corner(along, high);
+            return { deck: ground[at] + grid.levels[1].heights[at], under: ground[at] };
+        };
+        for (let along = first + 3; along <= last - 2; along++) {
+            const { deck, under } = deckAt(along);
+            if (deck <= under) {
+                problems.push(`the deck's in the ground at ${along},${high}`);
+            }
+        }
+        for (const [end, past] of [
+            [first, first - 2],
+            [last + 1, last + 3],
+        ]) {
+            const step = deckAt(end).deck - ground[corner(past, high)];
+            if (Math.abs(step) > DECK_STEP) {
+                problems.push(`the deck stops ${step} from its bank at ${end},${high}`);
+            }
+        }
         for (const way of [-1, 1]) {
             const end = way < 0 ? first : last;
             for (let step = 1; step <= ROAD_OFF_DECK; step++) {
@@ -247,8 +372,8 @@ function checkRoadsAndBuildings(map: GeneratedMap): string[] {
             }
         }
     }
-    // Fords aren't roads
-    const roadPoints = lines.filter((line) => line.halfWidth !== FORD_HALF_WIDTH);
+    // Fords aren't roads, and have no grade
+    const roadPoints = lines.filter((line) => line.grade !== undefined);
     for (const building of buildings) {
         const { exit, name } = building;
         if (!exit) {
@@ -343,6 +468,56 @@ function checkCollision(
 }
 
 // Every road's ground, along its length: how it was graded, steady, and walkable
+// A walled town has two ways in or more, you can walk through them, and a road only meets its
+// wall at a gate
+function checkWalls(
+    map: GeneratedMap,
+    context: BuildContext,
+    spawn: { x: number; y: number },
+    arena: TileRect,
+): string[] {
+    const { grid, roadTiles } = map;
+    const problems: string[] = [];
+    const flags = getCollisionFlags(grid, context.locs);
+    const reached = findReachable(flags, grid.sizeX, grid.sizeY, arena, spawn.x, spawn.y);
+    const tile = (x: number, y: number) => x + y * grid.sizeX;
+    for (const town of map.walled ?? []) {
+        const { kit, gates, taken, x0, y0, x1, y1 } = town;
+        const open = gates.filter((gate) => {
+            const { side, start } = getGateColumns(kit, town, gate);
+            const middle = start + (kit.gateSize >> 1);
+            return [-2, kit.width + 2].every(
+                (across) => reached[tile(side.x(middle, across), side.y(middle, across))],
+            );
+        });
+        if (open.length < 2) {
+            problems.push(`the wall at ${x0},${y0} has ${open.length} gates you can walk through`);
+        }
+        for (let turn = 0; turn < 4; turn++) {
+            const side = getWallSide({ x0, y0, x1, y1 }, turn);
+            const [inset, end] = getSideInsets(kit, town, turn);
+            const here = gates.filter((gate) => WALL_SIDES.indexOf(gate.side) === turn);
+            const starts = here.map((gate) => getGateColumns(kit, town, gate).start);
+            let from = -1;
+            for (let along = inset; along <= side.length - end + 1; along++) {
+                const i = tile(side.x(along, 0), side.y(along, 0));
+                const onRoad = along <= side.length - end && roadTiles[i] && !taken.has(i);
+                if (onRoad && from < 0) {
+                    from = along;
+                } else if (!onRoad && from >= 0) {
+                    const stop = along - 1;
+                    if (!starts.some((at) => at <= stop && at + kit.gateSize > from)) {
+                        const [x, y] = [side.x(from, 0), side.y(from, 0)];
+                        problems.push(`a road meets the wall at ${x},${y} with no gate`);
+                    }
+                    from = -1;
+                }
+            }
+        }
+    }
+    return problems;
+}
+
 function checkRoadHeights(map: GeneratedMap): { problems: string[]; steepest: number } {
     const { grid, lines, passes, walkSlope } = map;
     const problems: string[] = [];
@@ -414,6 +589,249 @@ function checkBuildingGround(map: GeneratedMap): string[] {
     return problems;
 }
 
+// The floor of a chasm: a drop, for a sea
+const STARS = 39;
+// How far from a fall foam can be: rivers fall across their whole width
+const FOAM_REACH = 14;
+
+// The corners of a rectangle of tiles: the lowest and highest
+function getRectHeights(grid: TileGrid, rect: TileRect): { min: number; max: number } {
+    const corners = grid.sizeX + 1;
+    const { heights } = grid.levels[0];
+    let min = Infinity;
+    let max = -Infinity;
+    for (let cy = rect.y0; cy <= rect.y1 + 1; cy++) {
+        for (let cx = rect.x0; cx <= rect.x1 + 1; cx++) {
+            min = Math.min(min, heights[cx + cy * corners]);
+            max = Math.max(max, heights[cx + cy * corners]);
+        }
+    }
+    return { min, max };
+}
+
+// Tiles in pieces joined at a side or a corner, biggest first, reach being how far apart two can be
+function groupTiles(tiles: number[], sizeX: number, reach = 1): number[][] {
+    const left = new Set(tiles);
+    const pieces: number[][] = [];
+    for (const start of tiles) {
+        if (!left.delete(start)) {
+            continue;
+        }
+        const piece = [start];
+        for (let at = 0; at < piece.length; at++) {
+            for (let dy = -reach; dy <= reach; dy++) {
+                for (let dx = -reach; dx <= reach; dx++) {
+                    const i = piece[at] + dx + dy * sizeX;
+                    if (left.delete(i)) {
+                        piece.push(i);
+                    }
+                }
+            }
+        }
+        pieces.push(piece);
+    }
+    return pieces.sort((a, b) => b.length - a.length);
+}
+
+function getTileBounds(tiles: number[], sizeX: number): TileRect {
+    const xs = tiles.map((i) => i % sizeX);
+    const ys = tiles.map((i) => Math.floor(i / sizeX));
+    return {
+        x0: Math.min(...xs),
+        y0: Math.min(...ys),
+        x1: Math.max(...xs),
+        y1: Math.max(...ys),
+    };
+}
+
+function formatRect({ x0, y0, x1, y1 }: TileRect): string {
+    return x0 === x1 && y0 === y1 ? `${x0},${y0}` : `${x0},${y0} to ${x1},${y1}`;
+}
+
+function isInRect(rect: TileRect, x: number, y: number): boolean {
+    return x >= rect.x0 && y >= rect.y0 && x <= rect.x1 && y <= rect.y1;
+}
+
+// Crops, and their share of the rectangle they're in, that make a field
+const FIELD_LEAST = 9;
+const FIELD_DENSITY = 0.3;
+
+// A field stands on level ground, fence and rows, unless its recipe says it slopes. Fields are
+// found by what's growing, so a map can't forget to say it has one.
+function checkFields(map: GeneratedMap, locs: (id: number) => LocMeta): string[] {
+    const { grid, fields = [] } = map;
+    const { sizeX } = grid;
+    const grown = grid.locs.filter(
+        ({ level, type, id }) => level === 0 && type === 10 && CROP_NAME.test(locs(id).name),
+    );
+    const crops = grown.map((loc) => loc.x + loc.y * sizeX);
+    // In rows, not a few stalks in the grass
+    const planted = groupTiles(crops, sizeX, 2).filter((piece) => {
+        const { x0, y0, x1, y1 } = getTileBounds(piece, sizeX);
+        const area = (x1 - x0 + 1) * (y1 - y0 + 1);
+        return piece.length >= FIELD_LEAST && piece.length / area >= FIELD_DENSITY;
+    });
+    const rects = planted.map((piece) => getTileBounds(piece, sizeX));
+    const problems: string[] = [];
+    for (const rect of [...fields, ...rects]) {
+        const declared = fields.find((field) => isInRect(field, rect.x0, rect.y0));
+        const { min, max } = getRectHeights(grid, rect);
+        if (max !== min && !declared?.slopes) {
+            const name = locs(grown.find(({ x, y }) => isInRect(rect, x, y))?.id ?? 0).name;
+            problems.push(
+                `the field at ${formatRect(rect)} isn't level: ${min} to ${max} (${name})`,
+            );
+        }
+    }
+    return problems;
+}
+
+// Every tile of water lies level, and only a fall can come between two levels of it. Corners
+// are shared, so that also makes a lake or a stretch of river one level all over.
+function checkWater(map: GeneratedMap): string[] {
+    const { grid, waterDrops = [], falls, waterfalls } = map;
+    const { sizeX, sizeY } = grid;
+    const corners = sizeX + 1;
+    const { heights, overlays } = grid.levels[0];
+    const tilted: number[] = [];
+    const spreads = new Map<number, number>();
+    for (let y = 0; y < sizeY; y++) {
+        for (let x = 0; x < sizeX; x++) {
+            const i = x + y * sizeX;
+            if (!WATER_OVERLAYS.has(overlays[i])) {
+                continue;
+            }
+            const at = x + y * corners;
+            const round = [at, at + 1, at + corners, at + corners + 1].map((c) => heights[c]);
+            const spread = Math.max(...round) - Math.min(...round);
+            if (spread > 0 && !waterDrops.some((drop) => isInRect(drop, x, y))) {
+                tilted.push(i);
+                spreads.set(i, spread);
+            }
+        }
+    }
+    const problems = groupTiles(tilted, sizeX).map((piece) => {
+        const worst = Math.max(...piece.map((i) => spreads.get(i)!));
+        const where = formatRect(getTileBounds(piece, sizeX));
+        return `${piece.length} water tiles aren't level at ${where}, by up to ${worst}`;
+    });
+    // A drop's only a drop with a fall at it
+    const seen = [...falls, ...waterfalls];
+    for (const drop of waterDrops) {
+        const atFall = seen.some(
+            ({ x, y }) =>
+                Math.hypot(x - (drop.x0 + drop.x1) / 2, y - (drop.y0 + drop.y1) / 2) <= FOAM_REACH,
+        );
+        if (!atFall) {
+            problems.push(`the water drops at ${formatRect(drop)} with no fall there`);
+        }
+    }
+    return problems;
+}
+
+// A road in land you can walk on can be walked, its bridge's deck and ends too. A road that's
+// shut has to say so in its recipe and show it in the world. Stretches out of reach altogether
+// aren't counted: nobody gets to them.
+function checkRoadsWalkable(
+    map: GeneratedMap,
+    context: BuildContext,
+    spawn: { x: number; y: number },
+    arena: TileRect,
+): string[] {
+    const { grid, roadTiles, lines, closedRoads = [], squares = [] } = map;
+    const { sizeX, sizeY } = grid;
+    const flags = getCollisionFlags(grid, context.locs);
+    const steps = getStepGrid(flags, sizeX, arena);
+    const reached = findReachable(flags, sizeX, sizeY, arena, spawn.x, spawn.y);
+    const onRoad = new Uint8Array(roadTiles.length);
+    grid.levels[1].flags.forEach((flag, i) => {
+        onRoad[i] = flag & TILE_BRIDGE ? 1 : 0;
+    });
+    // By its lines, painted or not: a town's square is paved, but what stands on it is meant to
+    for (const line of lines.filter((road) => road.grade !== undefined)) {
+        const reach = Math.ceil(line.halfWidth);
+        line.points.forEach((point, at) => {
+            const px = Math.floor(point.x);
+            const py = Math.floor(point.y);
+            for (let y = py - reach; y <= py + reach; y++) {
+                for (let x = px - reach; x <= px + reach; x++) {
+                    const i = x + y * sizeX;
+                    const away = Math.hypot(x + 0.5 - point.x, y + 0.5 - point.y);
+                    const floor = grid.levels[0].overlays[i];
+                    const dry = !WATER_OVERLAYS.has(floor) && floor !== STARS;
+                    const middle = x === px && y === py && at >= line.lead && dry;
+                    const painted = roadTiles[i] !== 0 && away <= line.halfWidth;
+                    if ((middle || painted) && isInRect(arena, x, y)) {
+                        onRoad[i] = 1;
+                    }
+                }
+            }
+        });
+    }
+    const blocked: number[] = [];
+    for (let y = arena.y0; y <= arena.y1; y++) {
+        for (let x = arena.x0; x <= arena.x1; x++) {
+            const shut =
+                [...closedRoads, ...squares].some((road) => isInRect(road, x, y)) ||
+                map.walled?.some(({ taken }) => taken.has(x + y * sizeX));
+            if (onRoad[x + y * sizeX] && steps.isSolid(x, y) && !shut) {
+                blocked.push(x + y * sizeX);
+            }
+        }
+    }
+    const walkedTo = (i: number) => {
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                if (reached[i + dx + dy * sizeX]) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    const pieces = groupTiles(blocked, sizeX).filter((piece) => piece.some(walkedTo));
+    const count = pieces.reduce((sum, piece) => sum + piece.length, 0);
+    // What's in the way: a loc, or the ground itself
+    const blamed = (i: number) => {
+        const [x, y] = [i % sizeX, Math.floor(i / sizeX)];
+        const loc = grid.locs.find((other) => {
+            const { sizeX: wide, sizeY: deep, clipType } = context.locs(other.id);
+            const [dx, dy] = [x - other.x, y - other.y];
+            const fills = other.type >= 9 && other.type !== 22;
+            return fills && clipType !== 0 && dx >= 0 && dy >= 0 && dx < wide && dy < deep;
+        });
+        const corners = sizeX + 1;
+        const slope = getTileSlope(grid.levels[0].heights, corners, x, y);
+        return loc ? `${context.locs(loc.id).name ?? "a loc"} ${loc.id}` : `slope ${slope}`;
+    };
+    const problems = pieces.map(
+        (piece) =>
+            `road can't be walked: ${piece.length} of ${count} tiles at ` +
+            `${formatRect(getTileBounds(piece, sizeX))} (${blamed(piece[0])})`,
+    );
+    for (const road of closedRoads) {
+        // Something solid on the road, or in the way of it, in its rectangle
+        const shown = grid.locs.filter(({ x, y, type, id }) => {
+            const { clipType, sizeX: wide, sizeY: deep } = context.locs(id);
+            let onIt = false;
+            for (let ty = y; ty < y + deep; ty++) {
+                for (let tx = x; tx < x + wide; tx++) {
+                    onIt ||= onRoad[tx + ty * sizeX] !== 0;
+                }
+            }
+            return type !== 22 && clipType !== 0 && isInRect(road, x, y) && onIt;
+        });
+        const ended = lines.some(({ points }) => {
+            const { x, y } = points[points.length - 1];
+            return isInRect(road, Math.floor(x), Math.floor(y));
+        });
+        if (road.shownBy === "broken end" ? !ended : shown.length === 0) {
+            problems.push(`the road shut at ${formatRect(road)} shows no ${road.shownBy}`);
+        }
+    }
+    return problems;
+}
+
 // Set pieces on land stand on flat ground, with nothing built or painted under them
 function checkLandmarks(map: GeneratedMap): string[] {
     const { grid, landmarks, roadTiles, footprint } = map;
@@ -444,16 +862,256 @@ function checkLandmarks(map: GeneratedMap): string[] {
     return problems;
 }
 
-// A cliff's waterfall comes down into its pool
+// How far the top of a fall can be from the lip behind it, and from level across it. A corner off
+// level across a seat is what shows a fall's dark back.
+const FALL_LIP_SLACK = 8;
+const FALL_SKEW = 2;
+
+// A fall's seated in its face: its foot's in level water, the ground's level across it and out to
+// its edges, it faces the camera, and its top meets the lip. The rest is for looking at.
 function checkFalls(map: GeneratedMap): string[] {
     const { grid, falls } = map;
-    const { flags, overlays } = grid.levels[0];
-    return falls
-        .filter(({ x, y }) => {
-            const i = x + 1 + (y - 2) * grid.sizeX;
-            return !(flags[i] & TILE_BLOCKED) || overlays[i] === 0;
-        })
-        .map(({ x, y }) => `the waterfall at ${x},${y} has no pool`);
+    const { sizeX } = grid;
+    const corners = sizeX + 1;
+    const { heights, overlays } = grid.levels[0];
+    const problems: string[] = [];
+    for (const { x, y } of falls) {
+        const where = `the waterfall at ${x},${y}`;
+        const loc = grid.locs.find(
+            (other) =>
+                other.x === x && other.y === y && FALL_MODELS.some(({ id }) => id === other.id),
+        );
+        if (!loc) {
+            problems.push(`${where} has no model`);
+            continue;
+        }
+        if (loc.rotation !== 0) {
+            problems.push(`${where} doesn't face the camera`);
+        }
+        const inPool = [0, 1, 2].every((across) =>
+            WATER_OVERLAYS.has(overlays[x + across + y * sizeX]),
+        );
+        if (!inPool) {
+            problems.push(`${where} has no pool`);
+        }
+        for (let row = 0; row <= FALL_ROWS; row++) {
+            const line = [-1, 0, 1, 2, 3, 4].map(
+                (across) => heights[x + across + (y + row) * corners],
+            );
+            const skew = Math.max(...line) - Math.min(...line);
+            if (skew > FALL_SKEW) {
+                problems.push(`${where} isn't level across its row ${row}: off by ${skew}`);
+            }
+        }
+        const at = x + 1 + y * corners;
+        const foot = [0, 1, 2].map((row) => heights[at + row * corners]);
+        if (Math.max(...foot) !== Math.min(...foot)) {
+            problems.push(`${where} stands on a slope: ${foot.join(", ")}`);
+        }
+        const { height } = FALL_MODELS.find(({ id }) => id === loc.id)!;
+        const top = heights[at + (FALL_ROWS - 1) * corners] + height;
+        const lip = heights[at + FALL_ROWS * corners];
+        if (Math.abs(top - lip) > FALL_LIP_SLACK) {
+            problems.push(`${where} stops ${top - lip} from its lip`);
+        }
+    }
+    return problems;
+}
+
+// Nothing from the wrong place: the ban list, blood that draws nothing, foam away from a fall
+function checkCatalogue(map: GeneratedMap): string[] {
+    const { grid, falls, waterfalls } = map;
+    const problems = findBannedLocs(grid).map(
+        ({ loc, why }) => `banned loc ${loc.id} at ${loc.x},${loc.y}: ${why}`,
+    );
+    const drops = [...falls, ...waterfalls];
+    for (const { id, type, x, y } of grid.locs) {
+        if (id === BLOOD_WALL_ONLY && type === 22) {
+            problems.push(`loc ${id} at ${x},${y} draws nothing as ground decoration`);
+        }
+        const atFall = drops.some((fall) => Math.hypot(fall.x - x, fall.y - y) <= FOAM_REACH);
+        if (id === WATERFALL && !atFall) {
+            problems.push(`foam at ${x},${y} isn't at a fall`);
+        }
+    }
+    return problems;
+}
+
+// Bars for how a map looks. A map can be fully reachable and still look awful, and now these
+// failures can be measured. Real regions have 26 to 39 decorations per 100 tiles and 23 to 96
+// on roads, 99.96% of tiles are 80 a tile or under, places with relief have something on 12%
+// to 83% of steep tiles, and the tile at a cliff's foot is on rock 2% to 20% of the time, with
+// 29 to 93 decorations per 100. See the engine plan.
+const LOOK = {
+    decorPer100: 20,
+    roadDecorPer100: 15,
+    steepest: 80,
+    steepWithLocPct: 25,
+    footOnRockPct: 30,
+    footDecorPer100: 20,
+    viewP50: 4,
+};
+// Below these a rule says nothing: a sliver of road or one short cliff isn't a look
+const LOOK_LEAST = { land: 2000, road: 200, steep: 100, foot: 60 };
+// Land textures, which stretched down a cliff are the bands that started all this
+const TEXTURED_ROCK = new Set([20, 32]);
+const ROCK_OVERLAYS = new Set(Object.values(BIOMES).map(({ rock }) => rock.overlay));
+const BIG_LOC = 6;
+// 45 degrees
+const STEEP = 16;
+const BRIDGE_REACH = 4;
+const WATER_REACH = 2;
+
+// How a map looks, from the same measures as the real world's, on its arena. Says what's wrong,
+// and prints what a map can be right to differ on.
+function checkLook(
+    id: string,
+    map: GeneratedMap,
+    margin: number,
+    locs: (id: number) => LocMeta,
+    settings?: GeneratorSettings,
+): string[] {
+    const { grid, roadTiles } = map;
+    const m = margin * MAP_SQUARE_SIZE;
+    const arena = cropGrid(grid, m, m, grid.sizeX - m * 2, grid.sizeY - m * 2);
+    const p = prepare(arena, locs);
+    const { n, sizeX } = p;
+    const { overlays, underlays, flags } = arena.levels[0];
+    const problems: string[] = [];
+
+    const isLand = (i: number) =>
+        !WATER_OVERLAYS.has(overlays[i]) && overlays[i] !== STARS && underlays[i] !== 0;
+    const decorAt = new Uint8Array(n);
+    for (const loc of arena.locs) {
+        if (loc.level === 0 && loc.type === 22) {
+            decorAt[loc.x + loc.y * sizeX] = 1;
+        }
+    }
+    let land = 0;
+    let decor = 0;
+    let road = 0;
+    let roadDecor = 0;
+    let textured = 0;
+    for (let i = 0; i < n; i++) {
+        land += isLand(i) ? 1 : 0;
+        decor += isLand(i) ? decorAt[i] : 0;
+        const whole = i % sizeX;
+        const y = Math.floor(i / sizeX);
+        if (roadTiles[whole + m + (y + m) * grid.sizeX]) {
+            road++;
+            roadDecor += decorAt[i];
+        }
+        textured += flags[i] & TILE_BLOCKED && TEXTURED_ROCK.has(overlays[i]) ? 1 : 0;
+    }
+    const dressed = !settings || (settings.dressing === 1 && settings.grass > 0);
+    const decorPer100 = (100 * decor) / Math.max(land, 1);
+    if (dressed && land >= LOOK_LEAST.land && decorPer100 < LOOK.decorPer100) {
+        problems.push(`decoration is ${decorPer100.toFixed(1)} per 100 land tiles`);
+    }
+    const roadPer100 = (100 * roadDecor) / Math.max(road, 1);
+    if (dressed && road >= LOOK_LEAST.road && roadPer100 < LOOK.roadDecorPer100) {
+        problems.push(`decoration is ${roadPer100.toFixed(1)} per 100 road tiles`);
+    }
+    if (textured > 0) {
+        problems.push(`${textured} blocked tiles are on a textured floor`);
+    }
+    // What stands on what's steep, on land: a shore can be as steep as it likes under water.
+    // Past that, only what can't move is left over the bar: a bridge's own heights, a fall in a
+    // river, and a road that's pinned where it meets water, which all hold both ends of a tile.
+    const covered = new Uint8Array(n);
+    for (const loc of arena.locs) {
+        const { sizeX: wide, sizeY: deep } = locs(loc.id);
+        for (let ty = loc.y; ty < Math.min(loc.y + deep, arena.sizeY); ty++) {
+            for (let tx = loc.x; tx < Math.min(loc.x + wide, sizeX); tx++) {
+                covered[tx + ty * sizeX] = loc.level === 0 ? 1 : covered[tx + ty * sizeX];
+            }
+        }
+    }
+    const held = new Uint8Array(n);
+    const nearBridge = new Uint8Array(n);
+    const hold = (i: number, reach: number) => {
+        for (let dy = -reach; dy <= reach; dy++) {
+            for (let dx = -reach; dx <= reach; dx++) {
+                held[Math.min(Math.max(i + dx + dy * sizeX, 0), n - 1)] = 1;
+            }
+        }
+    };
+    for (let i = 0; i < n; i++) {
+        if (arena.levels[1].flags[i] & TILE_BRIDGE) {
+            hold(i, BRIDGE_REACH);
+            for (let dy = -BRIDGE_REACH; dy <= BRIDGE_REACH; dy++) {
+                for (let dx = -BRIDGE_REACH; dx <= BRIDGE_REACH; dx++) {
+                    nearBridge[Math.min(Math.max(i + dx + dy * sizeX, 0), n - 1)] = 1;
+                }
+            }
+        } else if (WATER_OVERLAYS.has(overlays[i])) {
+            hold(i, WATER_REACH);
+        }
+    }
+    let steepest = 0;
+    let steepTiles = 0;
+    let steepCovered = 0;
+    for (let i = 0; i < n; i++) {
+        if (!held[i] && isLand(i)) {
+            steepest = Math.max(steepest, p.slope[i]);
+        }
+        // A bridge's banks have nothing on them, and stop where it does
+        if (isLand(i) && p.slope[i] >= STEEP && !nearBridge[i]) {
+            steepTiles++;
+            steepCovered += covered[i];
+        }
+    }
+    // A heightmap can ask for anything, and the sweep's asks for the worst
+    if (steepest > LOOK.steepest && !settings?.heightmap) {
+        problems.push(`the steepest tile is ${steepest} a tile`);
+    }
+    const steepWithLocPct = Math.round((100 * steepCovered) / Math.max(steepTiles, 1));
+    if (dressed && steepTiles >= LOOK_LEAST.steep && steepWithLocPct < LOOK.steepWithLocPct) {
+        problems.push(
+            `only ${steepWithLocPct}% of ${steepTiles} steep tiles have anything on them`,
+        );
+    }
+    const { walkSlopeSharePct } = measureHeight(p);
+    const rim = findRims(p);
+    let foot = 0;
+    let footRock = 0;
+    let footDecor = 0;
+    for (let i = 0; i < n; i++) {
+        if (rim[i] === 1) {
+            foot++;
+            footRock += ROCK_OVERLAYS.has(overlays[i]) ? 1 : 0;
+            footDecor += decorAt[i];
+        }
+    }
+    const footRockPct = (100 * footRock) / Math.max(foot, 1);
+    const footPer100 = (100 * footDecor) / Math.max(foot, 1);
+    if (foot >= LOOK_LEAST.foot && footRockPct > LOOK.footOnRockPct) {
+        problems.push(`${footRockPct.toFixed(0)}% of tiles at a cliff's foot are on rock`);
+    }
+    if (dressed && foot >= LOOK_LEAST.foot && footPer100 < LOOK.footDecorPer100) {
+        problems.push(`decoration at a cliff's foot is ${footPer100.toFixed(1)} per 100 tiles`);
+    }
+    const view = measureSightLines(p).viewQ[1];
+    if (view < LOOK.viewP50) {
+        problems.push(`you can only see ${view} tiles at the median`);
+    }
+
+    const { objectsOnScreen, kindsOnScreen } = measurePacing(p);
+    const { indoorSharePct, gapQ } = measureTowns(p);
+    const { scenerySize } = measureObjects(p);
+    const big = Object.entries(scenerySize).reduce(
+        (sum, [size, count]) => sum + (Number(size) >= BIG_LOC ? count : 0),
+        0,
+    );
+    console.log(
+        `  look ${id.slice(0, 24)}: decor ${decorPer100.toFixed(0)}, road ${roadPer100.toFixed(0)}, ` +
+            `steepest ${steepest}, on steep ${steepWithLocPct}%, foot rock ${footRockPct.toFixed(0)}% ` +
+            `decor ${footPer100.toFixed(0)}, view ${view}; objects ${objectsOnScreen.p10}/` +
+            `${objectsOnScreen.p50}/${objectsOnScreen.p90}, kinds ${kindsOnScreen.p50}, ` +
+            `flat ${walkSlopeSharePct["0-0"]}%, indoor ${indoorSharePct}%, gap ${gapQ[1]}, ` +
+            `size 6+ ${big}`,
+    );
+    return problems;
 }
 
 // Open tiles the play camera can't see, for the ground between
@@ -492,10 +1150,12 @@ function checkMap(
     id: string,
     mapDetail: (context: BuildContext) => GeneratedMap,
     recipe: MapRecipe,
+    settings?: GeneratorSettings,
 ) {
     if (only && !only.test(id)) {
         return true;
     }
+    const shipped = SCAPERUNE_MAPS.some((recipe) => recipe.id === id);
     const sceneBuilder = createSceneBuilder(cache);
     const { mapFileLoader, locTypeLoader } = sceneBuilder;
     const context = createBuildContext(mapFileLoader, locTypeLoader);
@@ -536,7 +1196,14 @@ function checkMap(
         ...roadHeights.problems,
         ...checkBuildingGround(map),
         ...checkLandmarks(map),
+        ...checkFields(map, createLocs(locTypeLoader)),
+        ...checkWater(map),
+        ...checkRoadsWalkable(map, context, recipe.spawn, gridRect),
         ...checkFalls(map),
+        ...checkWalls(map, context, recipe.spawn, gridRect),
+        ...describeClashes(findClashes(map, context.locs)),
+        ...(shipped ? [] : checkCatalogue(map)),
+        ...(shipped ? [] : checkLook(id, map, recipe.margin, createLocs(locTypeLoader), settings)),
     ];
     if (hidden > 0) {
         problems.push(`${hidden} open tiles are hidden from the camera`);
@@ -549,7 +1216,7 @@ function checkMap(
             `${map.landmarks.length} landmarks, ${map.falls.length} falls, ` +
             `passes ${map.passes.length}, steepest road ${roadHeights.steepest.toFixed(1)}`,
     );
-    for (const problem of problems.slice(0, 6)) {
+    for (const problem of problems.slice(0, 16)) {
         console.log(`  ${problem}`);
     }
     return stranded === 0 && open >= 200 && problems.length === 0;
@@ -565,7 +1232,7 @@ for (const recipe of [
     // A hand-made map says how to build what it's held to, if it's held to the rules at all
     const detail = settings ? (c: BuildContext) => generateMapDetail(settings, c) : recipe.detail;
     if (detail) {
-        failed = !checkMap(recipe.id, detail, recipe) || failed;
+        failed = !checkMap(recipe.id, detail, recipe, settings) || failed;
     }
 }
 SWEEP.forEach((overrides, i) => {
@@ -575,13 +1242,19 @@ SWEEP.forEach((overrides, i) => {
         `sweep ${i} ${JSON.stringify({ ...overrides, heightmap: undefined })}`,
         (context) => generateMapDetail(settings, context),
         recipe,
+        settings,
     );
     failed = !passed || failed;
 });
 for (const [name, preset] of Object.entries(SETTING_PRESETS)) {
     const settings: GeneratorSettings = { seed: 3, ...DEFAULT_SETTINGS, ...preset };
     const recipe = generatedRecipe("preset", 70, 134, settings);
-    const passed = checkMap(name, (context) => generateMapDetail(settings, context), recipe);
+    const passed = checkMap(
+        name,
+        (context) => generateMapDetail(settings, context),
+        recipe,
+        settings,
+    );
     failed = !passed || failed;
 }
 // What the screen's Randomize can come up with: refusing for too little ground is fine
@@ -593,6 +1266,7 @@ for (let i = 0; i < RANDOM_MAPS; i++) {
         `random ${i} ${formatSettings(settings)}`,
         (context) => generateMapDetail(settings, context),
         recipe,
+        settings,
     );
     failed = !passed || failed;
 }

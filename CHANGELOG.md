@@ -3,6 +3,62 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
+## 0.23.0 - 2026-11-02
+
+### Added
+
+- Co-op revives: stand over a downed teammate for 5 seconds to bring them back. Each player can
+  be revived once a run, with 75% of their hitpoints, and comes back untouchable for 5 seconds.
+- Extra co-op revives: a Prayer cape, rarely in a casket or for sale from the Mysterious Old Man,
+  lets a teammate revive you once more (with 50%, then 25% of your hitpoints).
+- Hard mode in co-op: the host can turn it on once everyone in the room has it.
+- Co-op results, by trippy22: a page for each player's own kills, damage, weapons and caskets, with
+  arrows (or the arrow keys) to flip between them, and the party's totals underneath.
+- Each weapon's damage during a run, by Xiodrade: press Tab, or click or tap the DPS under the
+  minimap, to see what each weapon is doing a second right now (the best first), its share, and
+  its total. It stays open or shut as you left it.
+
+### Changed
+
+- Co-op's server holds up better against anyone trying to flood it or take every room.
+- Co-op bosses come as a pair, or one for each player on hard mode, by trippy22. Between them
+  they have one boss's hitpoints and loot, so a party fights more bosses rather than bigger ones.
+- The Bow of Faerdhinen counts as a crystal bow for the Crystal armour set's bonus.
+- A weapon level past its last (in endless runs) shows the weapon's damage bonus before and after
+  on its card. Each pick multiplies what the weapon has, so a 15% pick at +477% gives +564%.
+
+### Fixed
+
+- With the game open in two tabs, only one saves, so they no longer undo each other's runs, coins
+  and unlocks. The other offers to play there instead.
+- A tab left open over an update no longer wipes progress from the newer version when it saves. It
+  asks you to reload instead, or to save anyway and lose only what was new.
+- A save that can't be read is kept rather than lost. The game tells you, and you can export it
+  from Settings.
+- If the game stops saving mid-run, a solo run pauses while it tells you why, and the pause menu
+  says so afterwards.
+- Killing the final boss wins the run, even if a hit lands in the same instant: it no longer counts
+  as a death or uses up a ring of life.
+- Co-op: two players with the same orbit weapon, like Elemental runes, no longer wipe out each
+  other's circle.
+- Co-op: a downed player can't reroll or skip level ups any more, so they can't spend the party's
+  coins.
+- Co-op: one player's Evil Bob finishing no longer ends another's Evil Bob timer early.
+- Co-op: each player's Toktz-mej-tal burns ground of its own: another player's pulse no longer
+  takes over your fire or puts it out.
+- Durial321's task says what it takes: surviving 6:06 in Falador, not 6 minutes.
+- Co-op: a double click or a quick second key on a level up, casket or random event no longer
+  answers the next one too, unseen. Fixed by Xiodrade.
+- Pressing Enter or Space on a focused casket button no longer resolves the next casket as well.
+  Fixed by Xiodrade.
+- Co-op: a tab left in the background no longer builds up effects to draw all at once when you come
+  back. Fixed by Xiodrade.
+- Item icons that failed to draw are tried again, rather than staying blank until the game's
+  reopened.
+- Endless: a run no longer holds on to every boss it's had, so very long ones use less memory.
+- Co-op: waiting on the Multiplayer screen for a room to appear no longer drops the connection
+  after 10 minutes.
+
 ## 0.22.1 - 2026-11-02
 
 ### Added
@@ -10,6 +66,10 @@ the version in the corner).
 - Movement prediction, a trial you can turn on in Settings or the pause menu: joining a co-op game,
   you move as soon as you press, then correct to the host. Hits and pickups still follow the host.
   Thanks to trippy22, who built it.
+
+### Changed
+
+- Multiplayer bosses spawn in pairs, or one per player in hard mode; Hallowed Night's final Nightmare fight stays a single boss.
 
 ## 0.22.0 - 2026-11-01
 

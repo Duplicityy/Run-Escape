@@ -1,0 +1,40 @@
+{
+    "Kourend and Kebos": {
+        "lineTiles": 15518,
+        "linesPer1000Tiles": 49.2,
+        "carriedByFeaturePct": 85,
+        "featureSharePct": 59,
+        "ownMatchesLocalPctByDistance": [
+            43, 48, 54, 61, 68, 73, 78, 81, 82, 83, 82, 82, 83, 83, 83, 83, 91
+        ],
+        "pairs": [
+            ["yellow-brown", 4048],
+            ["green-brown", 2916],
+            ["green-yellow", 2734],
+            ["brown-grey", 1889],
+            ["green-grey", 957],
+            ["yellow-grey", 778],
+            ["green-blue", 551],
+            ["grey-blue", 525]
+        ]
+    },
+    "Varlamore": {
+        "lineTiles": 7210,
+        "linesPer1000Tiles": 31.4,
+        "carriedByFeaturePct": 76,
+        "featureSharePct": 57,
+        "ownMatchesLocalPctByDistance": [
+            47, 53, 59, 66, 71, 74, 77, 81, 83, 83, 83, 84, 83, 85, 84, 84, 91
+        ],
+        "pairs": [
+            ["yellow-brown", 3969],
+            ["brown-white", 1090],
+            ["green-brown", 1028],
+            ["green-yellow", 730],
+            ["yellow-red", 193],
+            ["brown-grey", 117],
+            ["green-red", 70],
+            ["brown-red", 13]
+        ]
+    }
+}

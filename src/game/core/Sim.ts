@@ -1,6 +1,19 @@
 import { ArmouryUpgrades, getUpgradedGear } from "../content/armoury";
 import { getCharacter } from "../content/characters";
-import { PLAYER_GONE, PartyScale, getPartyScale } from "../content/coop";
+import {
+    EXTRA_REVIVE_PRICE,
+    OLD_MAN_REVIVE_CHANCE,
+    PLAYER_GONE,
+    PartyScale,
+    REVIVES_PER_PLAYER,
+    REVIVE_HP,
+    REVIVE_IMMUNITY_SECONDS,
+    REVIVE_RANGE,
+    REVIVE_SECONDS,
+    REVIVE_SPOTANIM,
+    bossCopies,
+    getPartyScale,
+} from "../content/coop";
 import {
     LATER_ROUND_START,
     LATE_CASKET_CHANCE,
@@ -109,8 +122,8 @@ import {
     MAX_PASSIVES,
     MAX_WEAPONS,
     UpgradeChoice,
-    getOverlevelDamage,
     hiltChoices,
+    overlevelBonus,
     rollChoices,
 } from "./Upgrades";
 import {
@@ -127,6 +140,7 @@ import {
     Death,
     Debuff,
     Effect,
+    Encounter,
     Enemy,
     EnemyAbilities,
     EnemyLeaving,
@@ -190,6 +204,13 @@ const FOOD_HEAL = 10;
 // After being hit the player can't be hit again for a moment, so a crowd hurts
 // more than one enemy but can't melt them instantly
 const HIT_INVULNERABLE_TICKS = 12;
+// Co-op: a teammate stands over a downed player this long to bring them back,
+// and nothing can hurt the revived for this long after (see content/coop.ts)
+const REVIVE_TICKS = REVIVE_SECONDS * TICKS_PER_SECOND;
+const REVIVE_IMMUNITY_TICKS = REVIVE_IMMUNITY_SECONDS * TICKS_PER_SECOND;
+// Held above a hit's invulnerability, which lets boss hits through as it runs
+// down, and above what makes the player blink, so the immunity shows
+const IMMUNE_INVULNERABLE_TICKS = 31;
 // Seconds until a random event that couldn't happen gets another go
 const RANDOM_EVENT_RETRY = 5;
 const RANDOM_EVENT_SEED = 0x5eed;
@@ -216,6 +237,8 @@ const SPAWN_MAX_DISTANCE = 24;
 // Bosses turn up a little closer, so the fight starts soon
 const BOSS_SPAWN_MIN_DISTANCE = 12;
 const BOSS_SPAWN_MAX_DISTANCE = 16;
+// Co-op: how far apart a boss's copies turn up, at least
+const BOSS_COPY_GAP = 4;
 // A boss in disguise (EnemyDef.disguise): how far from the player it lies, how
 // close sets it off, and ticks between it opening and its first attack
 const DISGUISE_MIN_DISTANCE = 7;
@@ -373,8 +396,9 @@ export const LEVEL_MIGHT_LEVELS = 40;
 // across it
 const FIRE_INTERVAL = 25;
 const FIRE_FLAMES = 7;
-// At most this many patches of burning ground at once; a pulse this close to
-// one (a share of its radius) keeps it burning rather than lighting another
+// At most this many patches of burning ground at once for each hero; a pulse
+// this close to one of theirs (a share of its radius) keeps it burning rather
+// than lighting another
 const MAX_FIRES = 3;
 const FIRE_MERGE = 0.5;
 // Split arrows look for enemies this close to where the arrow split
@@ -405,6 +429,8 @@ const PERSONAL_EVENTS = new Set<SimEvent["type"]>([
     "playerShout",
     "heroDown",
     "heroLeft",
+    "heroRevived",
+    "extraRevive",
     "playerCursed",
 ]);
 
@@ -534,6 +560,7 @@ export type Hero = {
     // DPS_WINDOW_TICKS, each tick taking over the slot of the oldest
     recentDamage: Float64Array;
     killsBySource: Record<string, number>;
+    casketsOpened: number;
     damageTaken: number;
     healed: number;
     highestHit: number;
@@ -562,10 +589,23 @@ export type Hero = {
     // What they're pressing, for the next tick
     moveX: number;
     moveY: number;
-    // Co-op: down with no revives left (out of the run, watching the rest),
-    // or gone from the game
+    // Co-op: down with no ring of life left (out of the fight until a teammate
+    // revives them, or for good once they've been revived REVIVES_PER_PLAYER
+    // times), or gone from the game, and the tick that happened (-1 while
+    // they're in)
     down: boolean;
     left: boolean;
+    outTick: number;
+    // Co-op: how many times a teammate's brought them back this run, and the
+    // revives found or bought on top of REVIVES_PER_PLAYER
+    revived: number;
+    extraRevives: number;
+    // Co-op: the teammate standing over them to bring them back, and how
+    // many ticks they've stood there (REVIVE_TICKS brings them back)
+    revive?: { hero: number; ticks: number };
+    // Co-op: just brought back, so nothing hurts them and enemies leave them
+    // be until this tick
+    immuneEndTick: number;
 };
 
 // A player in a co-op run, as SimOptions.party has them
@@ -619,7 +659,10 @@ export class Sim {
     // A boss's bullets, what fired each (BulletPool.source), and the volleys to
     // come
     readonly bullets = new BulletPool();
-    readonly bulletSources: { attack: BossAttackDef; enemy: Enemy }[] = [];
+    // What a bullet's source index means. A slot is freed once its boss is
+    // dead with nothing of its left in the air (see freeBulletSources), so
+    // a long endless run doesn't keep every boss it's had
+    readonly bulletSources: ({ attack: BossAttackDef; enemy: Enemy } | undefined)[] = [];
     private emitters: BulletEmitter[] = [];
     // Where each hero is for the bullets, kept from tick to tick
     private readonly bulletTargets: BulletTarget[] = [];
@@ -701,6 +744,8 @@ export class Sim {
     // A pool that turns up together (FunMapDef.bosses.together): the ones out
     // now, until the last of them is killed
     private funBossGroup: Enemy[] = [];
+    // Co-op: the next boss encounter's id (Encounter)
+    private nextEncounter = 1;
     private nextChatTick = 0;
     private nextPlayerChatSeconds = Infinity;
     // The factions seen so far, in order, and where the first one comes from
@@ -1031,6 +1076,7 @@ export class Sim {
             damageBySource: {},
             recentDamage: new Float64Array(DPS_WINDOW_TICKS),
             killsBySource: {},
+            casketsOpened: 0,
             damageTaken: 0,
             healed: 0,
             highestHit: 0,
@@ -1048,6 +1094,10 @@ export class Sim {
             moveY: 0,
             down: false,
             left: false,
+            outTick: -1,
+            revived: 0,
+            extraRevives: 0,
+            immuneEndTick: 0,
         };
     }
 
@@ -1076,16 +1126,63 @@ export class Sim {
         return !hero.down && !hero.left;
     }
 
-    // The hero nearest a spot that's still in the fight, for enemies to go
-    // after and pickups to fly to (the current one if nobody is)
+    // Co-op: just brought back by a teammate, so nothing can hurt them and
+    // enemies leave them be (see reviveHero)
+    isImmune(hero: Hero): boolean {
+        return this.tick < hero.immuneEndTick;
+    }
+
+    // Co-op: down, and a teammate can still bring them back
+    canBeRevived(hero: Hero): boolean {
+        return hero.down && !hero.left && this.revivesLeftFor(hero) > 0;
+    }
+
+    // Co-op: the times a hero can still be revived, for the UI
+    revivesLeftFor(hero: Hero): number {
+        return Math.max(0, REVIVES_PER_PLAYER + hero.extraRevives - hero.revived);
+    }
+
+    // Co-op: a Prayer cape found or bought, so they can be revived once more
+    private gainRevive(): void {
+        this.hero.extraRevives++;
+        this.emit({ type: "extraRevive" });
+    }
+
+    // Whether enemies go after a hero: up, and not just revived. When
+    // everyone up is immune they go after them anyway (and can't hurt them)
+    private isTarget(hero: Hero, anyTargets: boolean): boolean {
+        return this.isUp(hero) && (!anyTargets || !this.isImmune(hero));
+    }
+
+    private anyTargets(): boolean {
+        return this.heroes.some((hero) => this.isUp(hero) && !this.isImmune(hero));
+    }
+
+    // The hero nearest a spot that's still in the fight, for enemies (and
+    // their projectiles) to go after: a just revived hero is left be while
+    // anyone else is up (the current one if nobody is)
     private nearestHero(x: number, y: number): Hero {
         if (this.heroes.length === 1) {
             return this.heroes[0];
         }
+        const anyTargets = this.anyTargets();
+        return this.nearest(x, y, (hero) => this.isTarget(hero, anyTargets));
+    }
+
+    // The hero nearest a spot that's up, revived or not, for pickups to fly
+    // to and be picked up by: immunity keeps enemies off a hero, not food
+    private nearestUpHero(x: number, y: number): Hero {
+        if (this.heroes.length === 1) {
+            return this.heroes[0];
+        }
+        return this.nearest(x, y, (hero) => this.isUp(hero));
+    }
+
+    private nearest(x: number, y: number, fits: (hero: Hero) => boolean): Hero {
         let nearest: Hero | undefined;
         let best = Infinity;
         for (const hero of this.heroes) {
-            if (!this.isUp(hero)) {
+            if (!fits(hero)) {
                 continue;
             }
             const dx = hero.player.x - x;
@@ -1105,7 +1202,8 @@ export class Sim {
         if (this.heroes.length === 1) {
             return;
         }
-        const up = this.heroes.filter((hero) => this.isUp(hero));
+        const anyTargets = this.anyTargets();
+        const up = this.heroes.filter((hero) => this.isTarget(hero, anyTargets));
         if (up.length > 0) {
             this.use(up[this.rng.int(up.length)]);
         }
@@ -1255,7 +1353,9 @@ export class Sim {
             ...Object.keys(this.killsBySource),
             ...Object.keys(this.weaponSince).map((id) => `weapon:${id}`),
         ]) as Set<DamageSource>;
-        const end = this.endTick >= 0 ? this.endTick : this.tick;
+        // A weapon's time ends with the run, or when its hero went down or left
+        const runEnd = this.endTick >= 0 ? this.endTick : this.tick;
+        const end = this.hero.outTick >= 0 ? Math.min(this.hero.outTick, runEnd) : runEnd;
         return {
             sources: [...sources]
                 .map((source) => {
@@ -1435,10 +1535,11 @@ export class Sim {
     }
 
     // A level up's rewards can be skipped for coins, but not a godsword's
-    // hilt, or the coins and shark offered when there's nothing else
+    // hilt, or the coins and shark offered when there's nothing else. Only by
+    // someone choosing: a downed player can't spend the party's coins.
     get canSkip(): boolean {
         return (
-            this.state === "levelUp" &&
+            this.isChoosing() &&
             !this.choosingHilt &&
             this.choices.some((c) => c.kind !== "coins" && c.kind !== "food")
         );
@@ -1477,13 +1578,14 @@ export class Sim {
 
     // Rolls what's on offer again, for one of the run's rerolls: the level
     // up's rewards, or the open casket's item (another one, its rarity rolled
-    // again too). False when there's no reroll left or nothing on offer.
+    // again too). False when there's no reroll left or nothing on offer (a
+    // downed player has no level up to choose).
     reroll(): boolean {
         const chest = this.chest;
         if (this.rerollsLeft <= 0 || this.choosingHilt) {
             return false;
         }
-        if (this.state === "levelUp" && this.pendingLevelUps > 0) {
+        if (this.isChoosing()) {
             this.choices = this.roll();
         } else if (this.state === "chest" && chest) {
             this.declineSetPiece(chest.itemId);
@@ -1511,8 +1613,7 @@ export class Sim {
                     weapon.level = this.endless ? choice.level : Math.min(choice.level, last);
                     if (choice.level > last) {
                         // Multiplies everything the weapon had
-                        const more = getOverlevelDamage(choice.quality);
-                        weapon.bonus = (1 + weapon.bonus) * (1 + more) - 1;
+                        weapon.bonus = overlevelBonus(weapon.bonus, choice.quality);
                     } else {
                         weapon.bonus += RARITIES[choice.quality].weaponBonus;
                     }
@@ -1641,7 +1742,8 @@ export class Sim {
             this.equip(item.id, chest.upgrades);
             return;
         }
-        if (action === "take" && this.stash(item.id)) {
+        // An extra revive is theirs at once, not kept
+        if (action === "take" && item.use.kind !== "revive" && this.stash(item.id)) {
             return;
         }
         this.useUtility(item);
@@ -1751,6 +1853,9 @@ export class Sim {
                 });
                 break;
             }
+            case "revive":
+                this.gainRevive();
+                break;
             case "xp":
                 this.xp += (this.xpForNextLevel - this.xpForThisLevel) * use.levels;
                 break;
@@ -1854,6 +1959,9 @@ export class Sim {
             return;
         }
         hero.left = true;
+        if (hero.outTick < 0) {
+            hero.outTick = this.tick;
+        }
         hero.pendingLevelUps = 0;
         hero.choices = [];
         hero.chests = [];
@@ -1905,6 +2013,9 @@ export class Sim {
         if (this.runOver) {
             // Poison finished them
             return;
+        }
+        if (this.heroes.length > 1) {
+            this.stepRevives();
         }
         // Each hero's on a tick of its own, so a party's don't all come at once
         for (const hero of this.heroes) {
@@ -2004,6 +2115,10 @@ export class Sim {
         if (this.tick < this.sledEndTick || this.intro) {
             player.invulnerable = Math.max(player.invulnerable, HIT_INVULNERABLE_TICKS + 1);
         }
+        // Just revived by a teammate: nothing gets through, and they blink
+        if (this.isImmune(this.hero)) {
+            player.invulnerable = Math.max(player.invulnerable, IMMUNE_INVULNERABLE_TICKS);
+        }
         if (player.flash > 0) {
             player.flash--;
         }
@@ -2094,10 +2209,9 @@ export class Sim {
             // All at once, each on its own spot; the next lot is due once
             // they're all dead
             this.useSpawnHero();
-            this.funBossGroup = fun.bosses.pool.flatMap((id) => {
-                const boss = this.spawnBoss(getEnemy(id), "boss", undefined);
-                return boss ? [boss] : [];
-            });
+            this.funBossGroup = fun.bosses.pool.flatMap((id) =>
+                this.spawnBosses(getEnemy(id), "boss", undefined),
+            );
             if (this.funBossGroup.length > 0) {
                 this.nextFunBossSeconds = Infinity;
             }
@@ -2106,7 +2220,7 @@ export class Sim {
             const choices = pool.length > 1 ? pool.filter((id) => id !== this.lastFunBoss) : pool;
             const id = choices[this.rng.int(choices.length)];
             this.useSpawnHero();
-            if (this.spawnBoss(getEnemy(id), "boss", undefined)) {
+            if (this.spawnBosses(getEnemy(id), "boss", undefined).length > 0) {
                 this.lastFunBoss = id;
                 this.nextFunBossSeconds = this.seconds + this.rng.range(...fun.bosses.every);
             }
@@ -2193,11 +2307,14 @@ export class Sim {
         return alive;
     }
 
+    // avoid: spots already taken, that this one keeps clear of (a boss's other
+    // copies)
     private findSpawnPoint(
         def: EnemyDef,
         minDistance: number,
         maxDistance: number,
         angle?: number,
+        avoid?: { x: number; y: number }[],
     ) {
         const player = this.player;
         for (let attempt = 0; attempt < 16; attempt++) {
@@ -2208,7 +2325,11 @@ export class Sim {
             const distance = this.rng.range(minDistance, maxDistance);
             const x = Math.floor(player.x + fm.cos(a) * distance) + 0.5;
             const y = Math.floor(player.y + fm.sin(a) * distance) + 0.5;
-            if (this.canTurnUpAt(def, x, y) && !this.besideATeammate(x, y, minDistance)) {
+            if (
+                this.canTurnUpAt(def, x, y) &&
+                !this.besideATeammate(x, y, minDistance) &&
+                !avoid?.some((taken) => fm.hypot(taken.x - x, taken.y - y) < BOSS_COPY_GAP)
+            ) {
                 return { x, y };
             }
         }
@@ -2240,13 +2361,96 @@ export class Sim {
         );
     }
 
+    // Where a boss encounter's copies turn up, all reserved before any of them
+    // spawns, so that nowhere to put one retries the lot next tick rather than
+    // leaving a partial group behind. Each comes by a different player who's
+    // still up (the spawn hero's first), clear of the others. A boss with its
+    // own spots (spots, EnemyDef.spawnAt) takes a different one for each copy,
+    // and only as many as are free: Pest Control's portals have one each
+    private bossSpawnPoints(
+        def: EnemyDef,
+        copies: number,
+        minDistance: number,
+        maxDistance: number,
+        spots: { x: number; y: number }[] | undefined,
+    ): { x: number; y: number }[] {
+        const points: { x: number; y: number }[] = [];
+        if (spots) {
+            const free = this.freeSpawnSpots(def, spots);
+            for (let i = 0; i < copies && free.length > 0; i++) {
+                points.push(...free.splice(this.rng.int(free.length), 1));
+            }
+            return points;
+        }
+        const spawnHero = this.hero;
+        const by = this.heroes.filter((hero) => this.isUp(hero));
+        const first = Math.max(0, by.indexOf(spawnHero));
+        for (let i = 0; i < copies; i++) {
+            if (by.length > 0) {
+                this.use(by[(first + i) % by.length]);
+            }
+            const point = this.findSpawnPoint(def, minDistance, maxDistance, undefined, points);
+            if (!point) {
+                points.length = 0;
+                break;
+            }
+            points.push(point);
+        }
+        this.use(spawnHero);
+        return points;
+    }
+
+    // A boss encounter: the boss, or in co-op its copies (content/coop.ts
+    // bossCopies), with one boss's hitpoints and experience shared between
+    // them and its loot with the last to fall. The first of them says so.
+    // Scripted entrances (The Nightmare's) go through spawnBoss, one boss.
+    private spawnBosses(
+        def: EnemyDef,
+        type: "boss" | "finalBoss",
+        hp: number | undefined,
+    ): Enemy[] {
+        const points = this.bossSpawnPoints(
+            def,
+            bossCopies(this.heroes.length, this.hard),
+            BOSS_SPAWN_MIN_DISTANCE,
+            BOSS_SPAWN_MAX_DISTANCE,
+            def.spawnAt,
+        );
+        const encounter = this.newEncounter(points.length);
+        return points.map((at, i) => this.spawnBoss(def, type, hp, at, encounter, i > 0)!);
+    }
+
+    // What a boss's copies share; undefined for a boss on its own, which
+    // plays exactly as it did before co-op
+    private newEncounter(copies: number): Encounter | undefined {
+        return copies > 1 ? { id: this.nextEncounter++, copies } : undefined;
+    }
+
+    // Co-op: whether another of a boss's copies is still to be beaten, one of
+    // their caskets still to open too
+    private encounterLeft(enemy: Enemy): boolean {
+        const id = enemy.encounter;
+        return (
+            id !== undefined &&
+            (this.enemies.some(
+                (other) => other !== enemy && other.encounter === id && !other.dead,
+            ) ||
+                this.pickups.some(
+                    (pickup) => pickup.value !== -1 && pickup.disguise?.encounter?.id === id,
+                ))
+        );
+    }
+
+    // quiet: one of an encounter's copies after the first, which said so
     private spawnBoss(
         def: EnemyDef,
         type: "boss" | "finalBoss",
         hp: number | undefined,
         at?: { x: number; y: number },
+        encounter?: Encounter,
+        quiet = false,
     ): Enemy | undefined {
-        const boss = this.spawnEnemy(def, type, at, hp);
+        const boss = this.spawnEnemy(def, type, at, hp, encounter);
         if (boss) {
             const finalBoss = type === "finalBoss";
             if (finalBoss) {
@@ -2255,25 +2459,33 @@ export class Sim {
             if (def.spawnSpotAnim !== undefined) {
                 this.addEffect(def.spawnSpotAnim, boss.x, boss.y, 0, 60);
             }
-            this.emit({
-                type: "bossSpawned",
-                enemyId: def.id,
-                name: def.name,
-                message: def.spawnMessage ?? `${def.name} has appeared!`,
-                finalBoss,
-                x: boss.x,
-                y: boss.y,
-            });
+            if (!quiet) {
+                if (encounter) {
+                    encounter.announced = true;
+                }
+                this.emit({
+                    type: "bossSpawned",
+                    enemyId: def.id,
+                    name: def.name,
+                    message: def.spawnMessage ?? `${def.name} has appeared!`,
+                    finalBoss,
+                    x: boss.x,
+                    y: boss.y,
+                });
+            }
         }
         return boss;
     }
 
-    // bossHp: a boss's hitpoints when they're not its own times the map's
+    // bossHp: a boss's hitpoints when they're not its own times the map's.
+    // encounter: co-op, one of a boss's copies, with its share of the
+    // hitpoints and experience
     spawnEnemy(
         def: EnemyDef,
         type: "normal" | "elite" | "boss" | "finalBoss",
         at?: { x: number; y: number },
         bossHp?: number,
+        encounter?: Encounter,
     ): Enemy | undefined {
         const boss = type === "boss" || type === "finalBoss";
         let pos = at;
@@ -2319,6 +2531,10 @@ export class Sim {
             scale *= 1.6;
             tint = ELITE_TINT;
             xp *= 5;
+        }
+        if (encounter) {
+            hp /= encounter.copies;
+            xp /= encounter.copies;
         }
         const enemy: Enemy = {
             uid: this.nextUid++,
@@ -2376,6 +2592,7 @@ export class Sim {
             nextFoeLook: this.tick + (this.nextUid % FOE_LOOK_TICKS),
             foeWait: 0,
             aggro: false,
+            ...(encounter && { encounter: encounter.id }),
             noDrops: false,
             bonesOnly: false,
             abilities: getAbilities(def, this.tick, this.rng),
@@ -2414,14 +2631,22 @@ export class Sim {
     // One of the spots an enemy turns up at (EnemyDef.spawnAt) with room for
     // it, undefined if none has
     private pickSpawnSpot(def: EnemyDef): { x: number; y: number } | undefined {
-        const free = def.spawnAt!.filter(({ x, y }) =>
+        const free = this.freeSpawnSpots(def, def.spawnAt!);
+        return free.length > 0 ? free[this.rng.int(free.length)] : undefined;
+    }
+
+    // Which of an enemy's own spots (EnemyDef.spawnAt) it could turn up on now
+    private freeSpawnSpots(
+        def: EnemyDef,
+        spots: { x: number; y: number }[],
+    ): { x: number; y: number }[] {
+        return spots.filter(({ x, y }) =>
             // What never moves can stand on its own spot, solid or not (a
             // portal's is in the map's collision)
             def.stationary
                 ? this.grid.contains(Math.floor(x), Math.floor(y))
                 : this.canTurnUpAt(def, x, y),
         );
-        return free.length > 0 ? free[this.rng.int(free.length)] : undefined;
     }
 
     // Enemies get tougher faster as the run (or round) goes on: gently for the
@@ -2926,7 +3151,9 @@ export class Sim {
         ignoreArmor = false,
     ): number {
         const player = this.player;
-        if (this.hero.down && !this.runOver) {
+        // Once the run's over nothing more lands, so a win can't turn into a
+        // death (or spend a revive) later in the tick it's won
+        if (this.runOver || this.hero.down || this.isImmune(this.hero)) {
             return 0;
         }
         const armor = ignoreArmor ? 0 : this.stats.armor;
@@ -4030,9 +4257,16 @@ export class Sim {
         if (!pattern) {
             return;
         }
-        let source = this.bulletSources.findIndex((s) => s.attack === attack && s.enemy === enemy);
+        let source = this.bulletSources.findIndex(
+            (s) => s !== undefined && s.attack === attack && s.enemy === enemy,
+        );
         if (source === -1) {
-            source = this.bulletSources.push({ attack, enemy }) - 1;
+            this.freeBulletSources();
+            source = this.bulletSources.indexOf(undefined);
+            if (source === -1) {
+                source = this.bulletSources.length;
+            }
+            this.bulletSources[source] = { attack, enemy };
         }
         const aimed = pattern.shape === "spread";
         this.emitters.push({
@@ -4046,6 +4280,29 @@ export class Sim {
         });
         enemy.bossState!.channelEnd =
             this.tick + secondsToTicks(pattern.volleys * pattern.interval);
+    }
+
+    // Frees the slots of dead bosses, once no bullet or volley of theirs is
+    // left to point at them, for the next pattern to take
+    private freeBulletSources(): void {
+        const sources = this.bulletSources;
+        const bullets = this.bullets;
+        const inUse = new Set<number>();
+        for (let i = 0; i < bullets.count; i++) {
+            inUse.add(bullets.source[bullets.order[i]]);
+        }
+        for (const emitter of this.emitters) {
+            inUse.add(emitter.source);
+        }
+        for (let i = 0; i < sources.length; i++) {
+            const source = sources[i];
+            if (source && source.enemy.dead && !inUse.has(i)) {
+                sources[i] = undefined;
+            }
+        }
+        while (sources.length > 0 && sources[sources.length - 1] === undefined) {
+            sources.pop();
+        }
     }
 
     private fireVolley(emitter: BulletEmitter, boss: Enemy): void {
@@ -4161,7 +4418,8 @@ export class Sim {
                 return;
             }
             this.use(this.heroes[i]);
-            const { attack, enemy } = this.bulletSources[bullets.source[hit]];
+            // A bullet in the air keeps its source's slot (freeBulletSources)
+            const { attack, enemy } = this.bulletSources[bullets.source[hit]]!;
             this.bulletGraceEnd = this.tick + BULLET_GRACE_TICKS;
             this.bossHit(enemy.def.id, enemy, attack, bullets.damage[hit]);
         });
@@ -4897,7 +5155,7 @@ export class Sim {
         showImpact = true,
     ): void {
         const player = this.player;
-        if (this.reviving || (this.hero.down && !this.runOver)) {
+        if (this.reviving || this.runOver || this.hero.down) {
             return;
         }
         if (showImpact && attack.impactSpotAnim !== undefined) {
@@ -5038,18 +5296,91 @@ export class Sim {
         player.hp = 0;
         player.deathTick = this.tick;
         this.hero.down = true;
+        this.hero.outTick = this.tick;
         if (!this.heroes.some((hero) => this.isUp(hero))) {
             this.endRun("dead");
             return;
         }
-        // Co-op: they're out for the rest of the run, and the rest fight on
+        // Co-op: they're out of the fight until a teammate revives them (or
+        // for the rest of the run), and the rest fight on
         player.prevX = player.x;
         player.prevY = player.y;
         player.moving = false;
         player.poisonEnd = -1;
         player.poisonDamage = 0;
+        this.hero.revive = undefined;
         this.emit({ type: "heroDown" });
         this.rescaleParty();
+    }
+
+    // Co-op: a downed hero comes back once a teammate's stood over them long
+    // enough. Stepping away starts over, and the first to stand there does it
+    // until they step away.
+    private stepRevives(): void {
+        for (const downed of this.heroes) {
+            if (!this.canBeRevived(downed)) {
+                downed.revive = undefined;
+                continue;
+            }
+            const current = downed.revive && this.heroes[downed.revive.hero];
+            const reviver =
+                current && this.isReviving(current, downed)
+                    ? current
+                    : this.heroes.find((hero) => this.isReviving(hero, downed));
+            if (!reviver) {
+                downed.revive = undefined;
+                continue;
+            }
+            if (downed.revive?.hero !== reviver.index) {
+                downed.revive = { hero: reviver.index, ticks: 0 };
+                this.addEffect(
+                    REVIVE_SPOTANIM,
+                    reviver.player.x,
+                    reviver.player.y,
+                    0,
+                    REVIVE_TICKS,
+                );
+            }
+            downed.revive.ticks++;
+            if (downed.revive.ticks >= REVIVE_TICKS) {
+                this.reviveHero(downed, reviver);
+            }
+        }
+    }
+
+    // Whether a hero's up and standing over a downed one
+    private isReviving(hero: Hero, downed: Hero): boolean {
+        return (
+            hero !== downed &&
+            this.isUp(hero) &&
+            fm.hypot(hero.player.x - downed.player.x, hero.player.y - downed.player.y) <=
+                REVIVE_RANGE
+        );
+    }
+
+    // Co-op: a teammate's brought a downed hero back, with less of their
+    // hitpoints each time, and nothing can hurt them for a while. Level ups
+    // the party had while they were down are theirs to choose now.
+    private reviveHero(downed: Hero, by: Hero): void {
+        const player = downed.player;
+        const fraction = REVIVE_HP[Math.min(downed.revived, REVIVE_HP.length - 1)];
+        downed.revived++;
+        downed.revive = undefined;
+        downed.down = false;
+        downed.outTick = -1;
+        downed.immuneEndTick = this.tick + REVIVE_IMMUNITY_TICKS;
+        player.hp = Math.max(1, Math.round(player.maxHp * fraction));
+        player.deathTick = -1;
+        player.invulnerable = IMMUNE_INVULNERABLE_TICKS;
+        player.flash = 0;
+        player.frozen = 0;
+        downed.curse = undefined;
+        downed.parasite = undefined;
+        downed.hold = undefined;
+        downed.drowsyEndTick = 0;
+        this.as(downed.index, () => this.emit({ type: "heroRevived", by: by.index }));
+        this.rescaleParty();
+        this.as(this.focus, () => this.checkLevelUp());
     }
 
     // Co-op: the crowd and its bosses for the players still up, and half of
@@ -5152,16 +5483,22 @@ export class Sim {
         enemy.animStart = this.tick;
         enemy.vx = enemy.vy = 0;
         const byEnemy = cause === "enemy";
+        // Co-op: a boss's copies are one boss, killed when the last one falls
+        const lastCopy = !this.encounterLeft(enemy);
         // One brought back by a reviver was counted the first time it died
         if (!byEnemy && !enemy.noDrops) {
             this.kills++;
-            this.enemyKills[enemy.def.id] = (this.enemyKills[enemy.def.id] ?? 0) + 1;
+            if (lastCopy) {
+                this.enemyKills[enemy.def.id] = (this.enemyKills[enemy.def.id] ?? 0) + 1;
+            }
             const source = this.damageSource;
             this.killsBySource[source] = (this.killsBySource[source] ?? 0) + 1;
         }
         if (enemy.boss) {
-            this.bossesKilled.push(enemy.def.id);
-            this.bossKills.push({ enemyId: enemy.def.id, seconds: this.seconds });
+            if (lastCopy) {
+                this.bossesKilled.push(enemy.def.id);
+                this.bossKills.push({ enemyId: enemy.def.id, seconds: this.seconds });
+            }
             // A boss's glyph goes with it, rather than hanging about on the
             // victory screen
             this.glyphs = this.glyphs.filter((glyph) => glyph.bossUid !== enemy.uid);
@@ -5292,6 +5629,10 @@ export class Sim {
     // Bones, and now and then a casket, coins, food or a power-up
     private dropLoot(enemy: Enemy): void {
         this.dropPickup("bones", enemy.x, enemy.y, enemy.xp);
+        // Co-op: one of a boss's copies, whose loot comes with the last to fall
+        if (this.encounterLeft(enemy)) {
+            return;
+        }
         this.rollBossTrophies(enemy);
         if (enemy.bonesOnly) {
             return;
@@ -5344,6 +5685,24 @@ export class Sim {
     }
 
     private endRun(state: "dead" | "victory"): void {
+        // A result stands, except that the final boss falling in the same tick
+        // as the last player wins, whichever came first (weapons still fire in
+        // that tick, see stepRun)
+        if (this.runOver && !(state === "victory" && this.tick === this.endTick)) {
+            return;
+        }
+        if (state === "victory" && this.runOver) {
+            // Whoever fell in that tick didn't: they're up for the victory
+            // screen, on the last of their hitpoints
+            for (const hero of this.heroes) {
+                if (hero.down && hero.outTick === this.tick) {
+                    hero.down = false;
+                    hero.outTick = -1;
+                    hero.player.deathTick = -1;
+                    hero.player.hp = Math.max(hero.player.hp, 1);
+                }
+            }
+        }
         this.endTick = this.tick;
         this.state = state;
         // Everything stands still from here on; idle rather than walk on the spot
@@ -6031,10 +6390,14 @@ export class Sim {
     }
 
     // Puts the weapon's items circling the player, evenly spaced, in place of
-    // any still going round from last time
+    // any of theirs still going round from last time (not the rest of the
+    // party's)
     private fireOrbit(def: WeaponDef, level: WeaponDef["levels"][number]): void {
         const player = this.player;
-        this.projectiles = this.projectiles.filter((p) => !(p.orbit && p.weapon === def));
+        const hero = this.hero.index;
+        this.projectiles = this.projectiles.filter(
+            (p) => !(p.orbit && p.weapon === def && p.hero === hero),
+        );
         const amount = level.amount + this.stats.amount;
         const radius = level.area * (1 + this.stats.area);
         // Speed is how fast they go round, in tiles a second
@@ -6383,7 +6746,8 @@ export class Sim {
     // Leaves the ground around the player burning for the level's duration
     // (Toktz-mej-tal), with flames across it. A pulse where the ground's
     // already burning keeps that fire going instead, and only a few burn at
-    // once (the oldest goes out).
+    // once (the oldest goes out). In co-op each player has their own: one's
+    // pulse doesn't feed or put out another's fire.
     private burnGround(
         burns: NonNullable<WeaponDef["burns"]>,
         level: WeaponDef["levels"][number],
@@ -6394,7 +6758,9 @@ export class Sim {
         // A share of the aura's own reach, so it grows with its area bonuses
         const radius = level.area * (1 + this.stats.area) * burns.radius;
         const damage = level.damage * burns.damage;
-        const same = this.fires.find(
+        const hero = this.hero.index;
+        const own = this.fires.filter((fire) => fire.hero === hero);
+        const same = own.find(
             (fire) => fm.hypot(fire.x - x, fire.y - y) < fire.radius * FIRE_MERGE,
         );
         if (same) {
@@ -6402,8 +6768,8 @@ export class Sim {
             same.damage = Math.max(same.damage, damage);
             return;
         }
-        if (this.fires.length >= MAX_FIRES) {
-            this.fires.shift();
+        if (own.length >= MAX_FIRES) {
+            this.fires.splice(this.fires.indexOf(own[0]), 1);
         }
         const flames: Vec2[] = [];
         for (let i = 0; i < FIRE_FLAMES; i++) {
@@ -6750,27 +7116,38 @@ export class Sim {
         if (def.disguise && type === "boss") {
             return this.layDisguise(def, hp);
         }
-        return this.spawnBoss(def, type, hp) !== undefined;
+        return this.spawnBosses(def, type, hp).length > 0;
     }
 
     // Looks like any casket dropping, toast and all, close enough to tempt
     private layDisguise(def: EnemyDef, hp: number | undefined): boolean {
         const disguise = def.disguise!;
-        const pos = this.findSpawnPoint(def, DISGUISE_MIN_DISTANCE, DISGUISE_MAX_DISTANCE);
-        if (!pos) {
+        // Its copies in co-op lie in wait one each, near the players
+        const points = this.bossSpawnPoints(
+            def,
+            bossCopies(this.heroes.length, this.hard),
+            DISGUISE_MIN_DISTANCE,
+            DISGUISE_MAX_DISTANCE,
+            undefined,
+        );
+        if (points.length === 0) {
             return false;
         }
-        const { x, y } = this.walkableSpot(pos.x, pos.y);
-        this.dropPickup("casket", x, y, 1, {
-            tier: disguise.casket,
-            disguise: {
-                enemyId: def.id,
-                hp,
-                shakeTick: this.tick + Math.round(disguise.seconds * TICKS_PER_SECOND),
-                openTick: -1,
-            },
-        });
-        this.emit({ type: "casketDropped", tier: disguise.casket, x, y });
+        const encounter = this.newEncounter(points.length);
+        for (const pos of points) {
+            const { x, y } = this.walkableSpot(pos.x, pos.y);
+            this.dropPickup("casket", x, y, 1, {
+                tier: disguise.casket,
+                disguise: {
+                    enemyId: def.id,
+                    hp,
+                    shakeTick: this.tick + Math.round(disguise.seconds * TICKS_PER_SECOND),
+                    openTick: -1,
+                    ...(encounter && { encounter }),
+                },
+            });
+            this.emit({ type: "casketDropped", tier: disguise.casket, x, y });
+        }
         return true;
     }
 
@@ -6811,14 +7188,15 @@ export class Sim {
     }
 
     private revealBoss(pickup: Pickup, def: EnemyDef): void {
-        const boss = this.spawnEnemy(
-            def,
-            "boss",
-            { x: pickup.x, y: pickup.y },
-            pickup.disguise!.hp,
-        );
+        const { hp, encounter } = pickup.disguise!;
+        // Of several caskets, the first to open says so
+        const quiet = encounter?.announced === true;
+        const boss = this.spawnEnemy(def, "boss", { x: pickup.x, y: pickup.y }, hp, encounter);
         if (!boss) {
             return;
+        }
+        if (encounter) {
+            encounter.announced = true;
         }
         pickup.value = -1;
         const seq = def.disguise!.seq;
@@ -6831,15 +7209,17 @@ export class Sim {
         if (def.spawnSpotAnim !== undefined) {
             this.addEffect(def.spawnSpotAnim, boss.x, boss.y, 0, 60);
         }
-        this.emit({
-            type: "bossSpawned",
-            enemyId: def.id,
-            name: def.name,
-            message: def.spawnMessage ?? `${def.name} has appeared!`,
-            finalBoss: false,
-            x: boss.x,
-            y: boss.y,
-        });
+        if (!quiet) {
+            this.emit({
+                type: "bossSpawned",
+                enemyId: def.id,
+                name: def.name,
+                message: def.spawnMessage ?? `${def.name} has appeared!`,
+                finalBoss: false,
+                x: boss.x,
+                y: boss.y,
+            });
+        }
     }
 
     // Standing under a boss that stomps (BossDef.stomp)
@@ -7185,7 +7565,7 @@ export class Sim {
                 continue;
             }
             // Whoever's nearest gets it
-            this.use(this.nearestHero(pickup.x, pickup.y));
+            this.use(this.nearestUpHero(pickup.x, pickup.y));
             const player = this.player;
             const magnet = BASE_MAGNET * (1 + this.stats.magnet);
             const dx = player.x - pickup.x;
@@ -7229,7 +7609,7 @@ export class Sim {
     // walk over would be dragged away, and the run would level slower.
     private gatherPiles(): void {
         const away = (p: Pickup) => {
-            const player = this.nearestHero(p.x, p.y).player;
+            const player = this.nearestUpHero(p.x, p.y).player;
             return fm.hypot(p.x - player.x, p.y - player.y);
         };
         const loose = this.pickups.filter(
@@ -7640,10 +8020,13 @@ export class Sim {
         }
     }
 
-    // Its timer on screen goes with it, which may be early
+    // Its timer on screen goes with it, which may be early (its own hero's,
+    // not another's from the same power-up)
     private endRampage(rampage: Rampage): void {
         rampage.doneTick = this.tick;
-        const active = this.powerUps.find((p) => p.id === rampage.powerUpId);
+        const active = this.powerUps.find(
+            (p) => p.id === rampage.powerUpId && p.hero === rampage.hero,
+        );
         if (active) {
             active.endTick = this.tick + 1;
         }
@@ -7774,7 +8157,7 @@ export class Sim {
             // for when they turn up
             const enemy = getEnemy(effect.enemyId);
             const hp = enemy.hp * this.map.difficulty.hp * this.enemyHpScale();
-            if (!this.spawnBoss(enemy, "boss", hp)) {
+            if (this.spawnBosses(enemy, "boss", hp).length === 0) {
                 return false;
             }
             this.lastRandomEventId = def.id;
@@ -7919,26 +8302,35 @@ export class Sim {
     }
 
     // A few different power-ups, the ones that drop less often being the ones
-    // on offer less often too
+    // on offer less often too. In co-op, now and then one of them is an extra
+    // revive instead.
     private rollOldManOptions(): EventOption[] {
         const left = POWER_UPS.filter((powerUp) => powerUp.weight > 0);
         const options: EventOption[] = [];
+        if (this.heroes.length > 1 && this.eventRng.chance(OLD_MAN_REVIVE_CHANCE)) {
+            options.push({
+                kind: "revive",
+                price: this.oldManPrice(EXTRA_REVIVE_PRICE),
+                sold: false,
+            });
+        }
         while (options.length < OLD_MAN_OFFERS && left.length > 0) {
             const index = this.eventRng.weightedIndex(left.map((p) => p.weight));
             const [powerUp] = left.splice(index, 1);
             options.push({
                 kind: "powerUp",
                 powerUpId: powerUp.id,
-                price: this.oldManPrice(powerUp),
+                price: this.oldManPrice(powerUp.price),
                 sold: false,
             });
         }
         return options;
     }
 
-    private oldManPrice(powerUp: PowerUpDef): number {
+    // What something at this price at the start of the run costs now
+    private oldManPrice(price: number): number {
         const inflation = 1 + (this.seconds / 60) * OLD_MAN_PRICE_PER_MINUTE;
-        return Math.max(1, Math.round(powerUp.price * inflation * this.coinScale));
+        return Math.max(1, Math.round(price * inflation * this.coinScale));
     }
 
     // Some of one group of things and the odd one out from another, anywhere
@@ -7968,16 +8360,20 @@ export class Sim {
         if (this.state !== "event" || !offer || !option || offer.hero !== this.hero.index) {
             return false;
         }
-        if (option.kind === "powerUp") {
+        if (option.kind === "powerUp" || option.kind === "revive") {
             if (option.sold || this.coins < option.price) {
                 return false;
             }
             this.coins -= option.price;
             option.sold = true;
             this.emit({ type: "visitor", message: "", sound: SOUNDS.buy }, true);
-            this.usePowerUp(getPowerUp(option.powerUpId));
+            if (option.kind === "revive") {
+                this.gainRevive();
+            } else {
+                this.usePowerUp(getPowerUp(option.powerUpId));
+            }
             // A bought nuke can finish off a final boss
-            if (this.runOver || offer.options.every((o) => o.kind === "powerUp" && o.sold)) {
+            if (this.runOver || offer.options.every((o) => o.kind !== "answer" && o.sold)) {
                 this.leaveEvent();
             }
             return true;
@@ -8023,6 +8419,7 @@ export class Sim {
         );
         this.coins += coins;
         this.casketsOpened++;
+        this.hero.casketsOpened++;
         const { itemId, upgradedFrom } = this.rollChestItem(tier);
         const upgrades = this.offeredUpgrades(itemId);
         this.chests.push({ uid: this.nextUid++, tier, itemId, upgradedFrom, upgrades, coins });
@@ -8049,6 +8446,7 @@ export class Sim {
             { offered: this.gearUpgradesFound, worn: this.gearUpgrades },
             this.armoury,
             this.declinedSets,
+            this.heroes.length > 1,
         );
         if (getItem(found).kind !== "gear") {
             return { itemId: found };

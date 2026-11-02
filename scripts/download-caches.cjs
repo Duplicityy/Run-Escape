@@ -36,16 +36,71 @@ function getGameCacheName() {
     return /GAME_CACHE_NAME = "([^"]+)"/.exec(source)[1];
 }
 
+// How long a request may go without anything arriving before it's given up on:
+// CACHE_DOWNLOAD_TIMEOUT_MS, or a minute. A blank value counts as unset.
+function getTimeout() {
+    const raw = (process.env.CACHE_DOWNLOAD_TIMEOUT_MS ?? "").trim();
+    if (raw === "") {
+        return 60_000;
+    }
+    const timeout = Number(raw);
+    if (!Number.isSafeInteger(timeout) || timeout <= 0 || timeout > 2_147_483_647) {
+        throw new Error("CACHE_DOWNLOAD_TIMEOUT_MS must be a positive integer up to 2147483647");
+    }
+    return timeout;
+}
+
+// Fetches url and returns its body. The timer restarts each time data arrives,
+// headers included, so a slow but moving download isn't cut off the way a
+// deadline on the whole request would cut off the cache's zip.
+async function fetchArchive(url, timeout) {
+    const controller = new AbortController();
+    let timer;
+    const restartTimer = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+            const error = new Error(`Nothing arrived for ${timeout} ms (${url})`);
+            error.code = "STALLED";
+            controller.abort(error);
+        }, timeout);
+    };
+    restartTimer();
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+            // statusText is empty over HTTP/2
+            const reason = response.statusText ? ` ${response.statusText}` : "";
+            throw new Error(`Archive request failed: ${response.status}${reason} (${url})`);
+        }
+        const parts = [];
+        if (response.body) {
+            const reader = response.body.getReader();
+            for (let res = await reader.read(); !res.done; res = await reader.read()) {
+                restartTimer();
+                parts.push(res.value);
+            }
+        }
+        return Buffer.concat(parts);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function fetchArchiveJson(url, timeout) {
+    return JSON.parse((await fetchArchive(url, timeout)).toString("utf8"));
+}
+
 // The newest count caches, or with onlyName just the one that would be put in
 // caches/<onlyName>/
 async function downloadCaches(count, onlyName) {
+    const timeout = getTimeout();
+
     // renameCacheDirs();
     if (!fs.existsSync("caches/")) {
         fs.mkdirSync("caches/", { recursive: true });
     }
 
-    const resp = await fetch("https://archive.openrs2.org/caches.json");
-    const json = await resp.json();
+    const json = await fetchArchiveJson("https://archive.openrs2.org/caches.json", timeout);
 
     const caches = json.filter(
         (cache) =>
@@ -128,7 +183,7 @@ async function downloadCaches(count, onlyName) {
 
     for (const cache of cachesToDownload) {
         const cacheDir = getCacheDir(cache);
-        await downloadCache(cache, cacheDir);
+        await downloadCache(cache, cacheDir, timeout);
     }
 
     console.log("Finished downloading caches");
@@ -150,35 +205,35 @@ function getCacheDir(cache) {
     return `caches/rs2-${build}${langPostfix}_${date}/`;
 }
 
-async function downloadCache(cache, cacheDir) {
+async function downloadCache(cache, cacheDir, timeout) {
     if (!fs.existsSync(cacheDir)) {
         fs.mkdirSync(cacheDir);
     }
 
     console.log("Downloading cache to:", cacheDir);
 
-    const cacheZipBuffer = Buffer.from(await fetchCacheFiles(cache));
+    const cacheZipBuffer = await fetchCacheFiles(cache, timeout);
     const cacheZip = new AdmZip(cacheZipBuffer, { readEntries: true });
     cacheZip.extractEntryTo("cache/", cacheDir, false, true);
 
-    const xteas = await fetchXteas(cache);
+    const xteas = await fetchXteas(cache, timeout);
 
     fs.writeFileSync(cacheDir + "keys.json", JSON.stringify(xteas), "utf8");
     fs.writeFileSync(cacheDir + "info.json", JSON.stringify(cache), "utf8");
 }
 
-async function fetchCacheFiles(cache) {
-    const resp = await fetch(
+function fetchCacheFiles(cache, timeout) {
+    return fetchArchive(
         `https://archive.openrs2.org/caches/${cache.scope}/${cache.id}/disk.zip`,
+        timeout,
     );
-    return resp.arrayBuffer();
 }
 
-async function fetchXteas(cache) {
-    const resp = await fetch(
+async function fetchXteas(cache, timeout) {
+    const keys = await fetchArchiveJson(
         `https://archive.openrs2.org/caches/${cache.scope}/${cache.id}/keys.json`,
+        timeout,
     );
-    const keys = await resp.json();
 
     const xteas = {};
     for (const entry of keys) {
@@ -327,7 +382,14 @@ if (process.argv.length > 2) {
 downloadCaches(downloadCount, onlyName).then(
     () => process.exit(0),
     (e) => {
-        console.error(e.message);
+        // A network error from fetch is "fetch failed", with the reason in its cause
+        const cause = e.cause?.message ? ` (${e.cause.message})` : "";
+        console.error("Cache download failed:", e.message + cause);
+        if (e.code === "STALLED" || e.message === "fetch failed") {
+            console.error(
+                "Retry when the archive is reachable, or raise CACHE_DOWNLOAD_TIMEOUT_MS on a slow connection.",
+            );
+        }
         process.exit(1);
     },
 );

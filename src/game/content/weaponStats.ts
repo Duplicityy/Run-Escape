@@ -10,6 +10,12 @@ export type WeaponStatLine = {
     better?: boolean;
 };
 
+// A weapon's damage bonus (0.15 = +15%) as the HUD's tooltip and the level up
+// cards show it: "+15%"
+export function formatWeaponBonus(bonus: number): string {
+    return `+${Math.round(bonus * 100)}%`;
+}
+
 type StatField = {
     label: string;
     // undefined when the stat means nothing for this weapon

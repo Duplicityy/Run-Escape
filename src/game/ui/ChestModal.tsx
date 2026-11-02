@@ -63,6 +63,9 @@ function getActions(chest: ChestView): ActionButton[] {
     if (chest.isGear) {
         return [{ action: "take", label: "Equip" }, alch];
     }
+    if (chest.instant) {
+        return [{ action: "use", label: "Take" }, alch];
+    }
     return [
         {
             action: "take",
@@ -147,6 +150,12 @@ export function ChestModal({ chest, rerolls, client }: Props): JSX.Element {
                 return;
             }
             const confirm = event.code === "Space" || event.code === "Enter";
+            // A focused button answers Enter and Space with its own click,
+            // so taking the recommended action too would answer twice (and
+            // the second would land on the next casket)
+            if (confirm && event.target instanceof HTMLButtonElement) {
+                return;
+            }
             if (phase !== "reveal") {
                 if (confirm) {
                     skip();
@@ -318,9 +327,11 @@ function ChestCard({
                 ))}
             {!chest.isGear && (
                 <div className="ui-chest-compare">
-                    {chest.carried > 0
-                        ? `You have ${chest.carried} already; they stack.`
-                        : "Kept items are used with 1-4."}
+                    {chest.instant
+                        ? "Yours the moment you take it."
+                        : chest.carried > 0
+                          ? `You have ${chest.carried} already; they stack.`
+                          : "Kept items are used with 1-4."}
                 </div>
             )}
             <div className="ui-chest-actions">

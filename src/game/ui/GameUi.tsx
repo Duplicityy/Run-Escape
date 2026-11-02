@@ -35,6 +35,7 @@ import { MapReward, describeUnlockTask, getMapRewards } from "../content/unlocks
 import { WeaponStatLine } from "../content/weaponStats";
 import { WEAPONS, getWeapon } from "../content/weapons";
 import {
+    NewerSaveError,
     SaveData,
     getNextUpgradeCost,
     importSave,
@@ -48,16 +49,18 @@ import { ChangelogPanel } from "./ChangelogPanel";
 import { ChestModal } from "./ChestModal";
 import { Coins } from "./Coins";
 import { CollectionLogScreen } from "./CollectionLogScreen";
-import { CoopScreen, PartyFrames, WaitingNote } from "./CoopScreen";
+import { CoopScreen, PartyFrames, ReviveNote, WaitingNote } from "./CoopScreen";
 import { EventModal } from "./EventModal";
 import "./GameUi.css";
 import { ItemIcon } from "./ItemIcon";
 import { NoticePanel } from "./NoticePanel";
 import { QuestScreen } from "./QuestScreen";
 import { RerollButton } from "./RerollButton";
+import { SaveBlockPanel, UnreadableSavePanel } from "./SavePanels";
 import { SkipButton } from "./SkipButton";
 import { RotateNotice, TouchControls, enterFullscreen } from "./TouchControls";
 import { GAME_VERSION } from "./changelog";
+import { formatCompact, formatShare } from "./formatCompact";
 import { Notice, loadNotice, markNoticeSeen, shouldShowNotice } from "./notice";
 
 type Props = {
@@ -140,6 +143,9 @@ export function GameUi({ store, client }: Props): JSX.Element {
             onClickCapture={onClickCapture}
         >
             {screen}
+            {ui.saveBlock && !ui.saveBlockClosed && (
+                <SaveBlockPanel block={ui.saveBlock} client={client} />
+            )}
             {isCoarsePointer && <RotateNotice />}
         </div>
     );
@@ -347,11 +353,22 @@ function SaveSetting({ ui, client }: ScreenProps): JSX.Element {
         if (!file) {
             return;
         }
+        // Nothing's being saved, so an import wouldn't be kept
+        if (ui.saveBlock) {
+            window.alert(
+                "The game isn't saving right now (see the notice on the title screen), so an imported save wouldn't be kept.",
+            );
+            return;
+        }
         let save: SaveData;
         try {
-            save = importSave(await file.text());
-        } catch {
-            window.alert(`${file.name} isn't a Run Escape save.`);
+            save = importSave(await file.text(), GAME_VERSION);
+        } catch (e) {
+            window.alert(
+                e instanceof NewerSaveError
+                    ? `${file.name} is from a newer version of Run Escape. Reload to get it, then import.`
+                    : `${file.name} isn't a Run Escape save.`,
+            );
             return;
         }
         const describe = (s: SaveData) =>
@@ -380,6 +397,8 @@ function SaveSetting({ ui, client }: ScreenProps): JSX.Element {
             </button>
             <button
                 className="ui-button ui-button-small"
+                disabled={ui.saveBlock !== undefined}
+                title={ui.saveBlock && "Nothing's being saved right now, so it wouldn't be kept"}
                 onClick={(e) => {
                     fileInput.current?.click();
                     e.currentTarget.blur();
@@ -395,6 +414,45 @@ function SaveSetting({ ui, client }: ScreenProps): JSX.Element {
                 onChange={onFile}
             />
         </Setting>
+    );
+}
+
+// Saves that couldn't be read, kept as they were
+function UnreadableSaveSettings({ ui, client }: ScreenProps): JSX.Element {
+    return (
+        <>
+            {ui.unreadableSaves.map(({ key, time }) => {
+                const when = new Date(time).toLocaleString();
+                return (
+                    <Setting
+                        key={key}
+                        name="Unreadable save"
+                        text={`From ${when}. Export it to mend by hand or ask for help on the Discord.`}
+                    >
+                        <button
+                            className="ui-button ui-button-small"
+                            onClick={(e) => {
+                                client.exportUnreadableSave(key);
+                                e.currentTarget.blur();
+                            }}
+                        >
+                            Export
+                        </button>
+                        <button
+                            className="ui-button ui-button-small"
+                            onClick={(e) => {
+                                e.currentTarget.blur();
+                                if (window.confirm(`Delete the save from ${when} for good?`)) {
+                                    client.deleteUnreadableSave(key);
+                                }
+                            }}
+                        >
+                            Delete
+                        </button>
+                    </Setting>
+                );
+            })}
+        </>
     );
 }
 
@@ -431,6 +489,7 @@ function SettingsPanel({
                 <section className="ui-settings-section">
                     <h3>Save</h3>
                     <SaveSetting ui={ui} client={client} />
+                    <UnreadableSaveSettings ui={ui} client={client} />
                 </section>
             </div>
             <div className="ui-row">
@@ -472,6 +531,9 @@ function TitleStat({ name, value }: { name: string; value: string | number }): J
 
 function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
     const save = ui.save;
+    // The panel saying the game isn't saving is over everything, so the title's
+    // own wait till it's gone
+    const savePanel = ui.saveBlock !== undefined && !ui.saveBlockClosed;
     const [changelogOpen, setChangelogOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     // The notice, until it's closed (once for each new one)
@@ -495,7 +557,13 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
     }, [notice]);
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
-            if (notice) {
+            if (savePanel) {
+                return;
+            } else if (ui.unreadableSave) {
+                if (e.code === "Escape") {
+                    client.closeUnreadableNotice();
+                }
+            } else if (notice) {
                 if (e.code === "Enter" || e.code === "Space" || e.code === "Escape") {
                     closeNotice();
                 }
@@ -514,7 +582,7 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [client, changelogOpen, settingsOpen, notice, closeNotice]);
+    }, [client, changelogOpen, settingsOpen, notice, closeNotice, ui.unreadableSave, savePanel]);
     if (changelogOpen) {
         return (
             <div className="ui-fill ui-center">
@@ -596,6 +664,14 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
                 </div>
             </div>
             <div className="ui-title-utils">
+                {ui.saveBlock && ui.saveBlockClosed && (
+                    <button
+                        className="ui-version ui-save-off"
+                        onClick={() => client.showSaveBlock()}
+                    >
+                        Not saving
+                    </button>
+                )}
                 {import.meta.env.DEV && <MapGeneratorButton client={client} />}
                 <button className="ui-version" onClick={() => setChangelogOpen(true)}>
                     v{GAME_VERSION} · What's new
@@ -611,7 +687,11 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
                 <DiscordLink />
                 <GitHubLink />
             </div>
-            {notice && <NoticePanel notice={notice} onClose={closeNotice} />}
+            {savePanel ? null : ui.unreadableSave ? (
+                <UnreadableSavePanel keptAs={ui.unreadableSave} client={client} />
+            ) : (
+                notice && <NoticePanel notice={notice} onClose={closeNotice} />
+            )}
         </div>
     );
 }
@@ -1060,10 +1140,20 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
     const hud = ui.hud;
     return (
         <div className="ui-fill ui-run">
-            {hud && <Hud hud={hud} client={client} questTracker={ui.display.questTracker} />}
+            {hud && (
+                <Hud
+                    hud={hud}
+                    client={client}
+                    questTracker={ui.display.questTracker}
+                    damagePanel={ui.display.damagePanel}
+                />
+            )}
             {ui.party.length > 0 && <PartyFrames party={ui.party} />}
             {ui.waitingOn.length > 0 && (ui.overlay === "none" || ui.overlay === "paused") && (
                 <WaitingNote names={ui.waitingOn} />
+            )}
+            {ui.revive && (ui.overlay === "none" || ui.overlay === "paused") && (
+                <ReviveNote revive={ui.revive} />
             )}
             {isCoarsePointer && hud && (
                 <TouchControls hud={hud} overlay={ui.overlay} client={client} />
@@ -1254,10 +1344,12 @@ function Hud({
     hud,
     client,
     questTracker,
+    damagePanel,
 }: {
     hud: HudView;
     client: GameClient;
     questTracker: boolean;
+    damagePanel: boolean;
 }): JSX.Element {
     const bossIn = hud.bossIn;
     return (
@@ -1283,9 +1375,7 @@ function Hud({
                     {hud.quests.length > 0 && (
                         <QuestTracker quests={hud.quests} open={questTracker} client={client} />
                     )}
-                    <div className="ui-dps">
-                        <span className="ui-dps-label">DPS</span> {formatPerSecond(hud.dps)}
-                    </div>
+                    <DamagePanel hud={hud} open={damagePanel} client={client} />
                 </div>
             </div>
             {hud.boss ? (
@@ -1504,6 +1594,101 @@ function LevelUpModal({ ui, client }: ScreenProps): JSX.Element {
     );
 }
 
+// The HUD's DPS, and under it each weapon's: click the DPS (or press Tab) to
+// open or shut it. Each weapon's damage a second just now, most first, its
+// share of all of it (a bar and a percentage), and its damage this run.
+// Numbers are short (9.5K, 1.2B), as endless runs reach billions; pointing
+// at one gives it in full.
+function DamagePanel({
+    hud,
+    open,
+    client,
+}: {
+    hud: HudView;
+    open: boolean;
+    client: GameClient;
+}): JSX.Element {
+    const total = hud.weapons.reduce((sum, w) => sum + (w.dps ?? 0), hud.otherDps);
+    // Most damage a second first; ties (weapons yet to hit) keep the HUD's order
+    const rows = [...hud.weapons].sort((a, b) => (b.dps ?? 0) - (a.dps ?? 0));
+    return (
+        <div className="ui-damage">
+            <button
+                className="ui-dps"
+                onClick={() => client.toggleDamagePanel()}
+                title="Show or hide each weapon's damage (Tab)"
+            >
+                <span className="ui-dps-label">DPS</span> {formatCompact(hud.dps)}{" "}
+                <span className="ui-dps-toggle">{open ? "▾" : "▸"}</span>
+            </button>
+            {open && (
+                <div className="ui-damage-panel">
+                    <div className="ui-damage-head">
+                        <span />
+                        <span />
+                        <span>Share</span>
+                        <span>DPS</span>
+                        <span>Total</span>
+                    </div>
+                    {rows.map((slot) => {
+                        const dps = slot.dps ?? 0;
+                        return (
+                            <div key={slot.id} className="ui-damage-row">
+                                <ItemIcon
+                                    objId={slot.iconObjId}
+                                    spriteId={slot.iconSpriteId}
+                                    size={24}
+                                />
+                                <span className="ui-damage-weapon">
+                                    <span
+                                        className="ui-damage-name"
+                                        style={{ color: slot.rarityColor }}
+                                    >
+                                        {slot.name}
+                                    </span>
+                                    <span className="ui-damage-bar">
+                                        <span
+                                            style={{
+                                                width: `${total > 0 ? (dps / total) * 100 : 0}%`,
+                                            }}
+                                        />
+                                    </span>
+                                </span>
+                                <span className="ui-damage-share">{formatShare(dps, total)}</span>
+                                <span className="ui-damage-dps" title={exact(dps)}>
+                                    {formatCompact(dps)}
+                                </span>
+                                <span className="ui-damage-total" title={exact(slot.damage ?? 0)}>
+                                    {formatCompact(slot.damage ?? 0)}
+                                </span>
+                            </div>
+                        );
+                    })}
+                    {hud.otherDps >= 0.05 && (
+                        <div className="ui-damage-row ui-damage-other">
+                            <span />
+                            <span className="ui-damage-weapon" title="Items, power-ups and recoil">
+                                Other
+                            </span>
+                            <span className="ui-damage-share">
+                                {formatShare(hud.otherDps, total)}
+                            </span>
+                            <span className="ui-damage-dps" title={exact(hud.otherDps)}>
+                                {formatCompact(hud.otherDps)}
+                            </span>
+                            <span />
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function exact(value: number): string {
+    return Math.round(value).toLocaleString();
+}
+
 // The quests this run is getting on with, under the minimap: click the title
 // (or press Q) to fold it away
 function QuestTracker({
@@ -1574,6 +1759,16 @@ function PauseModal({
             <div className="ui-panel rs-border rs-background ui-pause">
                 <h2>{coop ? "Menu" : "Paused"}</h2>
                 {coop && <p className="ui-subtle">The run carries on while you're in here.</p>}
+                {ui.saveBlock && ui.saveBlockClosed && (
+                    <p className="ui-subtle">
+                        <button
+                            className="ui-version ui-save-off"
+                            onClick={() => client.showSaveBlock()}
+                        >
+                            Not saving
+                        </button>
+                    </p>
+                )}
                 <div className="ui-pause-columns">
                     <div className="ui-pause-column">
                         <div className="ui-pause-list">
@@ -1758,9 +1953,45 @@ function Big({ value }: { value: number }): JSX.Element {
     return <span title={n >= 100_000 ? n.toLocaleString() : undefined}>{formatBig(n)}</span>;
 }
 
-function ResultModal({ ui, client }: ScreenProps): JSX.Element {
+export function ResultModal({ ui, client }: ScreenProps): JSX.Element {
     const result = ui.result;
     const victory = ui.overlay === "victory";
+    const players = result?.players ?? [];
+    // Your own page first (the modal is mounted afresh for each run's result)
+    const [playerIndex, setPlayerIndex] = useState(() =>
+        Math.max(
+            0,
+            players.findIndex((player) => player.isLocal),
+        ),
+    );
+    const player = players[playerIndex];
+    const multiplayer = players.length > 1;
+    const changePlayer = useCallback(
+        (direction: number) =>
+            setPlayerIndex((current) => (current + direction + players.length) % players.length),
+        [players.length],
+    );
+    useEffect(() => {
+        if (!multiplayer) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            const target = event.target;
+            if (
+                event.altKey ||
+                event.ctrlKey ||
+                event.metaKey ||
+                event.shiftKey ||
+                (target instanceof HTMLElement &&
+                    (target.isContentEditable || target.closest("input, textarea, select")))
+            )
+                return;
+            if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                event.preventDefault();
+                if (!event.repeat) changePlayer(event.key === "ArrowLeft" ? -1 : 1);
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [changePlayer, multiplayer]);
     return (
         <div className="ui-modal">
             <div className="ui-panel rs-border rs-background ui-result">
@@ -1811,15 +2042,102 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                         Quest complete: {quest.name}! <Coins amount={quest.coins} />
                     </p>
                 ))}
-                {result && (
+                {multiplayer && player && (
+                    <div
+                        className="ui-result-player-nav"
+                        role="group"
+                        aria-label="Player stats navigation"
+                    >
+                        <button
+                            className="ui-button ui-result-arrow"
+                            aria-label="Previous player's stats"
+                            title="Previous player (Left arrow)"
+                            onClick={() => changePlayer(-1)}
+                        >
+                            <span className="ui-result-arrow-left" aria-hidden="true" />
+                        </button>
+                        <div className="ui-result-player" aria-live="polite" aria-atomic="true">
+                            <div className="ui-result-player-name">
+                                {player.name}
+                                {player.isLocal && " (you)"}
+                            </div>
+                            <div className="ui-result-player-detail">
+                                Player {playerIndex + 1} of {players.length}
+                                {player.left ? " · Left the run" : player.down ? " · Down" : ""}
+                            </div>
+                        </div>
+                        <button
+                            className="ui-button ui-result-arrow"
+                            aria-label="Next player's stats"
+                            title="Next player (Right arrow)"
+                            onClick={() => changePlayer(1)}
+                        >
+                            <span className="ui-result-arrow-right" aria-hidden="true" />
+                        </button>
+                    </div>
+                )}
+                {result && player && (
                     <div className="ui-result-columns">
                         <div className="ui-result-column">
-                            <table className="ui-result-table">
+                            {multiplayer && <h3 className="ui-pause-heading">Individual stats</h3>}
+                            <table className="ui-result-table" aria-label="Individual stats">
                                 <tbody>
                                     <tr>
                                         <td>Adventurer</td>
-                                        <td>{result.characterName}</td>
+                                        <td>{player.characterName}</td>
                                     </tr>
+                                    <tr>
+                                        <td>Kills</td>
+                                        <td>
+                                            <Big value={player.kills} />
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Damage dealt</td>
+                                        <td>
+                                            <Big value={player.damageDealt} />
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Biggest hit</td>
+                                        <td>
+                                            <Big value={player.highestHit} />
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Damage taken</td>
+                                        <td>
+                                            <Big value={player.damageTaken} />
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Hitpoints healed</td>
+                                        <td>
+                                            <Big value={player.healed} />
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Caskets opened</td>
+                                        <td>{player.caskets}</td>
+                                    </tr>
+                                    {(player.rerollsUsed > 0 || player.skips > 0) && (
+                                        <tr>
+                                            <td>Rerolls / skips</td>
+                                            <td>
+                                                {player.rerollsUsed} / {player.skips}
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                            <h3 className="ui-pause-heading">
+                                {multiplayer ? "Party totals (shared)" : "Run totals"}
+                            </h3>
+                            <table
+                                className="ui-result-table"
+                                aria-label={multiplayer ? "Party totals" : "Run totals"}
+                            >
+                                <tbody>
                                     {result.hard && (
                                         <tr>
                                             <td>Difficulty</td>
@@ -1833,48 +2151,38 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                                         </tr>
                                     )}
                                     <tr>
-                                        <td>Survived</td>
+                                        <td>Run time</td>
                                         <td>{formatTime(result.seconds)}</td>
                                     </tr>
                                     <tr>
                                         <td>Level</td>
                                         <td>{result.level}</td>
                                     </tr>
-                                    <tr>
-                                        <td>Kills</td>
-                                        <td>
-                                            <Big value={result.kills} />
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Biggest hit</td>
-                                        <td>
-                                            <Big value={result.stats.highestHit} />
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Damage taken</td>
-                                        <td>
-                                            <Big value={result.stats.damageTaken} />
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Hitpoints healed</td>
-                                        <td>
-                                            <Big value={result.stats.healed} />
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Caskets opened</td>
-                                        <td>{result.caskets}</td>
-                                    </tr>
-                                    {(result.stats.rerollsUsed > 0 || result.stats.skips > 0) && (
-                                        <tr>
-                                            <td>Rerolls / skips</td>
-                                            <td>
-                                                {result.stats.rerollsUsed} / {result.stats.skips}
-                                            </td>
-                                        </tr>
+                                    {multiplayer && (
+                                        <>
+                                            <tr>
+                                                <td>Kills</td>
+                                                <td>
+                                                    <Big value={result.kills} />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>Damage dealt</td>
+                                                <td>
+                                                    <Big
+                                                        value={players.reduce(
+                                                            (total, entry) =>
+                                                                total + entry.damageDealt,
+                                                            0,
+                                                        )}
+                                                    />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>Caskets opened</td>
+                                                <td>{result.caskets}</td>
+                                            </tr>
+                                        </>
                                     )}
                                     <tr>
                                         <td>Coins banked</td>
@@ -1886,7 +2194,9 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                             </table>
                             {result.bossKills.length > 0 && (
                                 <>
-                                    <h3 className="ui-pause-heading">Bosses</h3>
+                                    <h3 className="ui-pause-heading">
+                                        {multiplayer ? "Party bosses" : "Bosses"}
+                                    </h3>
                                     <table className="ui-result-table">
                                         <tbody>
                                             {result.bossKills.map((boss, i) => (
@@ -1900,9 +2210,10 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                                 </>
                             )}
                         </div>
-                        {result.damage.length > 0 && (
+                        {player.damage.length > 0 && (
                             <div className="ui-result-column">
-                                <table className="ui-result-damage">
+                                <h3 className="ui-pause-heading">Damage breakdown</h3>
+                                <table className="ui-result-damage" aria-label="Damage breakdown">
                                     <thead>
                                         <tr>
                                             <th />
@@ -1912,7 +2223,7 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {result.damage.map((row, i) => (
+                                        {player.damage.map((row, i) => (
                                             <tr key={i}>
                                                 <td>
                                                     <span className="ui-result-source">

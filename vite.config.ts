@@ -6,7 +6,7 @@ import { dirname, join, normalize, relative, resolve, sep } from "node:path";
 import type { Connect, Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 
-import { createRelay, isMultiplayerOn } from "./server/coop-relay.mjs";
+import { createRelay, isMetricsOn, isMultiplayerOn } from "./server/coop-relay.mjs";
 
 const CACHES_ROOT = resolve(process.cwd(), "caches");
 
@@ -128,7 +128,9 @@ function coopRelayPlugin(): Plugin {
         if (!httpServer || !isMultiplayerOn()) {
             return;
         }
-        const relay = createRelay();
+        // Metrics only when asked for (MULTIPLAYER_METRICS=on): a dev server's
+        // not scraped, and two checkouts would fight over the port
+        const relay = createRelay({ metrics: isMetricsOn(process.env, false) });
         relay.attach(httpServer);
         middlewares.use((req, res, next) => {
             if (!relay.handleRequest(req, res)) {

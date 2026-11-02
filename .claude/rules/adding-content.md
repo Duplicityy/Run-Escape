@@ -71,6 +71,9 @@ refunds come from `getUpgradeCost` and the save code. New ones don't need a save
 
 `items.ts`: gear goes in `CASKET_GEAR`, and utility items in `UTILITY`. `armoury.ts` says what each
 piece upgrades into, and `sets.ts` has the set bonuses. Run `scripts/cache/check-items.ts` afterwards.
+A utility item with a new `ItemUse` kind needs a case in `Sim.useUtility`, a sound in
+`USE_SOUNDS` in `client/GameSounds.ts`, and if it's only for some runs (the Prayer cape's extra
+revive, co-op only), its weight in `itemWeight` in `core/Loot.ts`.
 
 ## Power-up
 
@@ -112,6 +115,8 @@ a map, or an enemy on that map, mentions it), so that needs nothing added.
 - `ghost` goes through everything, and is only for what's really a spirit. Anything with wings gets
   `flies`: over fences, walls, trees and water, and round terrain (`world/FlightGrid.ts`).
 - A `blinks.surface` seq is baked like `blinks.seq`, and needs to be one the NPC's model can play.
+- In co-op a boss event spawns copies (`bossCopies` in `content/coop.ts`) that share one boss's
+  hitpoints, experience and loot. One with `spawnAt` gets no more copies than it has free spots.
 
 A new boss attack in `Sim.ts` that hits where the player stands has to hit each player in co-op:
 check them with `forEachHeroInReach`, and keep anything it leaves on a player on their `Hero`.

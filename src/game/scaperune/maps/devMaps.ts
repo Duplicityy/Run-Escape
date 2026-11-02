@@ -9,9 +9,11 @@ import { MapRecipe } from "../recipe";
 import { CLIFF_GALLERY } from "./cliffGallery";
 import { KALUAS_WAKE } from "./kaluasWake";
 import { PREFAB_GALLERY } from "./prefabGallery";
+import { ROCK_SHEET } from "./rockSheet";
 import { SHATTERED_REALM } from "./shatteredRealm";
 import { TERRAIN_TEST } from "./terrainTest";
 import { VARDHELM } from "./vardhelm";
+import { WALL_SHEET } from "./wallSheet";
 
 // Maps for development, shown on the dev server only (content/maps.ts). Each
 // needs its own squares: nothing in the cache lives at x 70-99, y 66-199, and the
@@ -87,6 +89,8 @@ const GENERATED: GeneratedLine[] = [
     ],
     ["scaperune_canyon", 76, { seed: 5, ...SETTING_PRESETS.Canyon, squaresX: 3, squaresY: 3 }, 110],
     ["scaperune_volcano", 81, { seed: 6, ...SETTING_PRESETS.Volcano }, 110],
+    ["scaperune_town", 93, { seed: 3, ...SETTING_PRESETS.Town, wallKit: "varrock" }, 180],
+    ["scaperune_city", 72, { seed: 2, ...SETTING_PRESETS["Walled city"] }, 190],
     // A map of each newer biome, 2 squares a side
     ...(
         [
@@ -125,6 +129,8 @@ export const SCAPERUNE_DEV_MAPS: MapRecipe[] = [
     PALETTE_RECIPE,
     PREFAB_GALLERY,
     CLIFF_GALLERY,
+    ROCK_SHEET,
+    WALL_SHEET,
     VARDHELM,
     KALUAS_WAKE,
     SHATTERED_REALM,

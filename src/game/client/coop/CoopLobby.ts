@@ -101,7 +101,9 @@ export function parseRoomCode(text: string): string {
 // What's missing for a room's map, by the map's name
 export function describeMissing(need: MissingMap): string {
     const map = MAP_BY_ID.get(need.mapId);
-    const what = `${map?.name ?? need.mapId}${need.endless ? " endless" : ""}`;
+    const what =
+        `${map?.name ?? need.mapId}` +
+        `${need.hard ? " hard" : ""}${need.endless ? " endless" : ""}`;
     return need.who
         ? `${need.who} hasn't got ${what} unlocked.`
         : `You need ${what} unlocked to join this room.`;
@@ -332,9 +334,9 @@ export class CoopLobby {
         }
     }
 
-    create(open: boolean, mapId: string, endless: boolean): void {
+    create(open: boolean, mapId: string, endless: boolean, hard: boolean): void {
         this.update({ error: undefined });
-        this.send({ t: "create", open, mapId, endless, me: this.joinAs() });
+        this.send({ t: "create", open, mapId, endless, hard, me: this.joinAs() });
     }
 
     join(code: string): void {
@@ -364,8 +366,8 @@ export class CoopLobby {
         this.send({ t: "settings", open });
     }
 
-    setMap(mapId: string, endless: boolean): void {
-        this.send({ t: "settings", mapId, endless });
+    setMap(mapId: string, endless: boolean, hard: boolean): void {
+        this.send({ t: "settings", mapId, endless, hard });
     }
 
     kick(id: string): void {

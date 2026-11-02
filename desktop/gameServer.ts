@@ -32,6 +32,14 @@ const MIME_TYPES: Record<string, string> = {
     ".wasm": "application/wasm",
 };
 
+// Where the page may connect: the app, and the relay if it has one. protocol.handle in main.ts
+// already answers every https request itself, but WebSockets don't go through it, so this is what
+// keeps those in. Workers get their own copy, from their script's answer.
+export function contentSecurityPolicy(relayOrigin: string | undefined): string {
+    const relay = relayOrigin ? ` ${relayOrigin} ${relayOrigin.replace(/^https:/, "wss:")}` : "";
+    return `connect-src 'self'${relay}`;
+}
+
 function status(code: number, headers: Record<string, string> = {}): Response {
     return new Response(null, { status: code, headers: { ...HEADERS, ...headers } });
 }
@@ -90,29 +98,36 @@ export function getRelayOrigin(coopUrl: string): string | undefined {
     }
 }
 
-// Answers a request for the game like the static server it's written for
-export async function serveGame(root: string, request: Request): Promise<Response> {
+// Answers a request for the game like the static server it's written for. relayOrigin is the one
+// address apart from the app's own that the page may connect to (see getRelayOrigin).
+export async function serveGame(
+    root: string,
+    request: Request,
+    relayOrigin?: string,
+): Promise<Response> {
+    const csp = { "Content-Security-Policy": contentSecurityPolicy(relayOrigin) };
     const url = new URL(request.url);
     if (url.origin !== GAME_ORIGIN) {
-        return status(403);
+        return status(403, csp);
     }
     if (request.method !== "GET" && request.method !== "HEAD") {
-        return status(405, { Allow: "GET, HEAD" });
+        return status(405, { ...csp, Allow: "GET, HEAD" });
     }
     const file = resolveGamePath(root, url.pathname === "/" ? "/index.html" : url.pathname);
     const info = file ? await stat(file).catch(() => undefined) : undefined;
     if (!file || !info?.isFile()) {
-        return status(404);
+        return status(404, csp);
     }
 
     const range = parseRange(request.headers.get("Range"), info.size);
     if (range === "unsatisfiable") {
-        return status(416, { "Content-Range": `bytes */${info.size}` });
+        return status(416, { ...csp, "Content-Range": `bytes */${info.size}` });
     }
     const start = range?.start ?? 0;
     const end = range?.end ?? info.size - 1;
     const headers: Record<string, string> = {
         ...HEADERS,
+        ...csp,
         "Accept-Ranges": "bytes",
         "Content-Length": String(end - start + 1),
         "Content-Type": MIME_TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream",

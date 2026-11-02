@@ -1,20 +1,24 @@
+import { SNOW_ROCK } from "./biomes";
+import { dressRock, paintRockFloor } from "./dress";
 import { TILE_BLOCKED, TILE_BRIDGE } from "./format";
 import {
     Build,
     LOC_NORMAL,
     SPAWN_CLEAR,
     createClimb,
+    getTouchedTiles,
     hasRelief,
     lerp,
     refreshTileHeights,
     settleTerrain,
 } from "./mapBuild";
-import { createRng } from "./noise";
+import { createRng, distanceTo } from "./noise";
 import { Point, smoothPath } from "./paths";
+import { findWaterPieces, holdWater } from "./rivers";
 import { RoadLine, gradeRoads } from "./roadGrades";
 import { ROAD_STEEPEST } from "./roads";
 import { GeneratorSettings } from "./settings";
-import { getTileSlope, limitNorthFaces } from "./terrain";
+import { getTileSlope, liftFaces, limitFaces, limitNorthFaces } from "./terrain";
 
 // What the land's shape comes to: passes through it, what can be walked, rock and caves.
 
@@ -36,16 +40,21 @@ const PASSES_A_SQUARE = 4;
 // the ground at its foot. This leaves a margin for the top of the screen.
 const NORTH_FACE_SLOPE = 30;
 
+// How steep any face can be, in height units a tile. 99.96% of the real world's tiles are 80
+// or under, and past that a tile stretches one row of triangles across the screen.
+const STEEPEST_FACE = 72;
+
 // Snow starts this high, with the setting at its least and its most
 const SNOW_LINE_HIGH = 235;
 
 const SNOW_LINE_LOW = 110;
 
-// How much steeper than walkable a tile is before it gets a rock face
-const FACE_SLOPE = 2;
+// A cliff's waterfall stands on this many tiles a side
+const FALL_TILES = 3;
 
-// Of the tiles at a cliff's edge, the share that get a boulder: they're wider than a tile
-const BOULDER_SHARE = 0.34;
+const ROCK_SEED = 202;
+
+const SNOW_SEED = 203;
 
 const CAVES_A_SQUARE = 1.5;
 
@@ -55,6 +64,9 @@ const CAVE_DEPTH = 2;
 
 // How much higher the ground has to rise behind a cave for there to be a cliff to go in
 const CAVE_CLIFF = 24;
+
+// Tiles roads and what's standing keep from lava
+const LAVA_CLEAR = 2;
 
 // The ground round the spawn is level and walkable, whatever the land's doing there
 function pinSpawn(build: Build): void {
@@ -146,13 +158,17 @@ export function cutPasses(build: Build): RoadLine[] {
     const joined = new Uint8Array(sizes.length);
     joined[labels[spawn.x + spawn.y * sizeX]] = 1;
     const inset = 3;
+    // Not through a crater, which lava will fill, or water, which won't move for it
+    const lava = getTouchedTiles(createLavaField(build), build.sizeX, build.sizeY);
+    const { flags } = build.ground.level0;
     const cost = (x: number, y: number) => {
         const inside =
             x >= arena.x0 + inset &&
             y >= arena.y0 + inset &&
             x <= arena.x1 - inset &&
             y <= arena.y1 - inset;
-        if (!inside) {
+        const i = x + y * sizeX;
+        if (!inside || lava[i] || flags[i] & TILE_BLOCKED) {
             return Infinity;
         }
         return cliffs[x + y * sizeX] ? PASS_CLIFF_COST : 1;
@@ -216,12 +232,9 @@ export function getSnowLine(settings: GeneratorSettings): number {
     return settings.snow > 0 ? lerp(SNOW_LINE_HIGH, SNOW_LINE_LOW, settings.snow) : Infinity;
 }
 
-// Lava in the craters
-export function paintLava(build: Build): void {
-    const { ground, relief, corners, biomeAt } = build;
-    if (relief.craters.length === 0) {
-        return;
-    }
+// Where the lava goes: above 0 is lava
+function createLavaField(build: Build): Float32Array {
+    const { relief, corners } = build;
     const field = new Float32Array(corners.x * corners.y).fill(-4);
     for (const { x, y, radius } of relief.craters) {
         const reach = Math.ceil(radius) + 4;
@@ -232,16 +245,78 @@ export function paintLava(build: Build): void {
             }
         }
     }
-    ground.paintField(field, (x, y) => biomeAt(x, y).rock.lava, true);
+    return field;
 }
 
-// The rock on everything too steep to walk, and rock faces over the steepest. It's painted
-// after the roads, and goes round them.
-export function paintRock(build: Build, skip: Uint8Array): Uint8Array {
-    const { ground, settings, sizeX, sizeY, corners, cliffs, biomeAt, terrain } = build;
-    if (!hasRelief(settings)) {
-        return new Uint8Array(sizeX * sizeY);
+// Lava comes last, so that it's painted over what's made of the land: until then, roads, and
+// anything standing, are kept off where it'll be
+export function keepOffLava(build: Build, avoid: Uint8Array): void {
+    const { ground, relief, sizeX, sizeY } = build;
+    if (relief.craters.length === 0) {
+        return;
     }
+    const lava = getTouchedTiles(createLavaField(build), sizeX, sizeY);
+    distanceTo(lava, sizeX, sizeY, LAVA_CLEAR + 1).forEach((distance, i) => {
+        if (distance <= LAVA_CLEAR) {
+            avoid[i] = 1;
+            ground.reserved[i] = 1;
+        }
+    });
+}
+
+// Lava lies level, as water does, at the lowest point of its edge, so that it fills its crater
+// as a lake fills a basin rather than sinking a pit, with its corners held like water's
+export function levelLava(build: Build): void {
+    const { relief, sizeX, sizeY, corners, terrain } = build;
+    if (relief.craters.length === 0) {
+        return;
+    }
+    const tiles = getTouchedTiles(createLavaField(build), sizeX, sizeY);
+    const pieces = findWaterPieces(build, tiles, new Uint8Array(tiles.length));
+    const lowest = new Map<number, number>();
+    const forCorners = (i: number, visit: (x: number, y: number) => void) => {
+        const x = i % sizeX;
+        const y = (i - x) / sizeX;
+        visit(x, y);
+        visit(x + 1, y);
+        visit(x, y + 1);
+        visit(x + 1, y + 1);
+    };
+    pieces.forEach((piece, i) => {
+        if (piece >= 0) {
+            forCorners(i, (x, y) => {
+                const round = [
+                    x - 1 + (y - 1) * sizeX,
+                    x + (y - 1) * sizeX,
+                    x - 1 + y * sizeX,
+                    x + y * sizeX,
+                ];
+                if (round.some((tile) => !tiles[tile])) {
+                    const height = terrain.height[x + y * corners.x];
+                    lowest.set(piece, Math.min(lowest.get(piece) ?? Infinity, height));
+                }
+            });
+        }
+    });
+    pieces.forEach((piece, i) => {
+        if (piece >= 0) {
+            forCorners(i, (x, y) => terrain.pin(x, y, Math.round(lowest.get(piece)!)));
+        }
+    });
+    holdWater(build, tiles);
+}
+
+export function paintLava(build: Build): void {
+    const { ground, relief, biomeAt } = build;
+    if (relief.craters.length > 0) {
+        ground.paintField(createLavaField(build), (x, y) => biomeAt(x, y).rock.lava, true);
+    }
+}
+
+// Which tiles are rock, and which are the same under snow: everything too steep to walk,
+// less what's skipped
+function findRockTiles(build: Build, skip: Uint8Array): { rock: Uint8Array; snowy: Uint8Array } {
+    const { ground, settings, sizeX, sizeY, corners, cliffs, terrain } = build;
     const { heights, flags } = ground.level0;
     const snowLine = getSnowLine(settings);
     const rock = new Uint8Array(sizeX * sizeY);
@@ -259,39 +334,44 @@ export function paintRock(build: Build, skip: Uint8Array): Uint8Array {
             }
         }
     }
-    ground.paintOverlay(rock, (x, y) => biomeAt(x, y).rock.overlay, false, skip);
+    return { rock, snowy };
+}
 
-    const roll = createRng(settings.seed + 200);
-    const faced = new Uint8Array(sizeX * sizeY);
-    for (let y = 1; y < sizeY - 1; y++) {
-        for (let x = 1; x < sizeX - 1; x++) {
-            const i = x + y * sizeX;
-            const slope = getTileSlope(heights, corners.x, x, y);
-            faced[i] = (rock[i] || snowy[i]) && slope >= settings.walkSlope + FACE_SLOPE ? 1 : 0;
-        }
+// Rock's colour on everything too steep to walk. It's painted after the roads, and goes
+// round them.
+export function paintRock(build: Build, skip: Uint8Array): Uint8Array {
+    const { ground, settings, sizeX, sizeY, biomeAt } = build;
+    if (!hasRelief(settings)) {
+        return new Uint8Array(sizeX * sizeY);
     }
-    for (let y = 1; y < sizeY - 1; y++) {
-        for (let x = 1; x < sizeX - 1; x++) {
-            const i = x + y * sizeX;
-            if (!faced[i] || roll() >= settings.rockFaces) {
-                continue;
-            }
-            const inner = faced[i - 1] && faced[i + 1] && faced[i - sizeX] && faced[i + sizeX];
-            if (inner || roll() >= BOULDER_SHARE) {
-                continue;
-            }
-            const { boulders } = biomeAt(x, y).rock;
-            ground.grid.locs.push({
-                id: boulders[Math.floor(roll() * boulders.length)],
-                type: LOC_NORMAL,
-                rotation: Math.floor(roll() * 4),
-                level: 0,
-                x,
-                y,
-            });
-        }
-    }
+    const { rock } = findRockTiles(build, skip);
+    paintRockFloor(ground, rock, (x, y) => biomeAt(x, y).rock.overlay, skip);
     return rock;
+}
+
+// What's on the rock, and on the snow over it, once everything that stands on a cliff has
+// taken its tiles out of the mask
+export function dressCliffs(
+    build: Build,
+    painted: Uint8Array,
+    skip: Uint8Array,
+    falls: Point[],
+): void {
+    const { ground, settings, sizeX, biomeAt } = build;
+    // Land with no rock on it still has steep banks
+    const found = findRockTiles(build, skip);
+    const { snowy } = found;
+    const rock = hasRelief(settings) ? painted : found.rock;
+    for (const { x, y } of falls) {
+        for (let ty = y; ty < y + FALL_TILES; ty++) {
+            rock.fill(0, x + ty * sizeX, x + FALL_TILES + ty * sizeX);
+            snowy.fill(0, x + ty * sizeX, x + FALL_TILES + ty * sizeX);
+        }
+    }
+    const share = settings.rockFaces;
+    const kitAt = (x: number, y: number) => biomeAt(x, y).rock;
+    dressRock(ground, rock, { kitAt, seed: settings.seed + ROCK_SEED, share });
+    dressRock(ground, snowy, { kitAt: () => SNOW_ROCK, seed: settings.seed + SNOW_SEED, share });
 }
 
 // Cave mouths, for looks: in the foot of a cliff that faces the camera
@@ -344,18 +424,22 @@ export function finishHeights(build: Build): void {
     const fixed = Uint8Array.from(heldCorners);
     terrain.markPinned(fixed);
     limitNorthFaces(terrain.height, corners.x, corners.y, NORTH_FACE_SLOPE, fixed);
+    limitFaces(terrain.height, corners.x, corners.y, STEEPEST_FACE, fixed);
+    liftFaces(terrain.height, corners.x, corners.y, STEEPEST_FACE, fixed);
+    limitNorthFaces(terrain.height, corners.x, corners.y, NORTH_FACE_SLOPE, fixed);
     terrain.write((x, y, height) => ground.setHeight(x, y, height));
 }
 
 // Tiles too steep to walk are blocked, going by the heights as they'll be drawn, and so is
 // what's left of the cliffs. Bridges are walked on a level up.
 export function blockSteepGround(build: Build): void {
-    const { ground, settings, cliffs, sizeX, sizeY, corners } = build;
+    const { ground, settings, cliffs, faces, sizeX, sizeY, corners } = build;
     const { heights, flags } = ground.level0;
     const bridges = ground.grid.levels[1].flags;
     for (let y = 0; y < sizeY; y++) {
         for (let x = 0; x < sizeX; x++) {
             const i = x + y * sizeX;
+            cliffs[i] |= faces[i];
             const steep = getTileSlope(heights, corners.x, x, y) > settings.walkSlope;
             if ((steep || cliffs[i]) && !(bridges[i] & TILE_BRIDGE)) {
                 flags[i] |= TILE_BLOCKED;

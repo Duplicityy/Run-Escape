@@ -168,6 +168,60 @@ describe("Sim", () => {
         expect(sim.takeEvents().some((e) => e.type === "revive")).toBe(true);
     });
 
+    test("a win stands, whatever hits the player later in the tick", () => {
+        const sim = createSim();
+        sim.revivesLeft = 0;
+        sim["endRun"]("victory");
+        sim.player.invulnerable = 0;
+        expect(sim["damagePlayer"](99999, "goblin", false)).toBe(0);
+        expect(sim.state).toBe("victory");
+        expect(sim.player.hp).toBe(sim.player.maxHp);
+    });
+
+    test("a ring of life isn't used up once the run's won", () => {
+        const sim = createSim();
+        sim.revivesLeft = 1;
+        const boss = sim.spawnEnemy(getEnemy("wise_old_man"), "finalBoss", {
+            x: 1040.5,
+            y: 1036.5,
+        })!;
+        sim.damageEnemy(boss, 1e9, 0, sim.player.x, sim.player.y);
+        sim.takeEvents();
+        sim["damagePlayer"](99999, "goblin", false);
+        expect(sim.state).toBe("victory");
+        expect(sim.revivesLeft).toBe(1);
+        expect(sim.takeEvents().some((e) => e.type === "revive")).toBe(false);
+    });
+
+    test("the final boss falling in the tick the player does wins, but not a tick later", () => {
+        const won = createSim();
+        won.revivesLeft = 0;
+        const boss = won.spawnEnemy(getEnemy("wise_old_man"), "finalBoss", {
+            x: 1040.5,
+            y: 1036.5,
+        })!;
+        won["damagePlayer"](99999, "goblin", false);
+        expect(won.state).toBe("dead");
+        // The player's weapons still fire in the tick they fall
+        won.damageEnemy(boss, 1e9, 0, won.player.x, won.player.y);
+        expect(won.state).toBe("victory");
+        // And they're standing on the victory screen
+        expect(won.heroes[0].down).toBe(false);
+        expect(won.player.deathTick).toBe(-1);
+        expect(won.player.hp).toBeGreaterThan(0);
+
+        const lost = createSim();
+        lost.revivesLeft = 0;
+        const late = lost.spawnEnemy(getEnemy("wise_old_man"), "finalBoss", {
+            x: 1040.5,
+            y: 1036.5,
+        })!;
+        lost["damagePlayer"](99999, "goblin", false);
+        lost.step(0, 0);
+        lost.damageEnemy(late, 1e9, 0, lost.player.x, lost.player.y);
+        expect(lost.state).toBe("dead");
+    });
+
     test("with too many bones lying around, the furthest pile comes to the new ones", () => {
         const sim = createSim();
         const { x, y } = sim.player;
@@ -3525,6 +3579,11 @@ describe("sets", () => {
         crystal.metaStats.cooldown = 1;
         crystal.updateStats();
         expect(ticks()).toBe(Math.max(5, Math.round(bow.cooldown * TICKS_PER_SECOND * 0.4)));
+        // The Bow of Faerdhinen is a crystal bow too
+        crystal.addWeapon("bow_of_faerdhinen");
+        expect(crystal["getEffectiveLevel"](crystal.weapons[1]).damage).toBeCloseTo(
+            getWeapon("bow_of_faerdhinen").levels[0].damage * 1.2,
+        );
         // Virtus: auras cover more ground
         const aura = armed("ice_burst", "wizard");
         aura.equip("virtus_mask");
@@ -4841,7 +4900,7 @@ describe("random events", () => {
         });
 
         test("charges more later on, and less in endless runs where coins are worth less", () => {
-            const price = (sim: Sim) => sim["oldManPrice"](getPowerUp("magnet"));
+            const price = (sim: Sim) => sim["oldManPrice"](getPowerUp("magnet").price);
             const early = createSim();
             const late = createSim();
             late.tick = 10 * 60 * TICKS_PER_SECOND;

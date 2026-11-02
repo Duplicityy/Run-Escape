@@ -7,7 +7,7 @@ import massacre from "../../media/music/massacre.ogg";
 import { CollisionFlag } from "../../rs/pathfinder/flag/CollisionFlag";
 import { isCoarsePointer } from "../../util/DeviceUtil";
 import { CHARACTERS, getCharacter } from "../content/characters";
-import { MAX_PARTY } from "../content/coop";
+import { MAX_PARTY, REVIVE_IMMUNITY_SECONDS, REVIVE_SECONDS } from "../content/coop";
 import { upgradedName } from "../content/endless";
 import { getEnemy } from "../content/enemies";
 import { CASKETS, getItem } from "../content/items";
@@ -30,15 +30,16 @@ import { formatStats } from "../content/stats";
 import { TROPHY_BY_ID } from "../content/trophies";
 import { Stats, emptyStats } from "../content/types";
 import { LOCKABLE_ITEMS, describeUnlockTask, isAvailable } from "../content/unlocks";
-import { formatWeaponStat, weaponStats } from "../content/weaponStats";
+import { formatWeaponBonus, formatWeaponStat, weaponStats } from "../content/weaponStats";
 import { getWeapon } from "../content/weapons";
 import { ChestAction } from "../core/Loot";
-import { HeroOptions, Sim, TICKS_PER_SECOND } from "../core/Sim";
+import { Hero, HeroOptions, Sim, TICKS_PER_SECOND } from "../core/Sim";
 import { canEvolve, describeChoice, getEvolutionHint } from "../core/Upgrades";
 import { SimEvent, WeaponState } from "../core/entities";
 import { usePortableMath } from "../core/fmath";
 import { CoopAction, applyAction, hasBadNumber } from "../core/lockstep";
 import {
+    NewerSave,
     SaveData,
     SaveStore,
     buyArmouryUpgrade,
@@ -59,6 +60,7 @@ import { ArenaGrid } from "../core/world/ArenaGrid";
 import { CameraRig } from "../render/CameraRig";
 import { GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer";
 import { installRecipe } from "../scaperune/squares";
+import { DamageMeter } from "./DamageMeter";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
 import {
     GameAssets,
@@ -69,7 +71,16 @@ import {
 import { GameAudio } from "./GameAudio";
 import { GameInput } from "./GameInput";
 import { ChestCue, GameSounds, getGameSoundIds } from "./GameSounds";
-import { ChoiceView, GameStore, HudView, QuestTrackView, Screen, SlotView } from "./GameStore";
+import {
+    ChoiceView,
+    GameStore,
+    HudView,
+    QuestTrackView,
+    ReviveView,
+    SaveBlock,
+    Screen,
+    SlotView,
+} from "./GameStore";
 import { GameView } from "./GameView";
 import {
     getBuffViews,
@@ -81,10 +92,11 @@ import {
 import { Minimap } from "./Minimap";
 import { Overlay, ScreenPoint } from "./Overlay";
 import { getPlayerPose } from "./PlayerPose";
-import { getBossKillViews, getDamageViews } from "./RunStatsViews";
+import { getBossKillViews, getPlayerResultViews } from "./RunStatsViews";
+import { SaveLock } from "./SaveLock";
 import { CoopLobby, makeLoadout } from "./coop/CoopLobby";
 import { CoopRun, GUEST_BUFFER_FRAMES } from "./coop/CoopRun";
-import { GameStart, GoneReason, Loadout, Unlocks, isGameStart } from "./coop/protocol";
+import { GameStart, GoneReason, Loadout, RoomView, Unlocks, isGameStart } from "./coop/protocol";
 import { saveFile } from "./saveFile";
 
 // 20ms: the OSRS client tick, also the unit of animation frame lengths
@@ -218,10 +230,11 @@ function cleanLoadout(loadout: Loadout | undefined): {
 }
 
 // What a co-op player's loadout gives their hero, no more than the shop can
-function loadoutStats(loadout: Loadout | undefined): Stats {
+export function loadoutStats(loadout: Loadout | undefined): Stats {
     const stats = emptyStats();
     for (const [key, value] of Object.entries(loadout?.metaStats ?? {})) {
-        if (key in stats && typeof value === "number" && Number.isFinite(value)) {
+        // A stat's own name only: "constructor" is in every object
+        if (Object.hasOwn(stats, key) && typeof value === "number" && Number.isFinite(value)) {
             const most = SHOP_MAX[key as keyof Stats] ?? 0;
             stats[key as keyof Stats] = Math.max(Math.min(0, most), Math.min(most, value));
         }
@@ -229,8 +242,9 @@ function loadoutStats(loadout: Loadout | undefined): Stats {
     return stats;
 }
 
-// Each stat with every shop upgrade for it bought
-const SHOP_MAX: Partial<Stats> = {};
+// Each stat with every shop upgrade for it bought (no prototype, so nothing
+// inherited reads as a stat)
+const SHOP_MAX: Partial<Stats> = Object.create(null);
 for (const upgrade of SHOP_UPGRADES) {
     SHOP_MAX[upgrade.stat] = (SHOP_MAX[upgrade.stat] ?? 0) + upgrade.perRank * upgrade.maxRank;
 }
@@ -257,6 +271,7 @@ export class GameClient implements GameFrameHandler {
         overlayCanvas: HTMLCanvasElement,
         store: GameStore,
         saveStore: SaveStore,
+        saveLock: SaveLock,
         options: GameClientOptions,
     ): Promise<GameClient> {
         const workerPool = mapViewer.workerPool;
@@ -291,6 +306,7 @@ export class GameClient implements GameFrameHandler {
             overlayCanvas,
             store,
             saveStore,
+            saveLock,
             options,
         );
     }
@@ -305,6 +321,13 @@ export class GameClient implements GameFrameHandler {
     sim?: Sim;
     paused = false;
     save: SaveData;
+    // The save was written by a newer version of the game, so it's not saved
+    // over (unless the player says so, see saveOverNewer)
+    private newerSave?: NewerSave;
+    // The save couldn't be read and there was no room to keep a copy, so it
+    // stays as it is
+    private saveNoRoom = false;
+    private stopSaveLock?: () => void;
     // Co-op: the room and its relay, and the run being played with it
     readonly coop: CoopLobby;
     private coopRun?: CoopRun;
@@ -320,6 +343,7 @@ export class GameClient implements GameFrameHandler {
     private cameraGround: number | undefined;
     private shownDps = 0;
     private shownDpsTick = 0;
+    private readonly damageMeter = new DamageMeter();
     // Each hero's look, as last baked
     private appearanceVersions: number[] = [];
     // The casket Auto alch last sent off (a co-op one takes a frame to come
@@ -350,6 +374,7 @@ export class GameClient implements GameFrameHandler {
         overlayCanvas: HTMLCanvasElement,
         readonly store: GameStore,
         readonly saveStore: SaveStore,
+        readonly saveLock: SaveLock,
         readonly options: GameClientOptions,
     ) {
         this.save = store.getSnapshot().save;
@@ -362,6 +387,7 @@ export class GameClient implements GameFrameHandler {
         this.overlay = new Overlay(overlayCanvas);
         this.input = new GameInput(renderer.canvas);
         this.input.onPress = this.onKeyPress;
+        this.input.takesKey = (code) => code === "Tab" && this.isPlaying();
         this.input.onBlur = () => {
             this.accumulator = 0;
             // With auto-pause off the run carries on (though a hidden tab
@@ -388,6 +414,8 @@ export class GameClient implements GameFrameHandler {
         document.addEventListener("visibilitychange", this.onVisibilityChange);
         this.cameraRig.pitch = ATTRACT_PITCH;
         this.cameraRig.distance = ATTRACT_DISTANCE;
+        // Before a run starts, so it's with the save as it is now
+        this.stopSaveLock = this.saveLock.listen((held) => this.onSaveLock(held));
 
         // An invite link (?room=CODE) goes straight to the room
         const invite = new URLSearchParams(window.location.search).get("room");
@@ -406,6 +434,7 @@ export class GameClient implements GameFrameHandler {
     }
 
     dispose(): void {
+        this.stopSaveLock?.();
         document.removeEventListener("visibilitychange", this.onVisibilityChange);
         this.stopBackgroundTicker();
         this.coop.close();
@@ -433,35 +462,82 @@ export class GameClient implements GameFrameHandler {
         this.coop.setMe({ characterId });
     }
 
+    // The map for the next run. Hosting a room, it's the room's map: the relay
+    // says it back in a room update, which the lobby shows, so nothing's
+    // changed here until it has. Endless and hard mode stay on where everyone
+    // has them for the new map, as the relay insists.
     selectMap(mapId: string): void {
-        if (isMapUnlocked(this.save, mapId)) {
-            const snapshot = this.store.getSnapshot();
-            const endless = snapshot.endless && isEndlessUnlocked(this.save, mapId);
-            const hard = snapshot.hard && isHardUnlocked(this.save, mapId);
-            this.store.set({ mapId, endless, hard });
-            if (this.coop.isHost) {
-                this.coop.setMap(mapId, endless);
-            }
+        if (!isMapUnlocked(this.save, mapId)) {
+            return;
         }
+        const room = this.hostedRoom();
+        if (room) {
+            this.coop.setMap(
+                mapId,
+                room.endless && this.roomHas("endless", mapId),
+                room.hard && this.roomHas("hard", mapId),
+            );
+            return;
+        }
+        const snapshot = this.store.getSnapshot();
+        this.store.set({
+            mapId,
+            endless: snapshot.endless && isEndlessUnlocked(this.save, mapId),
+            hard: snapshot.hard && isHardUnlocked(this.save, mapId),
+        });
     }
 
-    // Endless runs, for a map that's been beaten
+    // Endless runs, for a map that's been beaten (the room's, hosting one)
     toggleEndless(): void {
+        const room = this.hostedRoom();
+        if (room) {
+            if (room.endless || this.roomHas("endless", room.mapId)) {
+                this.coop.setMap(room.mapId, !room.endless, room.hard);
+            }
+            return;
+        }
         const { mapId, endless } = this.store.getSnapshot();
         if (endless || isEndlessUnlocked(this.save, mapId)) {
             this.store.set({ endless: !endless });
-            if (this.coop.isHost) {
-                this.coop.setMap(mapId, !endless);
-            }
         }
     }
 
-    // Hard mode, for a map that's been beaten
+    // Hard mode, for a map that's been beaten (the room's, hosting one)
     toggleHard(): void {
+        const room = this.hostedRoom();
+        if (room) {
+            if (room.hard || this.roomHas("hard", room.mapId)) {
+                this.coop.setMap(room.mapId, room.endless, !room.hard);
+            }
+            return;
+        }
         const { mapId, hard } = this.store.getSnapshot();
         if (hard || isHardUnlocked(this.save, mapId)) {
             this.store.set({ hard: !hard });
         }
+    }
+
+    // The room this player hosts, whose map and modes are the relay's to
+    // change
+    private hostedRoom(): RoomView | undefined {
+        return this.coop.isHost ? this.coop.room : undefined;
+    }
+
+    // Whether a map's endless or hard mode can be on in the room: this player
+    // has it, and so does everyone else (unless the relay takes anyone), as
+    // the relay checks before it takes a setting
+    private roomHas(mode: "endless" | "hard", mapId: string): boolean {
+        const mine =
+            mode === "endless"
+                ? isEndlessUnlocked(this.save, mapId)
+                : isHardUnlocked(this.save, mapId);
+        const { room, anyMap } = this.store.getSnapshot().coop;
+        return (
+            mine &&
+            (anyMap ||
+                !room ||
+                room.members.every((member) => member.unlocks?.[mode]?.includes(mapId) === true))
+        );
     }
 
     // ---- Co-op menus ----
@@ -493,8 +569,8 @@ export class GameClient implements GameFrameHandler {
 
     // A room of this player's, for the map picked
     createRoom(open: boolean): void {
-        const { mapId, endless } = this.store.getSnapshot();
-        this.coop.create(open, mapId, endless);
+        const { mapId, endless, hard } = this.store.getSnapshot();
+        this.coop.create(open, mapId, endless, hard);
     }
 
     // Another page of the open rooms
@@ -534,12 +610,14 @@ export class GameClient implements GameFrameHandler {
         return url.toString();
     }
 
-    // The maps this player has, and has endless for, which rooms go by
+    // The maps this player has, and has endless and hard mode for, which rooms
+    // go by
     private getUnlocks(): Unlocks {
         const ids = [...MAPS, ...FUN_MAPS].map((m) => m.id);
         return {
             maps: ids.filter((id) => isMapUnlocked(this.save, id)),
             endless: ids.filter((id) => isEndlessUnlocked(this.save, id)),
+            hard: ids.filter((id) => isHardUnlocked(this.save, id)),
         };
     }
 
@@ -567,11 +645,16 @@ export class GameClient implements GameFrameHandler {
             this.sounds.denied();
             return;
         }
+        // The room's modes, which the relay checked everyone has (or takes
+        // anyone for, with anyMap), so the run is what the lobby said
+        const { anyMap } = this.store.getSnapshot().coop;
         const game: GameStart = {
             seed: (Math.random() * 0x7fffffff) | 0,
             mapId: map.id,
             endless:
-                map.fun !== undefined || (room.endless && isEndlessUnlocked(this.save, map.id)),
+                map.fun !== undefined ||
+                (room.endless && (anyMap || isEndlessUnlocked(this.save, map.id))),
+            hard: room.hard === true && (anyMap || isHardUnlocked(this.save, map.id)),
             heroes: room.members.map((member) => ({
                 id: member.id,
                 name: member.name,
@@ -614,6 +697,8 @@ export class GameClient implements GameFrameHandler {
                 }
             }
             this.coopRun = undefined;
+            // Solo now: a hidden tab no longer needs stepping
+            this.stopBackgroundTicker();
             this.store.toast(
                 "Lost the connection to the others. The run goes on without them.",
                 6000,
@@ -687,6 +772,20 @@ export class GameClient implements GameFrameHandler {
         this.setDisplay({ questTracker: !this.display.questTracker });
     }
 
+    // In a run with nothing over it: Tab is the damage panel's then, and the
+    // browser's (moving between buttons) on every other screen
+    private isPlaying(): boolean {
+        return (
+            this.sim !== undefined &&
+            !this.sim.runOver &&
+            this.store.getSnapshot().overlay === "none"
+        );
+    }
+
+    toggleDamagePanel(): void {
+        this.setDisplay({ damagePanel: !this.display.damagePanel });
+    }
+
     toggleMovePrediction(): void {
         this.setDisplay({ movePrediction: !this.display.movePrediction });
         this.coopRun?.setPrediction(this.display.movePrediction);
@@ -703,13 +802,113 @@ export class GameClient implements GameFrameHandler {
         this.persist();
     }
 
-    // Gives the player the save as a file
+    // Gives the player the save as a file. One from a newer game goes as it
+    // is: this game's copy has dropped what it doesn't know.
     exportSave(): void {
-        saveFile("run-escape-save.json", exportSave(this.save), "application/json");
+        const text =
+            (this.newerSave && this.saveStore.read()) ??
+            exportSave(this.save, this.saveStore.gameVersion);
+        saveFile("run-escape-save.json", text, "application/json");
+    }
+
+    // Gives the player a save that couldn't be read, as it was
+    exportUnreadableSave(key: string): void {
+        const text = this.saveStore.readUnreadable(key);
+        if (text !== undefined) {
+            saveFile("run-escape-save-unreadable.json", text, "application/json");
+        }
+    }
+
+    deleteUnreadableSave(key: string): void {
+        this.saveStore.deleteUnreadable(key);
+        this.store.set({ unreadableSaves: this.saveStore.getUnreadable() });
+    }
+
+    closeUnreadableNotice(): void {
+        this.store.set({ unreadableSave: undefined });
+    }
+
+    // Saves here, and the tab that was saving stops
+    takeOverSave(): void {
+        this.saveLock.takeOver();
+    }
+
+    // Saves over the newer game's save from here on, losing what's new in it.
+    // The player's choice (and the only way out when a release is rolled
+    // back), but not for a newer format, which this game can't read.
+    saveOverNewer(): void {
+        if (!this.newerSave || this.newerSave.format) {
+            return;
+        }
+        this.newerSave = undefined;
+        this.saveStore.writeOver();
+        this.persist();
+        this.updateSaveBlock();
+    }
+
+    playWithoutSaving(): void {
+        this.store.set({ saveBlockClosed: true });
+    }
+
+    showSaveBlock(): void {
+        this.store.set({ saveBlockClosed: false });
+    }
+
+    private onSaveLock(held: boolean): void {
+        if (held) {
+            this.reloadSave();
+        } else {
+            this.updateSaveBlock();
+        }
+    }
+
+    // Reads the save again, as the tab that had it last left it
+    private reloadSave(): void {
+        const loaded = this.saveStore.load();
+        this.newerSave = loaded.newer;
+        this.saveNoRoom = loaded.noRoom === true;
+        this.useSave(loaded.save);
+        this.store.set({
+            // With no room for a copy, the panel saying so is the notice
+            unreadableSave: loaded.noRoom ? undefined : loaded.unreadable,
+            unreadableSaves: this.saveStore.getUnreadable(),
+        });
+        this.updateSaveBlock();
+        if (loaded.unreadable) {
+            // It's kept, so the fresh save can go in its place
+            this.persist();
+        } else {
+            this.store.set({ save: structuredClone(this.save) });
+        }
+    }
+
+    private updateSaveBlock(): void {
+        let saveBlock: SaveBlock | undefined;
+        if (this.saveLock.held === false) {
+            saveBlock = { kind: "otherTab" };
+        } else if (this.newerSave) {
+            saveBlock = { kind: "newerGame", ...this.newerSave };
+        } else if (this.saveNoRoom) {
+            saveBlock = { kind: "noRoom" };
+        }
+        // A new reason shows the panel again, and stops a solo run for it
+        // (co-op's goes on for the others)
+        const { saveBlock: was, saveBlockClosed } = this.store.getSnapshot();
+        const changed = saveBlock?.kind !== was?.kind;
+        this.store.set({ saveBlock, saveBlockClosed: saveBlockClosed && !changed });
+        if (saveBlock && changed && !this.coopRun) {
+            this.pause();
+        }
     }
 
     // Swaps in an imported save in place of this one
     replaceSave(save: SaveData): void {
+        this.useSave(save);
+        this.persist();
+    }
+
+    // Plays on with this save
+    private useSave(save: SaveData): void {
         this.save = save;
         // The adventurer and map picked might not be open in it
         const { characterId, mapId } = this.store.getSnapshot();
@@ -725,11 +924,13 @@ export class GameClient implements GameFrameHandler {
         if (!isHardUnlocked(save, this.store.getSnapshot().mapId)) {
             this.store.set({ hard: false });
         }
-        this.persist();
     }
 
     private persist(): void {
-        this.saveStore.save(this.save);
+        // Played without saving, it carries on in memory
+        if (this.saveLock.held && !this.newerSave && !this.saveNoRoom) {
+            this.saveStore.save(this.save);
+        }
         // A fresh object so React sees the change
         this.store.set({ save: structuredClone(this.save) });
     }
@@ -889,6 +1090,7 @@ export class GameClient implements GameFrameHandler {
             spawnX: map.spawn.x,
             spawnY: map.spawn.y,
             endless: game.endless,
+            hard: game.hard,
             party,
             focus,
         });
@@ -933,6 +1135,7 @@ export class GameClient implements GameFrameHandler {
         this.accumulator = 0;
         this.shownDps = 0;
         this.shownDpsTick = 0;
+        this.damageMeter.reset();
         this.appearanceVersions = [];
         this.decisionKey = "";
         this.autoAlchedUid = -1;
@@ -955,6 +1158,7 @@ export class GameClient implements GameFrameHandler {
             toasts: [],
             party: [],
             waitingOn: [],
+            revive: undefined,
         });
         this.updateHud(true);
         if (this.coopRun?.isHost && this.coopRun.waitingForLoad) {
@@ -971,8 +1175,7 @@ export class GameClient implements GameFrameHandler {
             return false;
         }
         if (this.coopRun) {
-            this.coopRun.act(action);
-            return true;
+            return this.coopRun.act(action);
         }
         const done = applyAction(sim, action);
         this.afterAction(action, done);
@@ -1075,7 +1278,10 @@ export class GameClient implements GameFrameHandler {
         if (!sim) {
             return false;
         }
-        if (this.coopRun && sim.rerollsLeft <= 0) {
+        // Checked here too in co-op: an action the host turns away still counts
+        // as this decision's answer (CoopRun.act), so a refused reroll would
+        // hold up the real pick
+        if (this.coopRun && (sim.rerollsLeft <= 0 || sim.choosingHilt)) {
             this.sounds.denied();
             return false;
         }
@@ -1188,6 +1394,7 @@ export class GameClient implements GameFrameHandler {
             result: undefined,
             party: [],
             waitingOn: [],
+            revive: undefined,
         });
     }
 
@@ -1216,9 +1423,9 @@ export class GameClient implements GameFrameHandler {
         const newTrophies = isDevMap(sim.map.id)
             ? []
             : result.trophies.filter((id) => !this.save.trophies.includes(id));
-        // A co-op run's numbers can come from another player's modified game
-        const quests =
-            sim.heroes.length > 1 && hasBadNumber(result) ? [] : recordRun(this.save, result);
+        // A co-op run's numbers can come from another player's modified game,
+        // and a NaN in a solo one's would come back from the save as 0 coins
+        const quests = hasBadNumber(result) ? [] : recordRun(this.save, result);
         this.persist();
         const unlockedMap = locked.find((m) => isMapUnlocked(this.save, m.id));
         const unlockedCharacters = lockedCharacters.filter((c) =>
@@ -1229,11 +1436,12 @@ export class GameClient implements GameFrameHandler {
             // Ready for the next run
             this.store.set({ mapId: unlockedMap.id, endless: false, hard: false });
         }
+        // Teammates' pages too, unless one of them has a number that isn't
+        const players = getPlayerResultViews(sim);
         this.store.set({
             result: {
                 ...result,
-                characterName: getCharacter(sim.characterId).name,
-                damage: getDamageViews(sim, result.stats),
+                players: players.some(hasBadNumber) ? players.filter((p) => p.isLocal) : players,
                 bossKills: getBossKillViews(result.stats),
                 endlessRecord,
                 firstHardWin,
@@ -1306,6 +1514,10 @@ export class GameClient implements GameFrameHandler {
         }
         if (code === "KeyQ" && this.sim) {
             this.toggleQuestTracker();
+            return;
+        }
+        if (code === "Tab" && this.isPlaying()) {
+            this.toggleDamagePanel();
             return;
         }
         const sim = this.sim;
@@ -1636,7 +1848,24 @@ export class GameClient implements GameFrameHandler {
                     this.store.toast(event.message);
                     break;
                 case "heroDown":
-                    this.store.toast("You're down! Watch the rest of your party fight on.", 5000);
+                    this.store.toast(
+                        sim.canBeRevived(sim.heroes[sim.focus])
+                            ? "You're down! A teammate standing over you for a few seconds can revive you."
+                            : "You're down! Watch the rest of your party fight on.",
+                        5000,
+                    );
+                    break;
+                case "heroRevived":
+                    this.store.toast(
+                        `${sim.heroes[event.by].name} revives you! Nothing can hurt you for ${REVIVE_IMMUNITY_SECONDS / 60} minutes.`,
+                        6000,
+                    );
+                    break;
+                case "extraRevive":
+                    this.store.toast(
+                        `A teammate can revive you once more (${describeRevives(sim.revivesLeftFor(sim.heroes[sim.focus]))}).`,
+                        6000,
+                    );
                     break;
                 case "visitor":
                     if (event.message) {
@@ -1658,7 +1887,22 @@ export class GameClient implements GameFrameHandler {
     private teammateToast(sim: Sim, name: string, event: SimEvent): void {
         switch (event.type) {
             case "heroDown":
-                this.store.toast(`${name} is down!`, 5000);
+                this.store.toast(
+                    sim.canBeRevived(sim.heroes[event.hero!])
+                        ? `${name} is down! Stand over them to revive them.`
+                        : `${name} is down!`,
+                    5000,
+                );
+                break;
+            case "heroRevived":
+                this.store.toast(
+                    event.by === sim.focus
+                        ? `You revive ${name}!`
+                        : `${sim.heroes[event.by].name} revives ${name}!`,
+                );
+                break;
+            case "extraRevive":
+                this.store.toast(`${name} can be revived once more.`);
                 break;
             case "heroLeft":
                 this.store.toast(`${name} left the game.`);
@@ -1768,6 +2012,8 @@ export class GameClient implements GameFrameHandler {
             this.shownDps = sim.dps;
             this.shownDpsTick = sim.tick;
         }
+        this.damageMeter.sample(sim.tick, sim.damageBySource);
+        const meter = this.damageMeter.read();
         const hud: HudView = {
             mapId: sim.map.id,
             round: sim.endless ? sim.round : undefined,
@@ -1784,6 +2030,7 @@ export class GameClient implements GameFrameHandler {
             kills: sim.kills,
             coins: sim.coins,
             dps: this.shownDps,
+            otherDps: meter.otherPerSecond,
             maxWeapons: sim.maxWeapons,
             maxPassives: sim.maxPassives,
             weapons: sim.weapons.map((w) => {
@@ -1795,10 +2042,12 @@ export class GameClient implements GameFrameHandler {
                     level: w.level,
                     maxLevel: w.def.levels.length,
                     iconObjId: level.objId ?? w.def.iconObjId,
-                    detail: w.bonus > 0 ? `+${Math.round(w.bonus * 100)}% damage` : "",
+                    detail: w.bonus > 0 ? `${formatWeaponBonus(w.bonus)} damage` : "",
                     stats: weaponStats(w.def, level).map(formatWeaponStat),
                     evolution: getEvolutionView(sim, w),
                     rarityColor: RARITIES[w.def.rarity].color,
+                    dps: meter.perSecond[`weapon:${w.def.id}`] ?? 0,
+                    damage: meter.totals[`weapon:${w.def.id}`] ?? 0,
                 };
             }),
             passives: sim.passives.map((p) => {
@@ -1839,10 +2088,17 @@ export class GameClient implements GameFrameHandler {
                     maxHp: hero.player.maxHp,
                     down: hero.down,
                     left: hero.left,
+                    revivable: sim.canBeRevived(hero),
+                    reviveProgress: reviveProgress(hero),
+                    immune: sim.isImmune(hero),
                     id: this.coopPlayerIds[hero.index],
                 }));
             if (JSON.stringify(party) !== JSON.stringify(this.store.getSnapshot().party)) {
                 this.store.set({ party });
+            }
+            const revive = getReviveView(sim);
+            if (JSON.stringify(revive) !== JSON.stringify(this.store.getSnapshot().revive)) {
+                this.store.set({ revive });
             }
         }
     }
@@ -1981,4 +2237,42 @@ export class GameClient implements GameFrameHandler {
             }
         }
     }
+}
+
+// "2 revives left"
+function describeRevives(left: number): string {
+    return `${left} ${left === 1 ? "revive" : "revives"} left`;
+}
+
+// How far along a downed hero's revive is, 0 to 1
+function reviveProgress(hero: Hero): number {
+    return hero.revive ? Math.min(1, hero.revive.ticks / (REVIVE_SECONDS * TICKS_PER_SECOND)) : 0;
+}
+
+// The revive this player's part of, if any: down and waiting for one, or
+// reviving a teammate
+function getReviveView(sim: Sim): ReviveView | undefined {
+    const own = sim.heroes[sim.focus];
+    if (sim.runOver || sim.state !== "playing") {
+        return undefined;
+    }
+    if (sim.canBeRevived(own)) {
+        const reviver = own.revive && sim.heroes[own.revive.hero];
+        return {
+            name: reviver?.name,
+            reviving: false,
+            progress: reviveProgress(own),
+            revivesLeft: sim.revivesLeftFor(own),
+        };
+    }
+    const downed = sim.heroes.find((hero) => hero.revive?.hero === sim.focus);
+    if (downed) {
+        return {
+            name: downed.name,
+            reviving: true,
+            progress: reviveProgress(downed),
+            revivesLeft: sim.revivesLeftFor(downed),
+        };
+    }
+    return undefined;
 }
