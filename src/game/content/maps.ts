@@ -330,7 +330,7 @@ export const MAPS: MapDef[] = [
         id: "phosani",
         name: "Phosani's Nightmare",
         description:
-            "The Nightmare's hard mode, on its own: her dream, ringed with its spikes, in the " +
+            "The Nightmare's hard mode, on its own: her dream, walled round in the stone of the " +
             "Sisterhood Sanctuary beneath Slepe. No waves, no picks and no items: " +
             "the Armadyl crossbow, and her. She rises as you arrive, quicker than before and " +
             "with more at once, and every hit of hers is shown before it lands. Her totems' " +

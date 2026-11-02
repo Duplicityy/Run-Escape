@@ -1411,7 +1411,7 @@ lists what a map square is made of, level by level (the Sanctuary's floor is on 
 arena is square 60,155), and `loc-sheet.ts` and `model-bounds.ts` then say what each loc is. It's a boss
 room on purpose, against the rule above, because the ask was the real arena. Its chamber is scenery
 only, every tile of it blocked, since enemies turn up anywhere walkable within 24 tiles of the player
-and a ring of spikes would strand them outside: a sealed arena needs nothing walkable past its edge.
+and a ring of scenery would strand them outside: a sealed arena needs nothing walkable past its edge.
 
 - List the recipe in `maps/shippedMaps.ts`. `getRecipe` and `check-maps` read that list. `check-maps` only picks
   up ids in it or starting `scaperune_` (but not the palette, prefabs and cliffs sheets).

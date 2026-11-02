@@ -20,8 +20,8 @@ import { BuildContext, MapRecipe } from "../recipe";
 // The Sisterhood Sanctuary: where Phosani's Nightmare is fought (content/phosani.ts), on its
 // own. It's the real fight's two places in one, both read from the cache's own squares. The
 // arena is The Nightmare's dream (map square 60,155): her dark floor, dead grass
-// and nightmare flowers over it, and a ring of dark spikes round it with a gate north and
-// south, each closed by its barrier. Round that is the chamber she sleeps in under Slepe
+// and nightmare flowers over it, walled round in the Sanctuary's own stone with a gate north
+// and south, each closed by its barrier. Round that is the chamber she sleeps in under Slepe
 // (square 59,152): the Sisterhood's masonry and rock blocks, Lumiere's candles, braziers,
 // hooded statues, coffins, the chains she broke, the Pool of Nightmares and Phosani's coffin
 // beyond the north gate, the scythe statues and the stairs down at the south one, and the
@@ -76,10 +76,10 @@ const DREAM_FLOWER = 37633;
 // Mostly the light tufts: the thick one is 336 triangles, and there are hundreds of them
 export const DEAD_GRASS = [37717, 37717, 37718, 37718, 37718, 37716];
 export const NIGHTMARE_FLOWERS = [37712, 37713, 37714, 37714, 37715, 37710];
-// The Sanctuary's floor: bones and pebbles (clip 0), and rubble and cracked flags
+// The Sanctuary's floor: bones and pebbles (clip 0), and Morytania's rubble. Its cracked flags
+// (37800 to 37809) are left out: from the camera they read as loose chequered tiles.
 export const CHAMBER_FLOOR = [
-    37786, 37787, 37788, 37789, 37790, 37791, 37792, 37793, 37800, 37801, 37802, 37803, 37804,
-    37805, 37806, 37807, 37808, 37809, 12705, 12910, 12911,
+    37786, 37787, 37788, 37789, 37790, 37791, 37792, 37793, 12705, 12910, 12911,
 ];
 // Blood, the Theatre's and the Nightmare's
 export const BLOOD = [652, 653, 654, 37846, 37847, 37848];
@@ -88,31 +88,18 @@ export const CANDLES = [12301, 12302, 12302, 11472, 11473];
 
 // What blocks, [loc id, tiles across, tiles deep] unturned. None of it stands on the arena.
 type Solid = [id: number, sizeX: number, sizeY: number];
-// The dream's spikes, the ones that stand on the ground: the rest of the ring's pieces float
-const SPIKES_ACROSS: Solid[] = [
-    [37647, 3, 2],
-    [37648, 3, 2],
-    [37650, 3, 2],
-    [37649, 3, 2],
-];
-const SPIKES_ALONG: Solid[] = [
-    [37652, 2, 3],
-    [37656, 2, 3],
-    [37657, 2, 3],
-];
-const GATE_POST: Solid = [37865, 1, 1];
+// The barrier across each gate, the one piece of the dream's own ring that reads from the
+// camera. Its spikes (37646 to 37657) are fragments of a wall stacked over several levels and
+// show as loose shards on their own, its posts (37865) as flat plates, its fallen trunks
+// (37709) as black bars, and its gates (37637, 37639) as a dark canopy from above.
 const BARRIER: Solid = [37730, 1, 5];
-// The gates themselves, the north one and its mirror
-const NORTH_GATE: Solid = [37637, 4, 5];
-const SOUTH_GATE: Solid = [37639, 4, 5];
-// The dream's dead trees, its black trunks and its bats
+// The dream's dead trees and its bats
 const DEAD_TREES: Solid[] = [
     [37706, 2, 2],
     [37706, 2, 2],
     [37707, 3, 3],
 ];
 const GREAT_TREE: Solid = [37708, 6, 6];
-const TRUNK: Solid = [37709, 1, 5];
 const BAT: Solid = [37724, 2, 2];
 
 // The Sanctuary's kit
@@ -174,15 +161,9 @@ const DEAD_RAIDERS: Solid[] = [
 
 // Everything above that blocks, for a test to build the map without the cache
 export const SOLID_LOCS: Solid[] = [
-    ...SPIKES_ACROSS,
-    ...SPIKES_ALONG,
-    GATE_POST,
     BARRIER,
-    NORTH_GATE,
-    SOUTH_GATE,
     ...DEAD_TREES,
     GREAT_TREE,
-    TRUNK,
     BAT,
     ...PILASTERS,
     ROCK_BLOCK,
@@ -429,53 +410,44 @@ function paintFloors(sanctuary: Sanctuary): void {
     }
 }
 
-// The ring round the arena: the dream's dark posts every three tiles on the tile past its edge,
-// its spikes and fallen black trunks behind them (the spikes alone are too small and dark to
-// read from the camera), and a gate north and south: its posts, its barrier across the way,
-// and the gate itself standing over it
+// The ring round the arena: the Sanctuary's own wall on the tile past its edge, facing in, a
+// pilaster at each corner and either side of the gate north and south, and the barrier across
+// each gate. The dream's own ring pieces don't read from the camera (see BARRIER).
 function placeRing(sanctuary: Sanctuary): void {
-    const { rng } = sanctuary;
-    const inGate = (tile: number) => Math.abs(tile + 0.5 - MIDDLE) <= GATEWAY_HALF + 0.5;
-    for (let along = ARENA_MIN; along <= ARENA_MAX; along += 3) {
+    const { ground, rng } = sanctuary;
+    const { locs } = ground.grid;
+    const wall = (x: number, y: number, type: number, rotation: number) =>
+        locs.push({ id: SANCTUARY_WALL, type, rotation, level: 0, x, y });
+    const low = ARENA_MIN - 1;
+    const high = ARENA_MAX + 1;
+    const inGate = (tile: number) => tile >= MIDDLE - GATE_HALF && tile <= MIDDLE + GATE_HALF;
+    for (let along = ARENA_MIN; along <= ARENA_MAX; along++) {
+        // Each on its tile's inner edge, facing the arena
         if (!inGate(along)) {
-            sanctuary.solid(GATE_POST, ...NORTH(along - MIDDLE, 1));
-            sanctuary.solid(GATE_POST, ...SOUTH(along - MIDDLE, 1));
+            wall(along, low, LOC_WALL, WALL_NORTH);
+            wall(along, high, LOC_WALL, WALL_SOUTH);
         }
-        sanctuary.solid(GATE_POST, ...WEST(along - MIDDLE, 1));
-        sanctuary.solid(GATE_POST, ...EAST(along - MIDDLE, 1));
+        wall(low, along, LOC_WALL, WALL_EAST);
+        wall(high, along, LOC_WALL, WALL_WEST);
     }
-    // The trunks lie along the ring, five tiles long, two tiles out
-    for (const along of [-30, -20, 12, 26]) {
-        sanctuary.solid(TRUNK, ...NORTH(along, 2), 1);
-        sanctuary.solid(TRUNK, ...SOUTH(along, 2), 1);
-        sanctuary.solid(TRUNK, ...WEST(along, 2), 0);
-        sanctuary.solid(TRUNK, ...EAST(along, 2), 0);
+    // Corners turn to meet both inner edges: a corner piece's rotation is the corner it turns
+    wall(low, low, LOC_WALL_CORNER, 1);
+    wall(low, high, LOC_WALL_CORNER, 2);
+    wall(high, high, LOC_WALL_CORNER, 3);
+    wall(high, low, LOC_WALL_CORNER, 0);
+    for (const [x, y] of [
+        [low - 1, low - 1],
+        [low - 1, high],
+        [high, high],
+        [high, low - 1],
+    ]) {
+        sanctuary.solid(pick(rng, PILASTERS), x, y);
     }
-    // Then the spikes, three tiles at a time, where the trunks left room
-    const low = ARENA_MIN - 3;
-    const high = ARENA_MAX + 2;
-    for (let along = ARENA_MIN - 2; along <= ARENA_MAX; along += 3) {
-        if (inGate(along) || inGate(along + 2)) {
-            continue;
-        }
-        sanctuary.solid(pick(rng, SPIKES_ACROSS), along, low, rng() < 0.5 ? 0 : 2);
-        sanctuary.solid(pick(rng, SPIKES_ACROSS), along, high, rng() < 0.5 ? 0 : 2);
-    }
-    for (let along = ARENA_MIN; along <= ARENA_MAX - 2; along += 3) {
-        sanctuary.solid(pick(rng, SPIKES_ALONG), low, along, rng() < 0.5 ? 0 : 2);
-        sanctuary.solid(pick(rng, SPIKES_ALONG), high, along, rng() < 0.5 ? 0 : 2);
-    }
-    for (const [side, gate, turn] of [
-        [NORTH, NORTH_GATE, 1],
-        [SOUTH, SOUTH_GATE, 3],
-    ] as const) {
-        sanctuary.solid(GATE_POST, ...side(-GATE_HALF - 1, 1), 0, 0, true);
-        sanctuary.solid(GATE_POST, ...side(GATE_HALF + 1, 1), 0, 0, true);
-        // The barrier's five long, laid across the way between the posts
+    for (const side of [NORTH, SOUTH]) {
+        // Pilasters either side of the gate, and the barrier across it, five long
+        sanctuary.solid(pick(rng, PILASTERS), ...side(-GATE_HALF - 3, 1), 0, 0, true);
+        sanctuary.solid(pick(rng, PILASTERS), ...side(GATE_HALF + 2, 1), 0, 0, true);
         sanctuary.solid(BARRIER, ...side(-GATE_HALF, 1), 1, 0, true);
-        // The gate stands over the way, four deep, from three tiles out
-        const [x, y] = side(-GATE_HALF, side === NORTH ? 3 : 6);
-        sanctuary.solid(gate, x, y, turn, 0, true);
     }
 }
 

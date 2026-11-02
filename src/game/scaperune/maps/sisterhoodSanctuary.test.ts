@@ -80,43 +80,37 @@ describe("the Sisterhood Sanctuary", () => {
         expect(heights[size / 2 + 2 * corners]).toBeGreaterThan(floor + 60);
     });
 
-    it("rings her square with the dream's spikes, with a gate north and south", () => {
-        const spikes = map.grid.locs.filter(
-            (loc) =>
-                !walkThrough.has(loc.id) &&
-                loc.type !== LOC_WALL &&
-                (loc.x === arenaMin - 2 ||
-                    loc.x === arenaMax + 1 ||
-                    loc.y === arenaMin - 2 ||
-                    loc.y === arenaMax + 1),
-        );
-        expect(spikes.length).toBeGreaterThan(70);
-        // The way through each gate is open to the chamber: no spike stands on it
-        for (const y of [arenaMin - 2, arenaMax + 1]) {
-            for (let x = middle - 2; x <= middle + 1; x++) {
-                const onIt = spikes.some(
-                    (loc) =>
-                        loc.y <= y &&
-                        loc.y + context.locs(loc.id).sizeY > y &&
-                        loc.x <= x &&
-                        loc.x + context.locs(loc.id).sizeX > x &&
-                        context.locs(loc.id).sizeX === 3,
-                );
-                expect(onIt, `${x},${y}`).toBe(false);
+    it("walls her square round, with a gate north and south", () => {
+        const onRing = (loc: { x: number; y: number }) =>
+            loc.x >= arenaMin - 1 &&
+            loc.x <= arenaMax + 1 &&
+            loc.y >= arenaMin - 1 &&
+            loc.y <= arenaMax + 1 &&
+            (loc.x === arenaMin - 1 ||
+                loc.x === arenaMax + 1 ||
+                loc.y === arenaMin - 1 ||
+                loc.y === arenaMax + 1);
+        const ring = map.grid.locs.filter((loc) => loc.type === LOC_WALL && onRing(loc));
+        // A wall on every tile of the ring but the five of each gate
+        expect(ring.length).toBe(64 * 4 - 5 * 2);
+        for (const y of [arenaMin - 1, arenaMax + 1]) {
+            for (let x = middle - 2; x <= middle + 2; x++) {
+                expect(
+                    ring.some((loc) => loc.x === x && loc.y === y),
+                    `${x},${y}`,
+                ).toBe(false);
             }
         }
-        // And the chamber has a wall all round
-        const walls = map.grid.locs.filter((loc) => loc.type === LOC_WALL);
+        // And the chamber has a wall of its own all round, further out
+        const walls = map.grid.locs.filter((loc) => loc.type === LOC_WALL && !onRing(loc));
         expect(walls.length).toBeGreaterThan(300);
     });
 
     it("has the gates, and what stands beyond each of them", () => {
         const count = (id: number) => map.grid.locs.filter((loc) => loc.id === id).length;
-        // The gates, their barriers and their posts, north and south
-        expect(count(37637)).toBe(1);
-        expect(count(37639)).toBe(1);
+        // The barriers, north and south, and the pilasters at the gates and the corners
         expect(count(37730)).toBe(2);
-        expect(count(37865)).toBeGreaterThan(60);
+        expect(count(37783) + count(37784)).toBeGreaterThanOrEqual(8 + 16);
         // The Pool of Nightmares and Phosani's coffin beyond the north gate, the scythe
         // statues and the stairs beyond the south one
         expect(count(37825)).toBe(1);
