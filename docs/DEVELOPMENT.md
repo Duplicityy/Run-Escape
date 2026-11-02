@@ -111,9 +111,17 @@ proxy, tell it what's in front with `PROXY` (or `--proxy=` after `npm run serve 
 | `local`        | Caddy, nginx or a container in front, on the same machine or a private network | that proxy's: the last address in its `X-Forwarded-For`, which it adds itself (Caddy does by default, nginx with the line above) |
 | `cloudflare`   | Cloudflare in front, with or without a local proxy behind it                   | Cloudflare's `CF-Connecting-IP`, only from Cloudflare's own addresses (and a local proxy's, as `local`)                          |
 
+**Only your proxy should be able to reach the relay.** `local` (and `cloudflare`, for the proxy
+behind it) believes `X-Forwarded-For` from any address on the machine or a private network, so
+anyone else who can connect from one could say they're anyone and get round the limits. Set
+`HOST=127.0.0.1` on the standalone relay or `serve.mjs`, with the proxy on the same machine. In
+Docker, leave `HOST` alone inside the container and publish the port on the host's loopback
+(`-p 127.0.0.1:8080:8080`): Docker's own proxy hands on connections from anywhere as if they came
+from its private network.
+
 The relay takes 800 connections in all, so give it room with `LimitNOFILE` if you raise that. A
 connection in no room that's done nothing for 10 minutes is closed, as is a room left alone for
-half an hour. Set `HOST=127.0.0.1` on the standalone relay so only your proxy can reach it.
+half an hour.
 
 Headers from anyone else are ignored, so they can't be made up to get round the limits. Behind a
 proxy with `PROXY` unset, the relay says so once. `TRUSTED_PROXIES` (`"10.1.2.3,10.9.0.0/16"`)
@@ -128,19 +136,29 @@ Its limits, at the top of `server/coop-relay.mjs`:
 | What                          | Limit                                                                                                 |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Rooms on the relay            | 500, or `MULTIPLAYER_MAX_ROOMS`; past that, making one says they're all taken (and the menu shows it) |
-| Connections from one address  | 16 (a household or LAN party behind one address)                                                      |
-| Rooms hosted from one address | 4                                                                                                     |
+| Connections from one address  | 16 (a household or LAN party behind one address), and 64 from one IPv6 /48                            |
+| Rooms hosted from one address | 4, and 16 from one IPv6 /48                                                                           |
 | Rooms made from one address   | 10 a minute                                                                                           |
-| Wrong room codes              | 20 a minute from one address, then it has to wait                                                     |
-| A room with nothing happening | closed after 30 minutes (pings and looking at the list don't count)                                   |
+| Rooms joined from one address | 12 a minute (joining and leaving are each a room update for everyone in it)                           |
+| Wrong room codes              | 20 a minute from one address or IPv6 /48, then it has to wait                                         |
+| A room with nothing happening | closed after 30 minutes (pings, looking at the list, and players' own updates and names don't count)  |
+| A room hearing how it is      | at most once each 250 ms, with the latest, however often it changes                                   |
+| What a host sends its room    | 64 KB/s (a run's start and frames), saving up to 256 KB; a host past it is dropped                    |
+| A guest's input for the host  | 1 KB each and 60 a second; past that it goes no further                                               |
+| A player's own update         | 40 KB, or it's ignored                                                                                |
 | A player's loadout            | 16 KB, or it's dropped                                                                                |
-| A message                     | 256 KB, in 16 pieces at most, nested 16 deep at most, and UTF-8                                       |
-| Frames from one connection    | 400 a second, empty ones and pings included                                                           |
+| A message                     | 256 KB, in 16 pieces at most, and UTF-8; nested 16 deep at most, apart from the host's frames         |
+| One connection                | 400 frames a second (empty ones and pings included) and 512 KB a second, or it's dropped              |
 | Waiting to go out to one      | 1 MB: a connection that stops reading is dropped                                                      |
 
-An IPv6 address counts by its /64, which is what one home or server gets. A kicked player can't
-rejoin that room from the same address. Anything wrong with one message (it isn't JSON, it's too
-deep, it throws) drops that connection and never the relay, and a request whose path isn't a URL
+An IPv6 address counts by its /64, which is what one home or server gets, and its /48 has looser
+limits of its own, as one person can easily have all of a /48's /64s. A kicked player can't rejoin
+that room from the same address, or from anywhere in the same IPv6 /48. A room update carries
+everyone's loadout to everyone, so the relay encodes it once and sends it at most each 250 ms
+however fast the room changes. The host's frames, nearly all of what comes through, go on as they
+came without the depth check: the relay never encodes them again, which is what a deep message
+would break. A message that isn't a JSON object is ignored. One that isn't UTF-8, is too deep or
+makes the relay throw drops that connection, never the relay, and a request whose path isn't a URL
 is a 400. `serve.mjs` turns away WebSocket upgrades to any other path rather than leaving them
 open, and answers `Range` with 206, as the cache's download resumes with one.
 
