@@ -9,6 +9,10 @@ the version in the corner).
 
 - Right-click a bought skill to refund one rank, including maxed skills, without resetting the rest.
 
+### Fixed
+
+- Coin icons stay visible while a changed stack size loads after buying or refunding skills.
+
 ## 0.23.0 - 2026-11-02
 
 ### Added
