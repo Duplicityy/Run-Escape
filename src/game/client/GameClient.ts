@@ -637,6 +637,8 @@ export class GameClient implements GameFrameHandler {
                 }
             }
             this.coopRun = undefined;
+            // Solo now: a hidden tab no longer needs stepping
+            this.stopBackgroundTicker();
             this.store.toast(
                 "Lost the connection to the others. The run goes on without them.",
                 6000,
@@ -1096,8 +1098,7 @@ export class GameClient implements GameFrameHandler {
             return false;
         }
         if (this.coopRun) {
-            this.coopRun.act(action);
-            return true;
+            return this.coopRun.act(action);
         }
         const done = applyAction(sim, action);
         this.afterAction(action, done);

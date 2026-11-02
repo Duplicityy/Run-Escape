@@ -29,6 +29,11 @@ the version in the corner).
 - Co-op: each player's Toktz-mej-tal burns ground of its own: another player's pulse no longer
   takes over your fire or puts it out.
 - Durial321's task says what it takes: surviving 6:06 in Falador, not 6 minutes.
+- Co-op: a double click or a quick second key on a level up, casket or random event no longer
+  answers the next one too, unseen.
+- Pressing Enter or Space on a focused casket button no longer resolves the next casket as well.
+- Co-op: a tab left in the background no longer builds up effects to draw all at once when you come
+  back.
 
 ## 0.22.1 - 2026-11-02
 

@@ -34,6 +34,20 @@ export const DECIDE_AFTER_MS = 20_000;
 // can do, and with moves kept to the latest it keeps what the host sends small
 // however much a guest sends while it waits.
 const MAX_QUEUED_ACTIONS = 8;
+// Actions that answer a decision (a level up, a casket, a random event), sent
+// once for each: a double click or a second key press before the host's frame
+// comes back is dropped
+const DECISIONS: ReadonlySet<CoopAction["kind"]> = new Set([
+    "choose",
+    "reroll",
+    "skip",
+    "chest",
+    "event",
+    "leaveEvent",
+]);
+// After this long with the decision unchanged (the host turned the action
+// away), it can be sent again
+const DECISION_RESEND_MS = 3000;
 
 export type CoopLink = {
     sendUp(message: UpMessage): void;
@@ -63,6 +77,8 @@ export class CoopRun {
     private lastMove: [number, number] = [0, 0];
     private moveSentAt = -Infinity;
     private moveSeqSent = 0;
+    // The decision the local player last answered, and when
+    private sentDecision?: { on: object; itemId?: string; at: number };
     // The host's: since when the run's been waiting on each hero
     private readonly waitingSince = new Map<number, number>();
     // The copies have gone apart (it's said once)
@@ -147,12 +163,47 @@ export class CoopRun {
         }
     }
 
-    // Something the local player did, applied when the frame it's in comes
-    act(action: CoopAction): void {
+    // Something the local player did, applied when the frame it's in comes.
+    // False when it's a second answer to a decision already answered: the
+    // first resolves it, and the second would land on the next one unseen.
+    act(action: CoopAction): boolean {
+        if (DECISIONS.has(action.kind)) {
+            const decision = this.decision();
+            const now = this.now();
+            const sent = this.sentDecision;
+            if (
+                decision &&
+                sent &&
+                sent.on === decision.on &&
+                sent.itemId === decision.itemId &&
+                now - sent.at < DECISION_RESEND_MS
+            ) {
+                return false;
+            }
+            this.sentDecision = decision && { ...decision, at: now };
+        }
         if (this.isHost) {
             this.queue({ frame: 0, hero: this.sim.focus, action });
         } else {
             this.link.sendUp({ action });
+        }
+        return true;
+    }
+
+    // What the local player is deciding on now: their level up's choices, the
+    // casket in front of them (and its item, which a reroll changes), or a
+    // random event's offer. Each is a new object once it's been answered.
+    private decision(): { on: object; itemId?: string } | undefined {
+        const sim = this.sim;
+        switch (sim.state) {
+            case "levelUp":
+                return { on: sim.choices };
+            case "chest":
+                return sim.chest && { on: sim.chest, itemId: sim.chest.itemId };
+            case "event":
+                return sim.offer && { on: sim.offer };
+            default:
+                return undefined;
         }
     }
 
