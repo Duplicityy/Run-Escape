@@ -44,6 +44,7 @@ export type SaveData = {
     upgrades: Record<string, number>;
     // Coins spent on upgrades, given back by a refund
     upgradesSpent: number;
+    upgradeRefunds?: Record<string, number[]>;
     unlockedCharacters: string[];
     // Ids of the weapons, passives and casket items brought in by map tasks
     unlockedItems: string[];
@@ -128,6 +129,27 @@ export function migrateSave(raw: unknown): SaveData {
         }
     }
     save.upgradesSpent = num(data.upgradesSpent, estimateSpent(save.upgrades));
+    if (data.upgradeRefunds && typeof data.upgradeRefunds === "object") {
+        const refunds: Record<string, number[]> = {};
+        let total = 0;
+        let valid = true;
+        for (const [id, rank] of Object.entries(save.upgrades)) {
+            const costs = data.upgradeRefunds[id];
+            if (
+                !Array.isArray(costs) ||
+                costs.length !== rank ||
+                !costs.every((cost) => Number.isSafeInteger(cost) && cost >= 0)
+            ) {
+                valid = false;
+                break;
+            }
+            refunds[id] = [...costs];
+            total += costs.reduce((sum, cost) => sum + cost, 0);
+        }
+        if (valid && total === save.upgradesSpent) {
+            save.upgradeRefunds = refunds;
+        }
+    }
     if (Array.isArray(data.unlockedCharacters)) {
         for (const id of data.unlockedCharacters) {
             const known = CHARACTERS.some((c) => c.id === id) || RETIRED_CHARACTERS.includes(id);
@@ -268,10 +290,59 @@ export function buyUpgrade(save: SaveData, upgradeId: string): boolean {
     if (cost === undefined || save.coins < cost) {
         return false;
     }
+    const refunds = getUpgradeRefunds(save);
+    (refunds[upgradeId] ??= []).push(cost);
     save.coins -= cost;
     save.upgradesSpent += cost;
     save.upgrades[upgradeId] = (save.upgrades[upgradeId] ?? 0) + 1;
     return true;
+}
+
+export function refundUpgrade(save: SaveData, upgradeId: string): boolean {
+    const upgrade = SHOP_UPGRADE_BY_ID.get(upgradeId);
+    const rank = save.upgrades[upgradeId] ?? 0;
+    if (!upgrade || rank <= 0) {
+        return false;
+    }
+    const refunds = getUpgradeRefunds(save);
+    const refund = refunds[upgradeId].pop()!;
+    save.coins += refund;
+    save.upgradesSpent -= refund;
+    if (rank === 1) {
+        delete save.upgrades[upgradeId];
+        delete refunds[upgradeId];
+    } else {
+        save.upgrades[upgradeId] = rank - 1;
+    }
+    if (getTotalUpgradesBought(save) === 0) {
+        delete save.upgradeRefunds;
+    }
+    return true;
+}
+
+function getUpgradeRefunds(save: SaveData): Record<string, number[]> {
+    if (save.upgradeRefunds) {
+        return save.upgradeRefunds;
+    }
+    const refunds: Record<string, number[]> = {};
+    let remaining = save.upgradesSpent;
+    let weightLeft = 0;
+    for (const [id, rank] of Object.entries(save.upgrades)) {
+        const upgrade = SHOP_UPGRADE_BY_ID.get(id)!;
+        refunds[id] = Array.from({ length: rank }, (_, index) => getUpgradeCost(upgrade, index, 0));
+        weightLeft += refunds[id].reduce((sum, weight) => sum + weight, 0);
+    }
+    for (const costs of Object.values(refunds)) {
+        for (let index = 0; index < costs.length; index++) {
+            const weight = costs[index];
+            const refund = Math.round((remaining * weight) / weightLeft);
+            costs[index] = refund;
+            remaining -= refund;
+            weightLeft -= weight;
+        }
+    }
+    save.upgradeRefunds = refunds;
+    return refunds;
 }
 
 // Sells every upgrade back for what it cost (VS lets you refund)
@@ -279,6 +350,7 @@ export function refundUpgrades(save: SaveData): void {
     save.coins += save.upgradesSpent;
     save.upgradesSpent = 0;
     save.upgrades = {};
+    delete save.upgradeRefunds;
 }
 
 // For saves from before spending was tracked: what buying these ranks one

@@ -2,7 +2,7 @@
 import { emptyStats } from "../content/types";
 import { Sim } from "../core/Sim";
 import { hasBadNumber } from "../core/lockstep";
-import { LoadedSave, SaveData, SaveStore, createSave } from "../core/save";
+import { LoadedSave, SaveData, SaveStore, buyUpgrade, createSave } from "../core/save";
 import { makeGrid } from "../core/world/testGrid";
 import { DamageMeter } from "./DamageMeter";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
@@ -327,6 +327,34 @@ describe("saving", () => {
         };
         return { client, store, saved, writeOver, setStored, lockChanged };
     }
+
+    test("a single skill refund is saved and refreshes the shop", () => {
+        expect.hasAssertions();
+        const { client, store, saved } = createSaving(true);
+        client.save.coins = 10000;
+        buyUpgrade(client.save, "strength");
+        buyUpgrade(client.save, "hitpoints");
+        const before = structuredClone(client.save);
+        buyUpgrade(client.save, "strength");
+        client.refundUpgrade("strength");
+        expect(client.save).toEqual(before);
+        expect(saved).toEqual([before]);
+        expect(store.getSnapshot().save).toEqual(before);
+        client.refundUpgrade("unknown");
+        expect(saved).toHaveLength(1);
+    });
+
+    test("a single skill refund respects another tab's save lock", () => {
+        expect.hasAssertions();
+        const { client, store, saved, lockChanged } = createSaving(true);
+        client.save.coins = 10000;
+        buyUpgrade(client.save, "strength");
+        lockChanged(false);
+        client.refundUpgrade("strength");
+        expect(client.save.upgrades).toEqual({});
+        expect(store.getSnapshot().save.coins).toBe(10000);
+        expect(saved).toEqual([]);
+    });
 
     test("nothing's saved while another tab has the game", () => {
         const { client, store, saved, lockChanged } = createSaving(true);

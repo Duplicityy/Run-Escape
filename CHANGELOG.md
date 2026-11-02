@@ -5,6 +5,10 @@ the version in the corner).
 
 ## Unreleased
 
+### Added
+
+- Right-click a bought skill to refund one rank, including maxed skills, without resetting the rest.
+
 ## 0.23.0 - 2026-11-02
 
 ### Added

@@ -1098,8 +1098,17 @@ function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
                                 className={
                                     "ui-card ui-shop-card" + (affordable ? "" : " ui-card-dim")
                                 }
-                                disabled={cost === undefined}
-                                onClick={() => client.buyUpgrade(upgrade.id)}
+                                onClick={() => {
+                                    if (cost !== undefined) {
+                                        client.buyUpgrade(upgrade.id);
+                                    }
+                                }}
+                                onContextMenu={(event) => {
+                                    if (rank > 0) {
+                                        event.preventDefault();
+                                        client.refundUpgrade(upgrade.id);
+                                    }
+                                }}
                             >
                                 <div className="ui-card-title">{upgrade.name}</div>
                                 <div className="ui-card-text">{upgrade.description}</div>

@@ -54,6 +54,7 @@ import {
     isHardUnlocked,
     isMapUnlocked,
     recordRun,
+    refundUpgrade,
     refundUpgrades,
 } from "../core/save";
 import { ArenaGrid } from "../core/world/ArenaGrid";
@@ -795,6 +796,12 @@ export class GameClient implements GameFrameHandler {
         this.display = { ...this.display, ...changes };
         saveDisplaySettings(this.display);
         this.store.set({ display: this.display });
+    }
+
+    refundUpgrade(upgradeId: string): void {
+        if (refundUpgrade(this.save, upgradeId)) {
+            this.persist();
+        }
     }
 
     refundUpgrades(): void {

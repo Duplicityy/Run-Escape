@@ -28,6 +28,7 @@ import {
     isMapUnlocked,
     migrateSave,
     recordRun,
+    refundUpgrade,
     refundUpgrades,
 } from "./save";
 
@@ -108,6 +109,120 @@ describe("save", () => {
         refundUpgrades(save);
         expect(save.coins).toBe(50000);
         expect(save.upgrades).toEqual({});
+    });
+
+    test("refunding one rank undoes the last purchase without changing other skills", () => {
+        expect.hasAssertions();
+        const save = createSave();
+        save.coins = 50000;
+        buyUpgrade(save, "strength");
+        buyUpgrade(save, "hitpoints");
+        const before = structuredClone(save);
+        buyUpgrade(save, "strength");
+        expect(refundUpgrade(save, "strength")).toBe(true);
+        expect(save).toEqual(before);
+        expect(getMetaStats(save).might).toBeCloseTo(0.05);
+    });
+
+    test("refunding a maxed skill reopens its last rank and removes its final rank", () => {
+        expect.hasAssertions();
+        const save = createSave();
+        save.coins = 50000;
+        for (let rank = 0; rank < 5; rank++) {
+            buyUpgrade(save, "strength");
+        }
+        expect(getNextUpgradeCost(save, "strength")).toBeUndefined();
+        expect(refundUpgrade(save, "strength")).toBe(true);
+        expect(save.upgrades.strength).toBe(4);
+        expect(getNextUpgradeCost(save, "strength")).toBeDefined();
+        for (let rank = 0; rank < 4; rank++) {
+            expect(refundUpgrade(save, "strength")).toBe(true);
+        }
+        expect(save.upgrades).toEqual({});
+        expect(save.coins).toBe(50000);
+        expect(save.upgradesSpent).toBe(0);
+    });
+
+    test("unbought and unknown skills cannot be refunded", () => {
+        expect.hasAssertions();
+        const save = createSave();
+        const before = structuredClone(save);
+        expect(refundUpgrade(save, "strength")).toBe(false);
+        expect(refundUpgrade(save, "unknown")).toBe(false);
+        expect(save).toEqual(before);
+    });
+
+    test("an early expensive purchase refunds its paid price after reloading", () => {
+        expect.hasAssertions();
+        const save = createSave();
+        save.coins = 50000;
+        buyUpgrade(save, "ring_of_life");
+        buyUpgrade(save, "strength");
+        buyUpgrade(save, "hitpoints");
+        const loaded = migrateSave(JSON.parse(exportSave(save, GAME)));
+        expect(refundUpgrade(loaded, "ring_of_life")).toBe(true);
+        expect(loaded.coins).toBe(49540);
+        expect(loaded.upgradesSpent).toBe(460);
+        expect(loaded.upgrades).toEqual({ strength: 1, hitpoints: 1 });
+        expect(loaded.upgradeRefunds).toEqual({ strength: [220], hitpoints: [240] });
+    });
+
+    test("legacy saves allocate their full spending without making other skills free", () => {
+        expect.hasAssertions();
+        const save = migrateSave({
+            ...createSave(),
+            coins: 39540,
+            upgrades: { ring_of_life: 1, strength: 1, hitpoints: 1 },
+            upgradesSpent: 10460,
+        });
+        expect(refundUpgrade(save, "ring_of_life")).toBe(true);
+        expect(save.upgradesSpent).toBeGreaterThan(0);
+        expect(save.coins + save.upgradesSpent).toBe(50000);
+        buyUpgrade(save, "strength");
+        expect(refundUpgrade(save, "strength")).toBe(true);
+        expect(refundUpgrade(save, "hitpoints")).toBe(true);
+        expect(refundUpgrade(save, "strength")).toBe(true);
+        expect(save.coins).toBe(50000);
+        expect(save.upgradesSpent).toBe(0);
+        expect(save.upgradeRefunds).toBeUndefined();
+    });
+
+    test.each([
+        { strength: [NaN] },
+        { strength: [-200] },
+        { strength: [200, 300] },
+        { strength: [10000] },
+        {},
+    ])("invalid refund records fall back to the legacy balance: %o", (upgradeRefunds) => {
+        expect.hasAssertions();
+        const save = migrateSave({
+            ...createSave(),
+            upgrades: { strength: 1 },
+            upgradesSpent: 200,
+            upgradeRefunds,
+        });
+        expect(refundUpgrade(save, "strength")).toBe(true);
+        expect(save.coins).toBe(200);
+        expect(save.upgradesSpent).toBe(0);
+    });
+
+    test("out-of-order refunds and repurchases never create coins", () => {
+        expect.hasAssertions();
+        const save = createSave();
+        save.coins = 50000;
+        buyUpgrade(save, "ring_of_life");
+        buyUpgrade(save, "strength");
+        buyUpgrade(save, "hitpoints");
+        for (let attempt = 0; attempt < 3; attempt++) {
+            expect(refundUpgrade(save, "ring_of_life")).toBe(true);
+            expect(save.upgradesSpent).toBeGreaterThanOrEqual(0);
+            expect(save.coins + save.upgradesSpent).toBe(50000);
+            expect(buyUpgrade(save, "ring_of_life")).toBe(true);
+        }
+        refundUpgrades(save);
+        expect(save.coins).toBe(50000);
+        expect(save.upgradesSpent).toBe(0);
+        expect(save.upgradeRefunds).toBeUndefined();
     });
 
     test("recording runs", () => {
