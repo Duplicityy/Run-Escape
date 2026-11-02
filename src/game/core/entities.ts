@@ -113,6 +113,8 @@ export type BossState = {
     phase?: BossPhase;
     surge?: BossSurge;
     walkers?: BossWalkers;
+    // An attack still to be used again straight after (BossAttackDef.chain)
+    chain?: { attack: BossAttackDef; left: number };
     // It stands still until this tick, as its volleys go out
     channelEnd: number;
     // BossDef.stomp: hits since the player stepped under it, and the next one

@@ -351,6 +351,12 @@ export type BulletPatternDef = {
     arc?: number;
     // Radians a second each bullet curves by as it flies
     curve?: number;
+    // Rings and spirals: radians left empty in each volley, from the ring's own
+    // angle, so there's a way through that moves round with turn
+    gap?: number;
+    // Spreads: aimed afresh at the nearest player with every volley, as a
+    // stream that follows them (keep stepping across it)
+    track?: boolean;
     // Model scale, when its hit size would leave it too thin to dodge, and how
     // much it's lit up against dark ground (0 to 1)
     scale?: number;
@@ -389,6 +395,9 @@ export type GroundPatternDef = {
 export type QuartersDef = {
     seconds: number;
     interval: number;
+    // While the flowers stand the boss stays put and uses only these of its
+    // attacks (by name, cooldowns or not), one every interval seconds
+    during?: { attacks: string[]; interval: number };
     // How much of its shield the boss gets back for each hit
     heal: number;
     // Tiles from the player the lines cross at most, and how far apart the
@@ -498,6 +507,14 @@ export type BossAttackDef = {
     // Blasts: the boss jumps onto the spot the player stood on, landing as it
     // hits (one of several, the first)
     leap?: boolean;
+    // Used again this many more times straight after, each wound up for
+    // windup seconds, before the boss's usual interval: dashes back to back,
+    // claws again and again. A surge's lane and a ground attack's spots are
+    // picked afresh each time.
+    chain?: { times: number; windup: number };
+    // The boss leaps to the middle of the arena as it begins (castSpotAnim
+    // where it left), and a quarters attack's lines cross there
+    toMiddle?: boolean;
     // Only used once the boss is enraged
     enraged?: boolean;
     // Only used in these of the boss's phases (BossDef.phases), counting from 1

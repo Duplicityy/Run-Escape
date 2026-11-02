@@ -34,6 +34,9 @@ const FUSE_FLASH = 0.7;
 const PARASITE_HEIGHT = 2;
 const DARK = 0.78;
 const FADE_TICKS = 40;
+// Warnings on the ground (her marks, lanes, cones and aim) are drawn half see
+// through, so what's under them still shows
+const WARNING_ALPHA = 0.5;
 const LANE_CHEVRON_GAP = 4;
 // Pixels, at a scale of 1
 const TOTEM_ARROW = 14;
@@ -105,7 +108,11 @@ export class BossFightView {
             this.ground(sim, hazard.x, hazard.y),
             hazard.y,
             0,
-            { scale: (fit * hazard.radius * 128) / Math.max(1, model.radius), flash: lit },
+            {
+                scale: (fit * hazard.radius * 128) / Math.max(1, model.radius),
+                flash: lit,
+                alpha: WARNING_ALPHA,
+            },
         );
         const middle = this.assets.get("spot:" + ground.middleSpotAnim);
         if (middle) {
@@ -118,6 +125,7 @@ export class BossFightView {
                 this.ground(sim, hazard.x, hazard.y),
                 hazard.y,
                 0,
+                { alpha: WARNING_ALPHA },
             );
         }
     }
@@ -261,6 +269,8 @@ export class BossFightView {
                 continue;
             }
             const windup = state.windup;
+            const ctx = overlay.ctx;
+            ctx.globalAlpha = WARNING_ALPHA;
             if (windup) {
                 const t = clamp01(
                     (sim.tick + alpha - windup.startTick) /
@@ -278,6 +288,7 @@ export class BossFightView {
             if (surge) {
                 this.drawLane(overlay, sim, surge.lane, 1, now, scale);
             }
+            ctx.globalAlpha = 1;
         }
     }
 
@@ -486,7 +497,7 @@ export class BossFightView {
         const base = Math.atan2(windup.dirY, windup.dirX);
         const arc = pattern.arc ?? 1;
         ctx.strokeStyle = "#ffb060";
-        ctx.globalAlpha = 0.3 + 0.5 * t;
+        ctx.globalAlpha = (0.3 + 0.5 * t) * WARNING_ALPHA;
         ctx.lineWidth = Math.max(2, 3 * scale);
         for (let i = 0; i < pattern.count; i++) {
             const angle = base - arc / 2 + (arc * i) / Math.max(1, pattern.count - 1);
@@ -504,7 +515,7 @@ export class BossFightView {
             ctx.lineTo(to.x, to.y);
             ctx.stroke();
         }
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = WARNING_ALPHA;
     }
 
     // ---- Over the whole screen ----

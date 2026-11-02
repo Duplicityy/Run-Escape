@@ -11,7 +11,10 @@ the version in the corner).
   fight on the Inquisitor's Field, a cavern under Slepe: no waves, no picks and no items. She
   rises as you arrive, with everything The Nightmare has, quicker and with more at once, her
   charge from the start, a sweep of petals to step against, and in her last phase a claw on the
-  tile you stand on. Her totems' blasts heal you. It has a hard mode once it's beaten, a quest,
+  tile you stand on. She charges three times over, her claws come at random round you three times
+  running, for her flowers she takes the middle and keeps up her petals and claws, and she has a
+  ring with one way through, rings to weave between, a barrage that follows you and orbs that hunt
+  you. Her warnings on the ground are half see-through. Her totems' blasts heal you. It has a hard mode once it's beaten, a quest,
   and it can't be endless. Everyone plays the Inquisitor there, an adventurer made for the fight:
   the Armadyl crossbow at its best, quicker on their feet, more hitpoints and harder on bosses.
   Beating her brings them to every other map, and the adventurer choice is blurred out while the

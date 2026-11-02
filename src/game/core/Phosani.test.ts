@@ -262,6 +262,152 @@ describe("her fight", () => {
         expect(sim.player.x).toBeGreaterThan(x);
     });
 
+    test("she charges three times over, each lane picked afresh", () => {
+        const sim = createSim();
+        const boss = startFight(sim);
+        const attack = phosani().boss!.attacks.find((a) => a.name === "Surge")!;
+        expect(attack.chain).toEqual({ times: 2, windup: 0.8 });
+        boss.bossState!.chain = { attack, left: attack.chain!.times };
+        sim["startBossAttack"](boss, attack);
+        let surges = 0;
+        let lanes = 0;
+        let lastLane: unknown;
+        for (let i = 0; i < 12 * TICKS_PER_SECOND; i++) {
+            sim.player.invulnerable = 100;
+            // Moving between charges, so each lane's somewhere else
+            sim.step(i % 40 < 20 ? 1 : -1, 0);
+            const state = boss.bossState!;
+            const lane = state.windup?.lane ?? state.surge?.lane;
+            if (lane && lane !== lastLane) {
+                lanes++;
+                lastLane = lane;
+            }
+            if (state.surge && state.surge.startTick === sim.tick) {
+                surges++;
+            }
+        }
+        expect(surges).toBe(3);
+        expect(lanes).toBe(3);
+        expect(boss.bossState!.chain).toBeUndefined();
+    });
+
+    test("her random claws leave ground to stand on, and come three times", () => {
+        const sim = createSim();
+        const boss = startFight(sim);
+        const attack = phosani().boss!.attacks.find((a) => a.name === "Grasping Claws (random)")!;
+        expect(attack.ground!.spots).toEqual([{ shape: "scatter", count: 10, spread: 7 }]);
+        boss.bossState!.chain = { attack, left: attack.chain!.times };
+        sim["startBossAttack"](boss, attack);
+        let rounds = 0;
+        for (let i = 0; i < 6 * TICKS_PER_SECOND; i++) {
+            sim.player.invulnerable = 100;
+            sim.step(0, 0);
+            const windup = boss.bossState!.windup;
+            if (windup?.attack === attack && windup.startTick === sim.tick) {
+                rounds++;
+            }
+        }
+        expect(rounds).toBe(2);
+        // Each round's spots are round the player, with a way out between them
+        const player = sim.player;
+        sim["startBossAttack"](boss, attack);
+        const spots = sim.hazards.filter((h) => h.attack === attack);
+        expect(spots.length).toBe(10);
+        for (const spot of spots) {
+            expect(Math.hypot(spot.x - player.x, spot.y - player.y)).toBeLessThanOrEqual(7.1);
+        }
+        let clear = 0;
+        for (let i = 0; i < 16; i++) {
+            const angle = (i / 16) * Math.PI * 2;
+            const x = player.x + Math.cos(angle) * 2.5;
+            const y = player.y + Math.sin(angle) * 2.5;
+            if (spots.every((s) => Math.hypot(s.x - x, s.y - y) > s.radius + player.radius)) {
+                clear++;
+            }
+        }
+        expect(clear).toBeGreaterThan(0);
+    });
+
+    test("for her flowers she takes the middle and keeps up her petals and claws", () => {
+        const sim = createSim();
+        const boss = startFight(sim);
+        const attack = phosani().boss!.attacks.find((a) => a.name === "Corpse Flowers")!;
+        expect(attack.toMiddle).toBe(true);
+        boss.x = boss.prevX = BASE + 10;
+        boss.y = boss.prevY = BASE + 10;
+        sim["startBossAttack"](boss, attack);
+        expect(boss.x).toBeCloseTo(BASE + SIZE / 2, 0);
+        expect(boss.y).toBeCloseTo(BASE + SIZE / 2, 0);
+        const quarters = sim.quarters!;
+        expect(Math.hypot(quarters.x - boss.x, quarters.y - boss.y)).toBeLessThanOrEqual(4.3);
+        boss.attackCooldown = 0;
+        const used = new Set<string>();
+        const { x, y } = boss;
+        for (let i = 0; i < 11 * TICKS_PER_SECOND; i++) {
+            sim.player.invulnerable = 100;
+            sim.player.x = BASE + SIZE / 2 - 1;
+            sim.player.y = BASE + SIZE / 2 - 1;
+            sim.step(0, 0);
+            const name = boss.bossState!.windup?.attack.name;
+            if (name) {
+                used.add(name);
+            }
+        }
+        for (const name of used) {
+            expect(attack.quarters!.during!.attacks.concat("Corpse Flowers")).toContain(name);
+        }
+        expect(used.size).toBeGreaterThan(1);
+        // She stood her ground among them
+        expect([boss.x, boss.y]).toEqual([x, y]);
+    });
+
+    test("a closing ring has a way through, and a barrage follows the player", () => {
+        const sim = createSim();
+        const boss = startFight(sim);
+        const ring = phosani().boss!.attacks.find((a) => a.name === "Closing ring")!;
+        sim["startBossAttack"](boss, ring);
+        boss.attackCooldown = 1e9;
+        run(sim, ring.windup + 0.1);
+        const bullets = sim.bullets;
+        expect(bullets.count).toBeLessThan(ring.pattern!.count);
+        expect(bullets.count).toBeGreaterThan(ring.pattern!.count * 0.7);
+        run(sim, 8);
+        expect(bullets.count).toBe(0);
+
+        const barrage = phosani().boss!.attacks.find((a) => a.name === "Barrage")!;
+        expect(barrage.pattern!.track).toBe(true);
+        sim.player.x = boss.x + 8;
+        sim.player.y = boss.y;
+        sim["startBossAttack"](boss, barrage);
+        boss.attackCooldown = 1e9;
+        run(sim, barrage.windup + 0.05);
+        const east = bullets.order[0];
+        expect(bullets.vx[east]).toBeGreaterThan(0);
+        expect(Math.abs(bullets.vy[east])).toBeLessThan(0.01);
+        sim.player.x = boss.x;
+        sim.player.y = boss.y + 8;
+        run(sim, 0.5);
+        let north = 0;
+        for (let i = 0; i < bullets.count; i++) {
+            if (bullets.vy[bullets.order[i]] > 0.1) {
+                north++;
+            }
+        }
+        expect(north).toBeGreaterThan(0);
+    });
+
+    test("her orbs hunt the player", () => {
+        const sim = createSim();
+        const boss = startFight(sim);
+        const orbs = phosani().boss!.attacks.find((a) => a.name === "Hunting orbs")!;
+        expect(orbs.kind).toBe("projectile");
+        expect(orbs.homing).toBeGreaterThan(0);
+        sim["startBossAttack"](boss, orbs);
+        boss.attackCooldown = 1e9;
+        run(sim, orbs.windup + 0.1);
+        expect(sim.enemyProjectiles.length).toBe(3);
+    });
+
     test("her parasites heal her and no one else", () => {
         for (const id of ["phosani_parasite", "phosani_parasite_weak"]) {
             expect(getEnemy(id).heals?.targets).toEqual(["phosanis_nightmare"]);

@@ -118,6 +118,10 @@ a map, or an enemy on that map, mentions it), so that needs nothing added.
 - `holds` has an enemy pin the player where they stand once it reaches them (Phosani's husks), and
   a boss's `summon.scatter` brings its summons on wherever a wave's enemy would, so there's time to
   kill them on the way.
+- A boss attack's `chain` repeats it straight after (dashes back to back, claws in rounds),
+  `toMiddle` takes the boss to the arena's middle first, a quarters attack's `during` says what it
+  does among its flowers, and a pattern's `gap` and `track` make a ring with a way through and a
+  stream that follows the player. Boss fights as data in `docs/DEVELOPMENT.md` has the lot.
 - In co-op a boss event spawns copies (`bossCopies` in `content/coop.ts`) that share one boss's
   hitpoints, experience and loot. One with `spawnAt` gets no more copies than it has free spots.
 

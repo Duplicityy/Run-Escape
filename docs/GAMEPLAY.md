@@ -375,9 +375,16 @@ version and how to run it.
       and with more of it at once: her charge from the first phase, a wider fan of shots, a six-armed
       spiral, farther-reaching Grasping Claws, husks that come for you from wherever they turn up
       and hold you once they arrive (shoot them down first), tougher parasites, more sleepwalkers, and
-      two of her own: a **Sweep**, one arm of petals aimed at you and then swept round widdershins
-      for three seconds (step against the turn), and in her last phase a claw on the tile you stand
-      on with barely a second to get clear. Every hit is shown before it lands, and nothing heals
+      her charge three times over, each lane picked afresh from where you are. Her claws come at
+      random round you, three rounds with barely a second each, with ground between them that's
+      never the same ground. For her Corpse Flowers she takes the middle of the arena, the lines
+      cross there, and while the flowers stand she rains petals and claws. Then her own: a
+      **Sweep**, one arm of petals aimed at you and then swept round widdershins for three seconds
+      (step against the turn); a **Closing ring** with one way through that turns with each volley;
+      **Weaving petals**, rings half a step apart to thread; a **Barrage**, a stream of shots that
+      follows you (keep stepping across it); **Hunting orbs** that turn after you in her last
+      phase; and a claw on the tile you stand on with barely a second to get clear. Her warnings
+      on the ground are drawn half see-through. Every hit is shown before it lands, and nothing heals
       but her totems. Her hits are a little softer than on Hallowed Night, as a big one still
       takes about half of the Inquisitor's hitpoints. Everyone plays the **Inquisitor** there,
       made for the fight; beating her brings them to every other map.

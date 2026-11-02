@@ -449,6 +449,11 @@ A boss's fight is in its `BossDef` and `BossAttackDef`, with no boss named in `S
   weapons off them.
 - Attack kinds `pattern` (rings, spirals, aimed spreads), `ground` (marks that land, or stay armed),
   `quarters`, `surge` and `mark`, and `phases` on an attack for when it's used.
+- The bullet hell's own tools (Phosani's Nightmare): `chain` uses an attack again straight after,
+  with its own windup, a lane or spots picked afresh each time; `toMiddle` leaps the boss to the
+  arena's middle as it begins (a `quarters` attack's lines cross there); `QuartersDef.during` has
+  it stand among its flowers using only those attacks at its own interval; a `pattern`'s `gap`
+  leaves a way through a ring that turns with it, and `track` re-aims a spread's every volley.
 - `Sim.bossArena` is the square all this goes by: `MapDef.bossArena`, or the whole map. Nothing's
   sized by hand, so she fights on any square.
 - `MapDef.fight` makes a map one fight (Phosani's Nightmare, `content/phosani.ts`): no waves, its

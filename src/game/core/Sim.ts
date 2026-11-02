@@ -91,6 +91,7 @@ import {
     PlayerEffectDef,
     PowerUpDef,
     PowerUpEffect,
+    QuartersDef,
     RandomEventDef,
     RandomEventEffect,
     SpecialAttackDef,
@@ -2822,6 +2823,9 @@ export class Sim {
                     } else if (this.tick < bossState.channelEnd) {
                         // And while its volleys go out, so a spiral stays a spiral
                         dirX = dirY = 0;
+                    } else if (this.flowersDuring(enemy)) {
+                        // And among its flowers, where it's taken its stand
+                        dirX = dirY = 0;
                     } else if (keep !== undefined && distance < keep) {
                         // Ranged bosses stop once they're in range (and stand their
                         // ground if you come at them)
@@ -3803,6 +3807,7 @@ export class Sim {
         if (enemy.bossState) {
             enemy.bossState.windup = undefined;
             enemy.bossState.surge = undefined;
+            enemy.bossState.chain = undefined;
         }
     }
 
@@ -4153,7 +4158,7 @@ export class Sim {
         if (!quarters) {
             return;
         }
-        const middle = this.partyMiddle();
+        const middle = attack.toMiddle ? enemy : this.partyMiddle();
         const arena = this.bossArena;
         const margin = quarters.offset * 2;
         const offset = () => this.rng.range(-quarters.offset, quarters.offset);
@@ -4338,9 +4343,18 @@ export class Sim {
         const turn = (pattern.curve ?? 0) / TICKS_PER_SECOND;
         const count = pattern.count;
         const spread = pattern.shape === "spread";
+        if (spread && pattern.track) {
+            // At whoever's nearest now
+            const target = this.nearestHero(boss.x, boss.y).player;
+            emitter.angle = fm.atan2(target.y - boss.y, target.x - boss.x);
+        }
         const step = spread ? (pattern.arc ?? 1) / Math.max(1, count - 1) : (Math.PI * 2) / count;
         const first = spread ? emitter.angle - (pattern.arc ?? 1) / 2 : emitter.angle;
         for (let i = 0; i < count; i++) {
+            // The way through a ring, at its own angle
+            if (!spread && pattern.gap !== undefined && i * step < pattern.gap) {
+                continue;
+            }
             const angle = first + i * step;
             this.bullets.add(
                 boss.x,
@@ -4695,6 +4709,22 @@ export class Sim {
         if (def.leash && distance > def.leash.distance) {
             this.leashBoss(enemy, def.leash);
         }
+        // The same again, straight after (BossAttackDef.chain)
+        const chain = state.chain;
+        if (chain && this.tick >= state.channelEnd) {
+            chain.left--;
+            if (chain.left <= 0) {
+                state.chain = undefined;
+            }
+            // Straight on to the next link, and the usual rest after the last
+            this.startBossAttack(
+                enemy,
+                chain.attack,
+                chain.attack.chain!.windup,
+                chain.left > 0 ? 0 : undefined,
+            );
+            return;
+        }
         // It holds off while the player can't move, and what's fired can land
         if (enemy.attackCooldown > 0 || this.hold || this.tick < state.channelEnd) {
             return;
@@ -4705,6 +4735,19 @@ export class Sim {
             phase.opener = undefined;
             this.startBossAttack(enemy, opener);
             return;
+        }
+        // Among its flowers it keeps to the attacks they call for (QuartersDef.during)
+        const during = this.flowersDuring(enemy);
+        if (during) {
+            const choices = during.attacks
+                .map((name) => def.attacks.find((a) => a.name === name))
+                .filter((a): a is BossAttackDef => a !== undefined);
+            if (choices.length > 0) {
+                const attack = choices[this.rng.int(choices.length)];
+                state.chain = attack.chain ? { attack, left: attack.chain.times } : undefined;
+                this.startBossAttack(enemy, attack, undefined, during.interval);
+                return;
+            }
         }
         const usable: number[] = [];
         def.attacks.forEach((attack, i) => {
@@ -4725,17 +4768,36 @@ export class Sim {
         const index = usable[this.rng.weightedIndex(usable.map((i) => def.attacks[i].weight))];
         const attack = def.attacks[index];
         state.cooldowns[index] = Math.round(attack.cooldown * TICKS_PER_SECOND);
+        state.chain = attack.chain ? { attack, left: attack.chain.times } : undefined;
         this.startBossAttack(enemy, attack);
     }
 
+    // The flowers a boss is standing among, if they say what it does meanwhile
+    private flowersDuring(enemy: Enemy): QuartersDef["during"] | undefined {
+        const quarters = this.quarters;
+        if (!quarters || quarters.enemyUid !== enemy.uid || this.tick >= quarters.endTick) {
+            return undefined;
+        }
+        return quarters.attack.quarters?.during;
+    }
+
     // Starts winding an attack up. Everything it'll do to the ground is on the
-    // ground from now on.
-    private startBossAttack(enemy: Enemy, attack: BossAttackDef): void {
+    // ground from now on. windupSeconds and interval replace the attack's own
+    // windup and the boss's interval after it (a chain's links, the flowers').
+    private startBossAttack(
+        enemy: Enemy,
+        attack: BossAttackDef,
+        windupSeconds = attack.windup,
+        interval?: number,
+    ): void {
         const state = enemy.bossState!;
         const def = enemy.def.boss!;
+        if (attack.toMiddle) {
+            this.leapToMiddle(enemy, attack);
+        }
         const player = this.player;
         const startTick = this.tick;
-        const landTick = startTick + Math.max(1, Math.round(attack.windup * TICKS_PER_SECOND));
+        const landTick = startTick + Math.max(1, Math.round(windupSeconds * TICKS_PER_SECOND));
         const toPlayer = Math.max(0.001, fm.hypot(player.x - enemy.x, player.y - enemy.y));
         const windup: BossWindup = {
             attack,
@@ -4754,12 +4816,12 @@ export class Sim {
             windup.lane = this.pickLane(enemy, attack);
         }
         const drowsy = this.tick < this.drowsyEndTick ? this.drowsyInterval : 1;
-        const interval =
+        const usual =
             def.attackInterval *
             (state.enraged ? ENRAGED_INTERVAL : 1) *
             (this.hard ? HARD_BOSS_INTERVAL : 1) *
             drowsy;
-        enemy.attackCooldown = Math.round(interval * TICKS_PER_SECOND);
+        enemy.attackCooldown = Math.round((interval ?? usual) * TICKS_PER_SECOND);
         enemy.anim = "attack";
         enemy.animStart = this.tick;
         enemy.attackSeq = attack.seq ?? enemy.def.attackSeq;
@@ -5073,6 +5135,23 @@ export class Sim {
                 this.emit({ type: "bossShout", enemyUid: enemy.uid, text: summon.shout });
             }
         }
+    }
+
+    // To the middle of the arena, as she goes for her flowers
+    private leapToMiddle(enemy: Enemy, attack: BossAttackDef): void {
+        const arena = this.bossArena;
+        const spot = findFreeSpot(
+            this.grid,
+            (arena.minX + arena.maxX) / 2,
+            (arena.minY + arena.maxY) / 2,
+            enemy.radius,
+        );
+        if (attack.castSpotAnim !== undefined) {
+            this.addEffect(attack.castSpotAnim, enemy.x, enemy.y, 0, 40);
+        }
+        enemy.x = enemy.prevX = spot.x;
+        enemy.y = enemy.prevY = spot.y;
+        enemy.vx = enemy.vy = 0;
     }
 
     // Jumps onto a spot, if there's room for it there
