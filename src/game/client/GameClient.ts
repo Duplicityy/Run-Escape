@@ -90,7 +90,7 @@ import {
 import { Minimap } from "./Minimap";
 import { Overlay, ScreenPoint } from "./Overlay";
 import { getPlayerPose } from "./PlayerPose";
-import { getBossKillViews, getDamageViews } from "./RunStatsViews";
+import { getBossKillViews, getPlayerResultViews } from "./RunStatsViews";
 import { SaveLock } from "./SaveLock";
 import { CoopLobby, makeLoadout } from "./coop/CoopLobby";
 import { CoopRun, GUEST_BUFFER_FRAMES } from "./coop/CoopRun";
@@ -1411,11 +1411,12 @@ export class GameClient implements GameFrameHandler {
             // Ready for the next run
             this.store.set({ mapId: unlockedMap.id, endless: false, hard: false });
         }
+        // Teammates' pages too, unless one of them has a number that isn't
+        const players = getPlayerResultViews(sim);
         this.store.set({
             result: {
                 ...result,
-                characterName: getCharacter(sim.characterId).name,
-                damage: getDamageViews(sim, result.stats),
+                players: players.some(hasBadNumber) ? players.filter((p) => p.isLocal) : players,
                 bossKills: getBossKillViews(result.stats),
                 endlessRecord,
                 firstHardWin,

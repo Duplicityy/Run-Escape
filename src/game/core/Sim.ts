@@ -535,6 +535,7 @@ export type Hero = {
     // DPS_WINDOW_TICKS, each tick taking over the slot of the oldest
     recentDamage: Float64Array;
     killsBySource: Record<string, number>;
+    casketsOpened: number;
     damageTaken: number;
     healed: number;
     highestHit: number;
@@ -564,9 +565,10 @@ export type Hero = {
     moveX: number;
     moveY: number;
     // Co-op: down with no revives left (out of the run, watching the rest),
-    // or gone from the game
+    // or gone from the game, and the tick that happened (-1 while they're in)
     down: boolean;
     left: boolean;
+    outTick: number;
 };
 
 // A player in a co-op run, as SimOptions.party has them
@@ -1035,6 +1037,7 @@ export class Sim {
             damageBySource: {},
             recentDamage: new Float64Array(DPS_WINDOW_TICKS),
             killsBySource: {},
+            casketsOpened: 0,
             damageTaken: 0,
             healed: 0,
             highestHit: 0,
@@ -1052,6 +1055,7 @@ export class Sim {
             moveY: 0,
             down: false,
             left: false,
+            outTick: -1,
         };
     }
 
@@ -1259,7 +1263,9 @@ export class Sim {
             ...Object.keys(this.killsBySource),
             ...Object.keys(this.weaponSince).map((id) => `weapon:${id}`),
         ]) as Set<DamageSource>;
-        const end = this.endTick >= 0 ? this.endTick : this.tick;
+        // A weapon's time ends with the run, or when its hero went down or left
+        const runEnd = this.endTick >= 0 ? this.endTick : this.tick;
+        const end = this.hero.outTick >= 0 ? Math.min(this.hero.outTick, runEnd) : runEnd;
         return {
             sources: [...sources]
                 .map((source) => {
@@ -1860,6 +1866,9 @@ export class Sim {
             return;
         }
         hero.left = true;
+        if (hero.outTick < 0) {
+            hero.outTick = this.tick;
+        }
         hero.pendingLevelUps = 0;
         hero.choices = [];
         hero.chests = [];
@@ -5077,6 +5086,7 @@ export class Sim {
         player.hp = 0;
         player.deathTick = this.tick;
         this.hero.down = true;
+        this.hero.outTick = this.tick;
         if (!this.heroes.some((hero) => this.isUp(hero))) {
             this.endRun("dead");
             return;
@@ -8078,6 +8088,7 @@ export class Sim {
         );
         this.coins += coins;
         this.casketsOpened++;
+        this.hero.casketsOpened++;
         const { itemId, upgradedFrom } = this.rollChestItem(tier);
         const upgrades = this.offeredUpgrades(itemId);
         this.chests.push({ uid: this.nextUid++, tier, itemId, upgradedFrom, upgrades, coins });

@@ -1,3 +1,4 @@
+import { getCharacter } from "../content/characters";
 import { upgradedName } from "../content/endless";
 import { getEnemy } from "../content/enemies";
 import { getItem } from "../content/items";
@@ -6,7 +7,32 @@ import { RARITIES } from "../content/rarity";
 import { getWeapon } from "../content/weapons";
 import { RunStats, Sim } from "../core/Sim";
 import { DamageSource } from "../core/entities";
-import { BossKillView, DamageView } from "./GameStore";
+import { BossKillView, DamageView, PlayerResultView } from "./GameStore";
+
+export function getPlayerResultViews(sim: Sim): PlayerResultView[] {
+    return sim.heroes.map((hero) =>
+        sim.as(hero.index, () => {
+            const stats = sim.getRunStats();
+            return {
+                name: hero.name,
+                characterName: getCharacter(hero.characterId).name,
+                isLocal: hero.index === sim.focus,
+                down: hero.down,
+                left: hero.left,
+                kills: stats.sources.reduce((total, source) => total + source.kills, 0),
+                damageDealt: stats.sources.reduce((total, source) => total + source.damage, 0),
+                caskets: hero.casketsOpened,
+                highestHit: stats.highestHit,
+                damageTaken: stats.damageTaken,
+                healed: stats.healed,
+                rerollsUsed: stats.rerollsUsed,
+                skips: stats.skips,
+                // Weapon names and tiers come from this hero's own loadout
+                damage: getDamageViews(sim, stats),
+            };
+        }),
+    );
+}
 
 // The stats screen's rows: what dealt the run's damage, most first, by the
 // names and icons the player knows them by (a weapon by its tier at the end)

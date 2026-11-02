@@ -18,7 +18,9 @@ version and how to run it.
   50, 100, 200 and 400, doubling each time.
 - When a run ends, the results screen shows its stats: damage, kills and damage a second for
   each weapon (and the utility items and power-ups that did damage), the biggest hit, damage
-  taken, hitpoints healed and when each boss went down.
+  taken, hitpoints healed and when each boss went down. In co-op it has a page for each player,
+  flipped through with the arrows or the arrow keys, and the party's shared totals under them. A
+  weapon's damage a second counts up to when its player went down or left.
 - You carry at most **4 weapons and 4 passives**, so a build is about what you leave out.
 - **Rarity**, in OSRS drop table terms: every weapon and passive is Common, Uncommon, Rare or
   Very rare, which sets how often it's offered. Every offer also rolls its own rarity: a Common

@@ -8,6 +8,8 @@ the version in the corner).
 ### Added
 
 - Hard mode in co-op: the host can turn it on once everyone in the room has it.
+- Co-op results, by trippy22: a page for each player's own kills, damage, weapons and caskets, with
+  arrows (or the arrow keys) to flip between them, and the party's totals underneath.
 
 ### Changed
 

@@ -1838,9 +1838,45 @@ function Big({ value }: { value: number }): JSX.Element {
     return <span title={n >= 100_000 ? n.toLocaleString() : undefined}>{formatBig(n)}</span>;
 }
 
-function ResultModal({ ui, client }: ScreenProps): JSX.Element {
+export function ResultModal({ ui, client }: ScreenProps): JSX.Element {
     const result = ui.result;
     const victory = ui.overlay === "victory";
+    const players = result?.players ?? [];
+    // Your own page first (the modal is mounted afresh for each run's result)
+    const [playerIndex, setPlayerIndex] = useState(() =>
+        Math.max(
+            0,
+            players.findIndex((player) => player.isLocal),
+        ),
+    );
+    const player = players[playerIndex];
+    const multiplayer = players.length > 1;
+    const changePlayer = useCallback(
+        (direction: number) =>
+            setPlayerIndex((current) => (current + direction + players.length) % players.length),
+        [players.length],
+    );
+    useEffect(() => {
+        if (!multiplayer) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            const target = event.target;
+            if (
+                event.altKey ||
+                event.ctrlKey ||
+                event.metaKey ||
+                event.shiftKey ||
+                (target instanceof HTMLElement &&
+                    (target.isContentEditable || target.closest("input, textarea, select")))
+            )
+                return;
+            if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                event.preventDefault();
+                if (!event.repeat) changePlayer(event.key === "ArrowLeft" ? -1 : 1);
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [changePlayer, multiplayer]);
     return (
         <div className="ui-modal">
             <div className="ui-panel rs-border rs-background ui-result">
@@ -1891,15 +1927,102 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                         Quest complete: {quest.name}! <Coins amount={quest.coins} />
                     </p>
                 ))}
-                {result && (
+                {multiplayer && player && (
+                    <div
+                        className="ui-result-player-nav"
+                        role="group"
+                        aria-label="Player stats navigation"
+                    >
+                        <button
+                            className="ui-button ui-result-arrow"
+                            aria-label="Previous player's stats"
+                            title="Previous player (Left arrow)"
+                            onClick={() => changePlayer(-1)}
+                        >
+                            <span className="ui-result-arrow-left" aria-hidden="true" />
+                        </button>
+                        <div className="ui-result-player" aria-live="polite" aria-atomic="true">
+                            <div className="ui-result-player-name">
+                                {player.name}
+                                {player.isLocal && " (you)"}
+                            </div>
+                            <div className="ui-result-player-detail">
+                                Player {playerIndex + 1} of {players.length}
+                                {player.left ? " · Left the run" : player.down ? " · Down" : ""}
+                            </div>
+                        </div>
+                        <button
+                            className="ui-button ui-result-arrow"
+                            aria-label="Next player's stats"
+                            title="Next player (Right arrow)"
+                            onClick={() => changePlayer(1)}
+                        >
+                            <span className="ui-result-arrow-right" aria-hidden="true" />
+                        </button>
+                    </div>
+                )}
+                {result && player && (
                     <div className="ui-result-columns">
                         <div className="ui-result-column">
-                            <table className="ui-result-table">
+                            {multiplayer && <h3 className="ui-pause-heading">Individual stats</h3>}
+                            <table className="ui-result-table" aria-label="Individual stats">
                                 <tbody>
                                     <tr>
                                         <td>Adventurer</td>
-                                        <td>{result.characterName}</td>
+                                        <td>{player.characterName}</td>
                                     </tr>
+                                    <tr>
+                                        <td>Kills</td>
+                                        <td>
+                                            <Big value={player.kills} />
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Damage dealt</td>
+                                        <td>
+                                            <Big value={player.damageDealt} />
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Biggest hit</td>
+                                        <td>
+                                            <Big value={player.highestHit} />
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Damage taken</td>
+                                        <td>
+                                            <Big value={player.damageTaken} />
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Hitpoints healed</td>
+                                        <td>
+                                            <Big value={player.healed} />
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Caskets opened</td>
+                                        <td>{player.caskets}</td>
+                                    </tr>
+                                    {(player.rerollsUsed > 0 || player.skips > 0) && (
+                                        <tr>
+                                            <td>Rerolls / skips</td>
+                                            <td>
+                                                {player.rerollsUsed} / {player.skips}
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                            <h3 className="ui-pause-heading">
+                                {multiplayer ? "Party totals (shared)" : "Run totals"}
+                            </h3>
+                            <table
+                                className="ui-result-table"
+                                aria-label={multiplayer ? "Party totals" : "Run totals"}
+                            >
+                                <tbody>
                                     {result.hard && (
                                         <tr>
                                             <td>Difficulty</td>
@@ -1913,48 +2036,38 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                                         </tr>
                                     )}
                                     <tr>
-                                        <td>Survived</td>
+                                        <td>Run time</td>
                                         <td>{formatTime(result.seconds)}</td>
                                     </tr>
                                     <tr>
                                         <td>Level</td>
                                         <td>{result.level}</td>
                                     </tr>
-                                    <tr>
-                                        <td>Kills</td>
-                                        <td>
-                                            <Big value={result.kills} />
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Biggest hit</td>
-                                        <td>
-                                            <Big value={result.stats.highestHit} />
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Damage taken</td>
-                                        <td>
-                                            <Big value={result.stats.damageTaken} />
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Hitpoints healed</td>
-                                        <td>
-                                            <Big value={result.stats.healed} />
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>Caskets opened</td>
-                                        <td>{result.caskets}</td>
-                                    </tr>
-                                    {(result.stats.rerollsUsed > 0 || result.stats.skips > 0) && (
-                                        <tr>
-                                            <td>Rerolls / skips</td>
-                                            <td>
-                                                {result.stats.rerollsUsed} / {result.stats.skips}
-                                            </td>
-                                        </tr>
+                                    {multiplayer && (
+                                        <>
+                                            <tr>
+                                                <td>Kills</td>
+                                                <td>
+                                                    <Big value={result.kills} />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>Damage dealt</td>
+                                                <td>
+                                                    <Big
+                                                        value={players.reduce(
+                                                            (total, entry) =>
+                                                                total + entry.damageDealt,
+                                                            0,
+                                                        )}
+                                                    />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>Caskets opened</td>
+                                                <td>{result.caskets}</td>
+                                            </tr>
+                                        </>
                                     )}
                                     <tr>
                                         <td>Coins banked</td>
@@ -1966,7 +2079,9 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                             </table>
                             {result.bossKills.length > 0 && (
                                 <>
-                                    <h3 className="ui-pause-heading">Bosses</h3>
+                                    <h3 className="ui-pause-heading">
+                                        {multiplayer ? "Party bosses" : "Bosses"}
+                                    </h3>
                                     <table className="ui-result-table">
                                         <tbody>
                                             {result.bossKills.map((boss, i) => (
@@ -1980,9 +2095,10 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                                 </>
                             )}
                         </div>
-                        {result.damage.length > 0 && (
+                        {player.damage.length > 0 && (
                             <div className="ui-result-column">
-                                <table className="ui-result-damage">
+                                <h3 className="ui-pause-heading">Damage breakdown</h3>
+                                <table className="ui-result-damage" aria-label="Damage breakdown">
                                     <thead>
                                         <tr>
                                             <th />
@@ -1992,7 +2108,7 @@ function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {result.damage.map((row, i) => (
+                                        {player.damage.map((row, i) => (
                                             <tr key={i}>
                                                 <td>
                                                     <span className="ui-result-source">

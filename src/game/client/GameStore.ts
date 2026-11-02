@@ -183,6 +183,25 @@ export type BossView = {
 
 export type BossKillView = { name: string; seconds: number };
 
+// One player's own numbers for the results screen (a teammate who fell or
+// left too)
+export type PlayerResultView = {
+    name: string;
+    characterName: string;
+    isLocal: boolean;
+    down: boolean;
+    left: boolean;
+    kills: number;
+    damageDealt: number;
+    caskets: number;
+    highestHit: number;
+    damageTaken: number;
+    healed: number;
+    rerollsUsed: number;
+    skips: number;
+    damage: DamageView[];
+};
+
 // done / of: how far it's got, this run's kills and caskets included;
 // finished: this run finished it (it pays once the run is over)
 export type QuestTrackView = {
@@ -272,10 +291,9 @@ export type UiSnapshot = {
     // been beaten on hard mode; newGear: the names of the gear it found for
     // the first time, for the Armoury; quests: the quests it finished, and
     // what they paid
-    // damage / bossKills: the stats screen's rows
+    // players: everyone's own stats; bossKills: the party's boss times
     result?: RunResult & {
-        characterName: string;
-        damage: DamageView[];
+        players: PlayerResultView[];
         bossKills: BossKillView[];
         endlessRecord: boolean;
         firstHardWin: boolean;

@@ -509,6 +509,13 @@ describe("co-op", () => {
         play(guest, 90 * TICKS_PER_SECOND);
         expect(host.kills).toBeGreaterThan(0);
         expect(fingerprint(guest)).toBe(fingerprint(host));
+        // Results expose every player's contribution on every client's copy.
+        for (const hero of host.heroes) {
+            expect(guest.as(hero.index, () => guest.getRunStats())).toEqual(
+                host.as(hero.index, () => host.getRunStats()),
+            );
+            expect(guest.heroes[hero.index].casketsOpened).toBe(hero.casketsOpened);
+        }
     }, 30000);
 
     it("plays out the same on every player's copy on hard mode too", () => {
