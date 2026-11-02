@@ -2926,7 +2926,9 @@ export class Sim {
         ignoreArmor = false,
     ): number {
         const player = this.player;
-        if (this.hero.down && !this.runOver) {
+        // Once the run's over nothing more lands, so a win can't turn into a
+        // death (or spend a revive) later in the tick it's won
+        if (this.runOver || this.hero.down) {
             return 0;
         }
         const armor = ignoreArmor ? 0 : this.stats.armor;
@@ -4897,7 +4899,7 @@ export class Sim {
         showImpact = true,
     ): void {
         const player = this.player;
-        if (this.reviving || (this.hero.down && !this.runOver)) {
+        if (this.reviving || this.runOver || this.hero.down) {
             return;
         }
         if (showImpact && attack.impactSpotAnim !== undefined) {
@@ -5344,6 +5346,12 @@ export class Sim {
     }
 
     private endRun(state: "dead" | "victory"): void {
+        // A result stands, except that the final boss falling in the same tick
+        // as the last player wins, whichever came first (weapons still fire in
+        // that tick, see stepRun)
+        if (this.runOver && !(state === "victory" && this.tick === this.endTick)) {
+            return;
+        }
         this.endTick = this.tick;
         this.state = state;
         // Everything stands still from here on; idle rather than walk on the spot

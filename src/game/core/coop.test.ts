@@ -159,6 +159,40 @@ describe("co-op", () => {
         expect(b.player.hp).toBe(b.player.maxHp);
     });
 
+    it("keeps a win from a hit on anyone later in the tick", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        a.revivesLeft = 1;
+        const boss = sim.spawnEnemy(getEnemy("wise_old_man"), "finalBoss", {
+            x: 1040.5,
+            y: 1036.5,
+        })!;
+        sim.as(1, () => sim.damageEnemy(boss, 1e9, 0, b.player.x, b.player.y));
+        expect(sim.state).toBe("victory");
+        sim.as(0, () => sim["damagePlayer"](99999, "goblin", false));
+        expect(sim.state).toBe("victory");
+        expect(a.down).toBe(false);
+        expect(a.revivesLeft).toBe(1);
+    });
+
+    it("wins with the final boss falling in the tick the last player does", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const boss = sim.spawnEnemy(getEnemy("wise_old_man"), "finalBoss", {
+            x: 1040.5,
+            y: 1036.5,
+        })!;
+        for (const h of sim.heroes) {
+            h.revivesLeft = 0;
+        }
+        sim.as(1, () => sim["damagePlayer"](99999, "goblin", false));
+        expect(sim.runOver).toBe(false);
+        sim.as(0, () => sim["damagePlayer"](99999, "goblin", false));
+        expect(sim.state).toBe("dead");
+        // What the first to fall left behind (a projectile, a thrall) gets it
+        sim.as(1, () => sim.damageEnemy(boss, 1e9, 0, boss.x, boss.y));
+        expect(sim.state).toBe("victory");
+    });
+
     it("ends the run when everyone's down or gone", () => {
         const sim = createParty(["warrior", "wizard"]);
         sim.leave(1);

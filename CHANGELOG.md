@@ -3,6 +3,13 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
+## Unreleased
+
+### Fixed
+
+- Killing the final boss wins the run, even if a hit lands in the same instant: it no longer counts
+  as a death or uses up a ring of life.
+
 ## 0.22.1 - 2026-11-02
 
 ### Added
