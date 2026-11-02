@@ -5,9 +5,27 @@ the version in the corner).
 
 ## Unreleased
 
+### Changed
+
+- Co-op's server holds up better against anyone trying to flood it or take every room.
+
 ### Fixed
 
-- In co-op, players with the same runes all get them: one player's cast no longer wiped the others'.
+- With the game open in two tabs, only one saves, so they no longer undo each other's runs, coins
+  and unlocks. The other offers to play there instead.
+- A tab left open over an update no longer wipes progress from the newer version when it saves. It
+  asks you to reload instead.
+- A save that can't be read is kept rather than lost. The game tells you, and you can export it
+  from Settings.
+- Killing the final boss wins the run, even if a hit lands in the same instant: it no longer counts
+  as a death or uses up a ring of life.
+- Co-op: two players with the same orbit weapon, like Elemental runes, no longer wipe out each
+  other's circle.
+- Co-op: a downed player can't reroll or skip level ups any more, so they can't spend the party's
+  coins.
+- Co-op: one player's Evil Bob finishing no longer ends another's Evil Bob timer early.
+- Co-op: each player's Toktz-mej-tal burns ground of its own: another player's pulse no longer
+  takes over your fire or puts it out.
 - Durial321's task says what it takes: surviving 6:06 in Falador, not 6 minutes.
 
 ## 0.22.1 - 2026-11-02

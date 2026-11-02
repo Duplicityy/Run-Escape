@@ -111,9 +111,17 @@ proxy, tell it what's in front with `PROXY` (or `--proxy=` after `npm run serve 
 | `local`        | Caddy, nginx or a container in front, on the same machine or a private network | that proxy's: the last address in its `X-Forwarded-For`, which it adds itself (Caddy does by default, nginx with the line above) |
 | `cloudflare`   | Cloudflare in front, with or without a local proxy behind it                   | Cloudflare's `CF-Connecting-IP`, only from Cloudflare's own addresses (and a local proxy's, as `local`)                          |
 
+**Only your proxy should be able to reach the relay.** `local` (and `cloudflare`, for the proxy
+behind it) believes `X-Forwarded-For` from any address on the machine or a private network, so
+anyone else who can connect from one could say they're anyone and get round the limits. Set
+`HOST=127.0.0.1` on the standalone relay or `serve.mjs`, with the proxy on the same machine. In
+Docker, leave `HOST` alone inside the container and publish the port on the host's loopback
+(`-p 127.0.0.1:8080:8080`): Docker's own proxy hands on connections from anywhere as if they came
+from its private network.
+
 The relay takes 800 connections in all, so give it room with `LimitNOFILE` if you raise that. A
 connection in no room that's done nothing for 10 minutes is closed, as is a room left alone for
-half an hour. Set `HOST=127.0.0.1` on the standalone relay so only your proxy can reach it.
+half an hour.
 
 Headers from anyone else are ignored, so they can't be made up to get round the limits. Behind a
 proxy with `PROXY` unset, the relay says so once. `TRUSTED_PROXIES` (`"10.1.2.3,10.9.0.0/16"`)
@@ -128,19 +136,29 @@ Its limits, at the top of `server/coop-relay.mjs`:
 | What                          | Limit                                                                                                 |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Rooms on the relay            | 500, or `MULTIPLAYER_MAX_ROOMS`; past that, making one says they're all taken (and the menu shows it) |
-| Connections from one address  | 16 (a household or LAN party behind one address)                                                      |
-| Rooms hosted from one address | 4                                                                                                     |
+| Connections from one address  | 16 (a household or LAN party behind one address), and 64 from one IPv6 /48                            |
+| Rooms hosted from one address | 4, and 16 from one IPv6 /48                                                                           |
 | Rooms made from one address   | 10 a minute                                                                                           |
-| Wrong room codes              | 20 a minute from one address, then it has to wait                                                     |
-| A room with nothing happening | closed after 30 minutes (pings and looking at the list don't count)                                   |
+| Rooms joined from one address | 12 a minute (joining and leaving are each a room update for everyone in it)                           |
+| Wrong room codes              | 20 a minute from one address or IPv6 /48, then it has to wait                                         |
+| A room with nothing happening | closed after 30 minutes (pings, looking at the list, and players' own updates and names don't count)  |
+| A room hearing how it is      | at most once each 250 ms, with the latest, however often it changes                                   |
+| What a host sends its room    | 64 KB/s (a run's start and frames), saving up to 256 KB; a host past it is dropped                    |
+| A guest's input for the host  | 1 KB each and 60 a second; past that it goes no further                                               |
+| A player's own update         | 40 KB, or it's ignored                                                                                |
 | A player's loadout            | 16 KB, or it's dropped                                                                                |
-| A message                     | 256 KB, in 16 pieces at most, nested 16 deep at most, and UTF-8                                       |
-| Frames from one connection    | 400 a second, empty ones and pings included                                                           |
+| A message                     | 256 KB, in 16 pieces at most, and UTF-8; nested 16 deep at most, apart from the host's frames         |
+| One connection                | 400 frames a second (empty ones and pings included) and 512 KB a second, or it's dropped              |
 | Waiting to go out to one      | 1 MB: a connection that stops reading is dropped                                                      |
 
-An IPv6 address counts by its /64, which is what one home or server gets. A kicked player can't
-rejoin that room from the same address. Anything wrong with one message (it isn't JSON, it's too
-deep, it throws) drops that connection and never the relay, and a request whose path isn't a URL
+An IPv6 address counts by its /64, which is what one home or server gets, and its /48 has looser
+limits of its own, as one person can easily have all of a /48's /64s. A kicked player can't rejoin
+that room from the same address, or from anywhere in the same IPv6 /48. A room update carries
+everyone's loadout to everyone, so the relay encodes it once and sends it at most each 250 ms
+however fast the room changes. The host's frames, nearly all of what comes through, go on as they
+came without the depth check: the relay never encodes them again, which is what a deep message
+would break. A message that isn't a JSON object is ignored. One that isn't UTF-8, is too deep or
+makes the relay throw drops that connection, never the relay, and a request whose path isn't a URL
 is a 400. `serve.mjs` turns away WebSocket upgrades to any other path rather than leaving them
 open, and answers `Range` with 206, as the cache's download resumes with one.
 
@@ -297,13 +315,15 @@ src/game/
     Loot.ts           what's in a casket, the inventory
     save.ts           versioned save with migrations, shop, unlocks (maps, and the adventurers
                       and items earned by tasks), the gear found and the Armoury's upgrades,
-                      quests (and the kills and caskets they count)
+                      quests (and the kills and caskets they count), and LocalSaveStore (the
+                      save in localStorage: see Saves)
   scaperune/ maps that aren't in OSRS: a seeded generator, recipes, prefabs cut from the real world.
             Dev-only but for the recipes in maps/shippedMaps.ts, with a temporary Map generator
             button on the dev server's title screen. Its CLAUDE.md is the guide to making one
   client/   GameClient (run flow, camera, input), GameView (3D actors + 2D overlay),
             BossFightView (a phased boss's ground marks, bullets and entrance),
-            GameAssets (what gets baked), GameStore (state for the React UI)
+            GameAssets (what gets baked), GameStore (state for the React UI), SaveLock (one
+            tab saves at a time)
     coop/     CoopLobby (the relay connection and the room), CoopRun (a run's lockstep, host or
               guest), protocol (the messages)
   render/   GameWebGLRenderer (the map viewer's renderer with the game's passes), CameraRig
@@ -438,7 +458,9 @@ numbers the ticks (frames) and sends, every frame or two, what happened at each:
 they're pressing (as whole numbers, so every copy moves the same) and who chose what. Guests step
 only as far as the host has sent, sending their own input to the host to go in a frame, a move
 about 15 times a second at most. The host checks what a guest sends (`cleanMove`,
-`cleanAction` in `core/lockstep.ts`) before it goes in, since every copy applies it. Nothing
+`cleanAction` in `core/lockstep.ts`) before it goes in, since every copy applies it. That only
+checks its shape, so whether a player can do it now is the sim's to check: a modified game can
+send anything (a downed player can't choose, reroll or skip, as `isChoosing` says). Nothing
 waits on a slow guest; they see the run a little behind, and catch up at 8 ms a frame at most.
 
 Guests can predict their own **displayed** movement in `client/coop/MovementPrediction.ts`. It's
@@ -493,7 +515,9 @@ The sim's player state is split into `Hero`s, one a player. `sim.player`, `sim.w
 `sim.stats` and the rest are the current hero's: whichever one the sim is working on (an enemy's
 target, a projectile's owner, whoever's picking something up), and between ticks the one this
 browser plays (`focus`). Something that belongs to a hero (a projectile, a thrall, burning ground,
-venom) remembers whose with `hero`, and the sim works as them when it acts. Co-op actions go
+venom) remembers whose with `hero`, and the sim works as them when it acts. Whatever replaces,
+merges with or caps those (an orbit weapon's orbs, burning ground, a power-up's timer) matches on
+`hero` too, so one player's never takes the place of another's. Co-op actions go
 through `sim.as(hero, ...)`. Events that are a hero's own (a hit taken, a pickup, a casket) carry
 `hero` in co-op, so the client shows its own and leaves the rest. A solo run has one hero and
 plays exactly as before.
@@ -549,7 +573,8 @@ longest), worked out once after each change rather than for every request; the m
 page every 5 seconds, and again when joining fails (a room that filled up or started meanwhile).
 
 To try it locally, `npm start` and open the game in two windows (one private, for a
-save of its own), make a room in one and join it from the other.
+save of its own), make a room in one and join it from the other. A second ordinary window says the
+game's open in another tab, and Play without saving lets it play (see Saves).
 
 ### Touch screens
 
@@ -577,6 +602,34 @@ Everything touch only hangs off `pointer: coarse`, so a mouse and keyboard never
 
 To test it, Playwright's `isMobile` and `hasTouch` turn on `pointer: coarse`, and CDP's
 `Input.dispatchTouchEvent` sends real multi-touch. Mouse clicks don't test any of this.
+
+### Saves
+
+The save is in localStorage under `rune-survivors-save` (`LocalSaveStore` in `core/save.ts`). A
+tab loads it once and writes the whole of it back after each run or purchase, so these keep one
+from being lost:
+
+- **One tab at a time.** `client/SaveLock.ts` holds the Web Lock `run-escape-save` for as long as
+  the tab's open. Another tab doesn't save, and says the game's open elsewhere: Play here takes the
+  lock, and the tab that had it stops saving. When the tab with it closes, the next one gets it.
+  A tab reads the save again whenever it gets the lock, so it carries on from where the other left
+  off. Never rename the lock, or an old tab and a new one won't see each other. Without Web Locks
+  (Safari before 15.4, or plain http other than localhost) every tab saves, as before.
+- **A newer game's save isn't written over.** Every write marks the save with `gameVersion`
+  (`package.json`'s). One from a newer version, or with a `version` above `SAVE_VERSION`, is played
+  but never written, and the player's told to reload. `migrateSave` keeps only the ids it knows,
+  so an older game would otherwise drop new maps, upgrades and items. `SAVE_VERSION` alone can't
+  tell, as new ids don't raise it. This catches a tab left open over a deploy, and an older branch
+  on the dev server. Import turns one away too.
+- **One that won't load is kept.** A save that won't parse goes to
+  `rune-survivors-save-unreadable-<Date.now()>` (the last two are kept) before a fresh one takes
+  its place. The title screen says so, with Export, and Settings lists them to export or delete.
+
+Play without saving closes the panel, and a Not saving button on the title screen opens it again.
+What's bought or earned meanwhile lasts until the tab gets the save back or reloads.
+
+The desktop app has one window and plays the newest game it has, so neither tabs nor an older
+game come up there; an export from a newer version is turned away on import, as anywhere.
 
 ### Notice
 

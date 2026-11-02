@@ -373,8 +373,9 @@ export const LEVEL_MIGHT_LEVELS = 40;
 // across it
 const FIRE_INTERVAL = 25;
 const FIRE_FLAMES = 7;
-// At most this many patches of burning ground at once; a pulse this close to
-// one (a share of its radius) keeps it burning rather than lighting another
+// At most this many patches of burning ground at once for each hero; a pulse
+// this close to one of theirs (a share of its radius) keeps it burning rather
+// than lighting another
 const MAX_FIRES = 3;
 const FIRE_MERGE = 0.5;
 // Split arrows look for enemies this close to where the arrow split
@@ -1435,10 +1436,11 @@ export class Sim {
     }
 
     // A level up's rewards can be skipped for coins, but not a godsword's
-    // hilt, or the coins and shark offered when there's nothing else
+    // hilt, or the coins and shark offered when there's nothing else. Only by
+    // someone choosing: a downed player can't spend the party's coins.
     get canSkip(): boolean {
         return (
-            this.state === "levelUp" &&
+            this.isChoosing() &&
             !this.choosingHilt &&
             this.choices.some((c) => c.kind !== "coins" && c.kind !== "food")
         );
@@ -1477,13 +1479,14 @@ export class Sim {
 
     // Rolls what's on offer again, for one of the run's rerolls: the level
     // up's rewards, or the open casket's item (another one, its rarity rolled
-    // again too). False when there's no reroll left or nothing on offer.
+    // again too). False when there's no reroll left or nothing on offer (a
+    // downed player has no level up to choose).
     reroll(): boolean {
         const chest = this.chest;
         if (this.rerollsLeft <= 0 || this.choosingHilt) {
             return false;
         }
-        if (this.state === "levelUp" && this.pendingLevelUps > 0) {
+        if (this.isChoosing()) {
             this.choices = this.roll();
         } else if (this.state === "chest" && chest) {
             this.declineSetPiece(chest.itemId);
@@ -2926,7 +2929,9 @@ export class Sim {
         ignoreArmor = false,
     ): number {
         const player = this.player;
-        if (this.hero.down && !this.runOver) {
+        // Once the run's over nothing more lands, so a win can't turn into a
+        // death (or spend a revive) later in the tick it's won
+        if (this.runOver || this.hero.down) {
             return 0;
         }
         const armor = ignoreArmor ? 0 : this.stats.armor;
@@ -4897,7 +4902,7 @@ export class Sim {
         showImpact = true,
     ): void {
         const player = this.player;
-        if (this.reviving || (this.hero.down && !this.runOver)) {
+        if (this.reviving || this.runOver || this.hero.down) {
             return;
         }
         if (showImpact && attack.impactSpotAnim !== undefined) {
@@ -5344,6 +5349,12 @@ export class Sim {
     }
 
     private endRun(state: "dead" | "victory"): void {
+        // A result stands, except that the final boss falling in the same tick
+        // as the last player wins, whichever came first (weapons still fire in
+        // that tick, see stepRun)
+        if (this.runOver && !(state === "victory" && this.tick === this.endTick)) {
+            return;
+        }
         this.endTick = this.tick;
         this.state = state;
         // Everything stands still from here on; idle rather than walk on the spot
@@ -6031,11 +6042,13 @@ export class Sim {
     }
 
     // Puts the weapon's items circling the player, evenly spaced, in place of
-    // any of theirs still going round from last time
+    // any of theirs still going round from last time (not the rest of the
+    // party's)
     private fireOrbit(def: WeaponDef, level: WeaponDef["levels"][number]): void {
         const player = this.player;
+        const hero = this.hero.index;
         this.projectiles = this.projectiles.filter(
-            (p) => !(p.orbit && p.weapon === def && p.hero === this.hero.index),
+            (p) => !(p.orbit && p.weapon === def && p.hero === hero),
         );
         const amount = level.amount + this.stats.amount;
         const radius = level.area * (1 + this.stats.area);
@@ -6385,7 +6398,8 @@ export class Sim {
     // Leaves the ground around the player burning for the level's duration
     // (Toktz-mej-tal), with flames across it. A pulse where the ground's
     // already burning keeps that fire going instead, and only a few burn at
-    // once (the oldest goes out).
+    // once (the oldest goes out). In co-op each player has their own: one's
+    // pulse doesn't feed or put out another's fire.
     private burnGround(
         burns: NonNullable<WeaponDef["burns"]>,
         level: WeaponDef["levels"][number],
@@ -6396,7 +6410,9 @@ export class Sim {
         // A share of the aura's own reach, so it grows with its area bonuses
         const radius = level.area * (1 + this.stats.area) * burns.radius;
         const damage = level.damage * burns.damage;
-        const same = this.fires.find(
+        const hero = this.hero.index;
+        const own = this.fires.filter((fire) => fire.hero === hero);
+        const same = own.find(
             (fire) => fm.hypot(fire.x - x, fire.y - y) < fire.radius * FIRE_MERGE,
         );
         if (same) {
@@ -6404,8 +6420,8 @@ export class Sim {
             same.damage = Math.max(same.damage, damage);
             return;
         }
-        if (this.fires.length >= MAX_FIRES) {
-            this.fires.shift();
+        if (own.length >= MAX_FIRES) {
+            this.fires.splice(this.fires.indexOf(own[0]), 1);
         }
         const flames: Vec2[] = [];
         for (let i = 0; i < FIRE_FLAMES; i++) {
@@ -7642,10 +7658,13 @@ export class Sim {
         }
     }
 
-    // Its timer on screen goes with it, which may be early
+    // Its timer on screen goes with it, which may be early (its own hero's,
+    // not another's from the same power-up)
     private endRampage(rampage: Rampage): void {
         rampage.doneTick = this.tick;
-        const active = this.powerUps.find((p) => p.id === rampage.powerUpId);
+        const active = this.powerUps.find(
+            (p) => p.id === rampage.powerUpId && p.hero === rampage.hero,
+        );
         if (active) {
             active.endTick = this.tick + 1;
         }
