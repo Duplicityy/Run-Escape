@@ -8,8 +8,8 @@ the version in the corner).
 ### Added
 
 - Each weapon's damage during a run: press Tab, or click or tap the DPS under the minimap, to see
-  what each weapon is doing a second right now, its share, and its total. It stays open or shut as
-  you left it.
+  what each weapon is doing a second right now (the best first), its share, and its total. It stays
+  open or shut as you left it.
 
 ## 0.22.1 - 2026-11-02
 

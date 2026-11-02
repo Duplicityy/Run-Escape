@@ -1036,11 +1036,11 @@
 
 .ui-damage-panel {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) auto auto;
+    grid-template-columns: 24px minmax(0, 1fr) auto auto auto;
     align-items: center;
     column-gap: 8px;
     row-gap: 3px;
-    width: 250px;
+    width: 290px;
     margin-top: 4px;
     padding: 6px 8px;
     /* The game's stone brown, which item icons are drawn for, a little see-through */
@@ -1090,10 +1090,15 @@
     background: var(--ui-orange);
 }
 
+.ui-damage-share,
 .ui-damage-dps,
 .ui-damage-total {
     text-align: right;
     white-space: nowrap;
+}
+
+.ui-damage-share {
+    color: var(--ui-orange);
 }
 
 .ui-damage-dps {

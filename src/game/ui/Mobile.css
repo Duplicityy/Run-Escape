@@ -573,13 +573,13 @@
     }
 
     /* Beside the DPS rather than under it, left of the item buttons' column
-       however many weapons there are: damage a second only */
+       however many weapons there are: share and damage a second only */
     .ui-damage-panel {
         position: absolute;
         top: 0;
         right: 160px;
         zoom: 0.75;
-        grid-template-columns: 24px minmax(0, 1fr) auto;
+        grid-template-columns: 24px minmax(0, 1fr) auto auto;
         margin-top: 0;
     }
 

@@ -58,6 +58,7 @@ import { RerollButton } from "./RerollButton";
 import { SkipButton } from "./SkipButton";
 import { RotateNotice, TouchControls, enterFullscreen } from "./TouchControls";
 import { GAME_VERSION } from "./changelog";
+import { formatCompact, formatShare } from "./formatCompact";
 import { Notice, loadNotice, markNoticeSeen, shouldShowNotice } from "./notice";
 
 type Props = {
@@ -1512,8 +1513,10 @@ function LevelUpModal({ ui, client }: ScreenProps): JSX.Element {
 }
 
 // The HUD's DPS, and under it each weapon's: click the DPS (or press Tab) to
-// open or shut it. Each weapon's damage a second just now, its share of all
-// of it as a bar, and its damage this run.
+// open or shut it. Each weapon's damage a second just now, most first, its
+// share of all of it (a bar and a percentage), and its damage this run.
+// Numbers are short (9.5K, 1.2B), as endless runs reach billions; pointing
+// at one gives it in full.
 function DamagePanel({
     hud,
     open,
@@ -1524,6 +1527,10 @@ function DamagePanel({
     client: GameClient;
 }): JSX.Element {
     const total = hud.weaponDamage.reduce((sum, w) => sum + w.dps, hud.otherDps);
+    // Most damage a second first; ties (weapons yet to hit) keep the HUD's order
+    const rows = hud.weapons
+        .map((slot) => ({ slot, row: hud.weaponDamage.find((w) => w.id === slot.id) }))
+        .sort((a, b) => (b.row?.dps ?? 0) - (a.row?.dps ?? 0));
     return (
         <div className="ui-damage">
             <button
@@ -1531,7 +1538,7 @@ function DamagePanel({
                 onClick={() => client.toggleDamagePanel()}
                 title="Show or hide each weapon's damage (Tab)"
             >
-                <span className="ui-dps-label">DPS</span> {formatPerSecond(hud.dps)}{" "}
+                <span className="ui-dps-label">DPS</span> {formatCompact(hud.dps)}{" "}
                 <span className="ui-dps-toggle">{open ? "▾" : "▸"}</span>
             </button>
             {open && (
@@ -1539,11 +1546,11 @@ function DamagePanel({
                     <div className="ui-damage-head">
                         <span />
                         <span />
+                        <span>Share</span>
                         <span>DPS</span>
                         <span>Total</span>
                     </div>
-                    {hud.weapons.map((slot) => {
-                        const row = hud.weaponDamage.find((w) => w.id === slot.id);
+                    {rows.map(({ slot, row }) => {
                         const dps = row?.dps ?? 0;
                         return (
                             <div key={slot.id} className="ui-damage-row">
@@ -1567,9 +1574,12 @@ function DamagePanel({
                                         />
                                     </span>
                                 </span>
-                                <span className="ui-damage-dps">{formatPerSecond(dps)}</span>
-                                <span className="ui-damage-total">
-                                    <Big value={row?.damage ?? 0} />
+                                <span className="ui-damage-share">{formatShare(dps, total)}</span>
+                                <span className="ui-damage-dps" title={exact(dps)}>
+                                    {formatCompact(dps)}
+                                </span>
+                                <span className="ui-damage-total" title={exact(row?.damage ?? 0)}>
+                                    {formatCompact(row?.damage ?? 0)}
                                 </span>
                             </div>
                         );
@@ -1580,7 +1590,12 @@ function DamagePanel({
                             <span className="ui-damage-weapon" title="Items, power-ups and recoil">
                                 Other
                             </span>
-                            <span className="ui-damage-dps">{formatPerSecond(hud.otherDps)}</span>
+                            <span className="ui-damage-share">
+                                {formatShare(hud.otherDps, total)}
+                            </span>
+                            <span className="ui-damage-dps" title={exact(hud.otherDps)}>
+                                {formatCompact(hud.otherDps)}
+                            </span>
                             <span />
                         </div>
                     )}
@@ -1588,6 +1603,10 @@ function DamagePanel({
             )}
         </div>
     );
+}
+
+function exact(value: number): string {
+    return Math.round(value).toLocaleString();
 }
 
 // The quests this run is getting on with, under the minimap: click the title
