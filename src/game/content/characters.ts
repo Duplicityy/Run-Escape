@@ -541,6 +541,28 @@ export const CHARACTERS: CharacterDef[] = [
         bonus: { might: 0.1 },
         unlock: { kind: "killBoss", mapId: "pest_control", enemyId: "purple_portal" },
     },
+    {
+        id: "inquisitor",
+        name: "Inquisitor",
+        description:
+            "Made for Phosani's Nightmare, and everyone plays them there: starts with the " +
+            "Inquisitor's mace, moves 15% faster, has 20% more hitpoints and hits bosses 25% " +
+            "harder.",
+        style: "melee",
+        startingWeapon: "inquisitors_mace",
+        // The Inquisitor's armour, her own drop, with Barrows gloves and climbing boots
+        equipment: {
+            [EquipSlot.HEAD]: 24419,
+            [EquipSlot.TORSO]: 24420,
+            [EquipSlot.LEGS]: 24421,
+            [EquipSlot.HANDS]: FUN_ITEMS.barrowsGloves,
+            [EquipSlot.FEET]: FUN_ITEMS.climbingBoots,
+        },
+        // A fight that's all dodging and one boss: feet, hitpoints to learn her
+        // on, and damage where it counts
+        bonus: { moveSpeed: 0.15, maxHp: 0.2, bossMight: 0.25 },
+        unlock: { kind: "killBoss", mapId: "phosani", enemyId: "phosanis_nightmare" },
+    },
 ];
 
 export const CHARACTER_BY_ID: Map<string, CharacterDef> = new Map(CHARACTERS.map((c) => [c.id, c]));

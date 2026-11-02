@@ -2656,6 +2656,7 @@ describe("maps", () => {
                 expect(map.events[0]).toMatchObject({ at: 0, kind: "finalBoss" });
                 expect(getEnemy(map.events[0].enemyId).boss?.intro?.alone).toBe(true);
                 expect(getMap(map.fight.requires).fight).toBeUndefined();
+                expect(CHARACTERS.some((c) => c.id === map.fight!.character)).toBe(true);
                 continue;
             }
             expect(map.waves.length).toBeGreaterThan(0);

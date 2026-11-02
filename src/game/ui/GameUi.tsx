@@ -1040,9 +1040,14 @@ function MapDetails({ save, map }: { save: SaveData; map: MapDef }): JSX.Element
                                 : "Fun map, endless"
                             : !unlocked
                               ? `Beat ${getMap(map.fight?.requires ?? MAPS[MAPS.indexOf(map) - 1].id).name} to unlock`
-                              : wins > 0
-                                ? `Beaten ${wins === 1 ? "once" : `${wins} times`}`
-                                : "Not beaten yet"}
+                              : map.fight
+                                ? `Boss fight. You play as the ${getCharacter(map.fight.character).name}` +
+                                  (wins > 0
+                                      ? `, beaten ${wins === 1 ? "once" : `${wins} times`}.`
+                                      : ".")
+                                : wins > 0
+                                  ? `Beaten ${wins === 1 ? "once" : `${wins} times`}`
+                                  : "Not beaten yet"}
                     </div>
                     {endless && (
                         <div className="ui-card-style">

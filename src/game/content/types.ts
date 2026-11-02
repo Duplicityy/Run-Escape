@@ -985,7 +985,8 @@ export type MapDef = {
     // seasonal map, and open once requires (a map id) has been beaten; it
     // can't be endless. The run begins at level 1 + levelUps, with that many
     // picks to make before she wakes, as there's nothing to level on but her.
-    fight?: { requires: string; levelUps: number };
+    // Everyone plays character there (an adventurer made for the fight).
+    fight?: { requires: string; levelUps: number; character: string };
     // How the map's drawn, 1 as the game is and lower darker
     brightness?: number;
 };

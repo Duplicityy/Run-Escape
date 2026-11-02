@@ -143,7 +143,8 @@ Add it to `MAPS` in `maps.ts` (fun maps go in `fun/maps.ts`), with its waves in 
 - A map with `fight` is one boss fight (Phosani's Nightmare): `waves: []`, one `finalBoss` event
   at 0 whose boss has an `intro` with `alone`, and it opens once `fight.requires` is beaten. The run
   begins with `fight.levelUps` picks, and `BossPhasesDef.blastLevelUps` gives more with each totem
-  blast. It's listed under Boss fights on the map screen, and can't be endless. Sim it with
+  blast. Everyone plays `fight.character` there (`getMapCharacter` in `maps.ts` is what reads it,
+  and a fun map's `character`), an adventurer made for the fight, with its own `unlock` task. It's listed under Boss fights on the map screen, and can't be endless. Sim it with
   `FLAT=1 MAP=phosani DODGE=1`, which needs no cache, and go by how long the bot lasts and what
   hits it: it can't dodge as a person does.
 - Check it in the browser: the minimap, the spawn, and that enemies can reach you. The sim's bot

@@ -1,3 +1,4 @@
+import { getCharacter } from "../content/characters";
 import { getEnemy } from "../content/enemies";
 import { getMap } from "../content/maps";
 import { emptyStats } from "../content/types";
@@ -13,7 +14,7 @@ const BASE = 1000;
 const SIZE = 64;
 
 // An open square with a wall round it, as big as her square on the real map
-function createSim(seed = 1, characterId = "wizard"): Sim {
+function createSim(seed = 1, characterId = "inquisitor"): Sim {
     const rows: string[] = [];
     for (let y = 0; y < SIZE; y++) {
         let row = "";
@@ -80,7 +81,7 @@ afterEach(() => {
 describe("the map", () => {
     test("is one fight, with her the only thing on it", () => {
         const map = getMap("phosani");
-        expect(map.fight).toEqual({ requires: "halloween", levelUps: 8 });
+        expect(map.fight).toEqual({ requires: "halloween", levelUps: 8, character: "inquisitor" });
         expect(map.waves).toEqual([]);
         expect(map.events).toEqual([
             { at: 0, kind: "finalBoss", enemyId: "phosanis_nightmare", hp: 4200 },
@@ -96,6 +97,31 @@ describe("the map", () => {
         expect(pickAll(sim)).toBe(8);
         expect(sim.state).toBe("playing");
         expect(sim.weapons.length + sim.passives.length).toBeGreaterThan(1);
+    });
+
+    test("everyone plays the Inquisitor there, with the mace she drops", () => {
+        const map = getMap("phosani");
+        expect(map.fight?.character).toBe("inquisitor");
+        const inquisitor = getCharacter("inquisitor");
+        expect(inquisitor.startingWeapon).toBe("inquisitors_mace");
+        expect(inquisitor.unlock).toEqual({
+            kind: "killBoss",
+            mapId: "phosani",
+            enemyId: "phosanis_nightmare",
+        });
+        const sim = createSim();
+        expect(sim.weapons.map((w) => w.def.id)).toEqual(["inquisitors_mace"]);
+        // Their picks can take the mace further, though it's a locked weapon
+        let levelled = false;
+        for (let i = 0; i < 8 && !levelled; i++) {
+            const index = sim.choices.findIndex(
+                (c) => c.kind === "weaponLevel" && c.weaponId === "inquisitors_mace",
+            );
+            levelled = index !== -1;
+            sim.choose(Math.max(0, index));
+        }
+        expect(sim.stats.moveSpeed).toBeGreaterThan(0);
+        expect(sim.stats.bossMight).toBeGreaterThan(0);
     });
 
     test("she rises as soon as the picks are made, and nothing else ever comes", () => {

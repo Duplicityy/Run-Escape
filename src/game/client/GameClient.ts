@@ -18,6 +18,7 @@ import {
     MAP_BY_ID,
     getArenaRegion,
     getMap,
+    getMapCharacter,
     isDevMap,
     isFunMap,
 } from "../content/maps";
@@ -659,7 +660,7 @@ export class GameClient implements GameFrameHandler {
                 id: member.id,
                 name: member.name,
                 characterId:
-                    map.fun?.character ??
+                    getMapCharacter(map) ??
                     (CHARACTERS.some((c) => c.id === member.characterId)
                         ? member.characterId
                         : CHARACTERS[0].id),
@@ -994,7 +995,7 @@ export class GameClient implements GameFrameHandler {
             map.fun !== undefined ||
             (this.store.getSnapshot().endless && isEndlessUnlocked(this.save, mapId));
         const hard = this.store.getSnapshot().hard && isHardUnlocked(this.save, mapId);
-        const characterId = map.fun?.character ?? this.store.getSnapshot().characterId;
+        const characterId = getMapCharacter(map) ?? this.store.getSnapshot().characterId;
         if (!(await this.travelTo(mapId, "characters"))) {
             return;
         }
@@ -1161,6 +1162,9 @@ export class GameClient implements GameFrameHandler {
             revive: undefined,
         });
         this.updateHud(true);
+        // A run that begins with picks to make (a boss fight's) shows them now:
+        // the loop only steps the sim once they're made
+        this.syncOverlay();
         if (this.coopRun?.isHost && this.coopRun.waitingForLoad) {
             this.store.toast("Waiting for everyone to arrive...", 3000);
         }

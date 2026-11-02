@@ -356,7 +356,7 @@ export const MAPS: MapDef[] = [
         victoryText: "Phosani's Nightmare is laid to rest!",
         bossArena: INQUISITORS_BOSS_ARENA,
         scaperune: true,
-        fight: { requires: "halloween", levelUps: 8 },
+        fight: { requires: "halloween", levelUps: 8, character: "inquisitor" },
         brightness: 0.75,
     },
 ];
@@ -435,6 +435,12 @@ export function isSeasonalMap(mapId: string): boolean {
 
 export function isFightMap(mapId: string): boolean {
     return MAP_BY_ID.get(mapId)?.fight !== undefined;
+}
+
+// The adventurer everyone plays on a map, if it has one (Durial321 in
+// Falador, the Inquisitor against Phosani's Nightmare)
+export function getMapCharacter(map: MapDef): string | undefined {
+    return map.fun?.character ?? map.fight?.character;
 }
 
 export function getMap(id: string): MapDef {

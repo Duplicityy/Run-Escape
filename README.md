@@ -25,7 +25,7 @@ built on [rs-map-viewer](https://github.com/dennisdev/rs-map-viewer), the code b
 - **6 fun maps**, open from the start and endless: the Grand Exchange's scammers, East Varrock's
   F2P pkers past the Wilderness Ditch, Falador on 6 June 2006, Last Man Standing, Castle Wars and
   Pest Control.
-- **33 adventurers**, each with a starting weapon and a bonus, unlocked by beating maps and doing
+- **34 adventurers**, each with a starting weapon and a bonus, unlocked by beating maps and doing
   tasks on them.
 - **Weapons that upgrade the OSRS way** (bronze to dragon, Fire Strike to Fire Wave) and
   **evolve** with the right passive (a maxed dragon scimitar with Piety becomes the Abyssal whip),
