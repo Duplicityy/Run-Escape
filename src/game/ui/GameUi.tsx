@@ -58,6 +58,7 @@ import { RerollButton } from "./RerollButton";
 import { SkipButton } from "./SkipButton";
 import { RotateNotice, TouchControls, enterFullscreen } from "./TouchControls";
 import { GAME_VERSION } from "./changelog";
+import { formatCompact, formatShare } from "./formatCompact";
 import { Notice, loadNotice, markNoticeSeen, shouldShowNotice } from "./notice";
 
 type Props = {
@@ -1060,7 +1061,14 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
     const hud = ui.hud;
     return (
         <div className="ui-fill ui-run">
-            {hud && <Hud hud={hud} client={client} questTracker={ui.display.questTracker} />}
+            {hud && (
+                <Hud
+                    hud={hud}
+                    client={client}
+                    questTracker={ui.display.questTracker}
+                    damagePanel={ui.display.damagePanel}
+                />
+            )}
             {ui.party.length > 0 && <PartyFrames party={ui.party} />}
             {ui.waitingOn.length > 0 && (ui.overlay === "none" || ui.overlay === "paused") && (
                 <WaitingNote names={ui.waitingOn} />
@@ -1254,10 +1262,12 @@ function Hud({
     hud,
     client,
     questTracker,
+    damagePanel,
 }: {
     hud: HudView;
     client: GameClient;
     questTracker: boolean;
+    damagePanel: boolean;
 }): JSX.Element {
     const bossIn = hud.bossIn;
     return (
@@ -1283,9 +1293,7 @@ function Hud({
                     {hud.quests.length > 0 && (
                         <QuestTracker quests={hud.quests} open={questTracker} client={client} />
                     )}
-                    <div className="ui-dps">
-                        <span className="ui-dps-label">DPS</span> {formatPerSecond(hud.dps)}
-                    </div>
+                    <DamagePanel hud={hud} open={damagePanel} client={client} />
                 </div>
             </div>
             {hud.boss ? (
@@ -1502,6 +1510,101 @@ function LevelUpModal({ ui, client }: ScreenProps): JSX.Element {
             </div>
         </div>
     );
+}
+
+// The HUD's DPS, and under it each weapon's: click the DPS (or press Tab) to
+// open or shut it. Each weapon's damage a second just now, most first, its
+// share of all of it (a bar and a percentage), and its damage this run.
+// Numbers are short (9.5K, 1.2B), as endless runs reach billions; pointing
+// at one gives it in full.
+function DamagePanel({
+    hud,
+    open,
+    client,
+}: {
+    hud: HudView;
+    open: boolean;
+    client: GameClient;
+}): JSX.Element {
+    const total = hud.weapons.reduce((sum, w) => sum + (w.dps ?? 0), hud.otherDps);
+    // Most damage a second first; ties (weapons yet to hit) keep the HUD's order
+    const rows = [...hud.weapons].sort((a, b) => (b.dps ?? 0) - (a.dps ?? 0));
+    return (
+        <div className="ui-damage">
+            <button
+                className="ui-dps"
+                onClick={() => client.toggleDamagePanel()}
+                title="Show or hide each weapon's damage (Tab)"
+            >
+                <span className="ui-dps-label">DPS</span> {formatCompact(hud.dps)}{" "}
+                <span className="ui-dps-toggle">{open ? "▾" : "▸"}</span>
+            </button>
+            {open && (
+                <div className="ui-damage-panel">
+                    <div className="ui-damage-head">
+                        <span />
+                        <span />
+                        <span>Share</span>
+                        <span>DPS</span>
+                        <span>Total</span>
+                    </div>
+                    {rows.map((slot) => {
+                        const dps = slot.dps ?? 0;
+                        return (
+                            <div key={slot.id} className="ui-damage-row">
+                                <ItemIcon
+                                    objId={slot.iconObjId}
+                                    spriteId={slot.iconSpriteId}
+                                    size={24}
+                                />
+                                <span className="ui-damage-weapon">
+                                    <span
+                                        className="ui-damage-name"
+                                        style={{ color: slot.rarityColor }}
+                                    >
+                                        {slot.name}
+                                    </span>
+                                    <span className="ui-damage-bar">
+                                        <span
+                                            style={{
+                                                width: `${total > 0 ? (dps / total) * 100 : 0}%`,
+                                            }}
+                                        />
+                                    </span>
+                                </span>
+                                <span className="ui-damage-share">{formatShare(dps, total)}</span>
+                                <span className="ui-damage-dps" title={exact(dps)}>
+                                    {formatCompact(dps)}
+                                </span>
+                                <span className="ui-damage-total" title={exact(slot.damage ?? 0)}>
+                                    {formatCompact(slot.damage ?? 0)}
+                                </span>
+                            </div>
+                        );
+                    })}
+                    {hud.otherDps >= 0.05 && (
+                        <div className="ui-damage-row ui-damage-other">
+                            <span />
+                            <span className="ui-damage-weapon" title="Items, power-ups and recoil">
+                                Other
+                            </span>
+                            <span className="ui-damage-share">
+                                {formatShare(hud.otherDps, total)}
+                            </span>
+                            <span className="ui-damage-dps" title={exact(hud.otherDps)}>
+                                {formatCompact(hud.otherDps)}
+                            </span>
+                            <span />
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function exact(value: number): string {
+    return Math.round(value).toLocaleString();
 }
 
 // The quests this run is getting on with, under the minimap: click the title

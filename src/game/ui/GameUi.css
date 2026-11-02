@@ -1011,10 +1011,103 @@
     color: var(--ui-green);
 }
 
-/* The damage meter, under the quest tracker */
+/* The damage meter, under the quest tracker, and each weapon's under it */
+/* Only the DPS takes clicks: the panel under it lets them through to the
+   game, the mouse wheel's zoom included */
+.ui-damage {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    pointer-events: none;
+}
+
 .ui-dps {
+    font: inherit;
     font-size: 16px;
+    color: var(--ui-white);
+    background: none;
+    border: none;
+    padding: 0;
     text-shadow: 1px 1px 0 #000;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.ui-dps-toggle {
+    color: var(--ui-orange);
+}
+
+.ui-damage-panel {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 3px;
+    width: 290px;
+    margin-top: 4px;
+    padding: 6px 8px;
+    /* The game's stone brown, which item icons are drawn for, a little see-through */
+    background: rgba(62, 53, 41, 0.85);
+    border: 1px solid var(--ui-edge);
+    box-shadow: inset 0 0 0 1px var(--ui-edge-light);
+    font-size: 15px;
+    text-shadow: 1px 1px 0 #000;
+}
+
+/* Each row's cells sit in the panel's columns */
+.ui-damage-head,
+.ui-damage-row {
+    display: contents;
+}
+
+.ui-damage-head > span {
+    font-family: "OSRS Bold", sans-serif;
+    color: var(--ui-orange);
+    text-align: right;
+}
+
+.ui-damage-weapon {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.ui-damage-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Its share of all the damage just now */
+.ui-damage-bar {
+    height: 3px;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.ui-damage-bar > span {
+    display: block;
+    height: 100%;
+    background: var(--ui-orange);
+}
+
+.ui-damage-share,
+.ui-damage-dps,
+.ui-damage-total {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.ui-damage-share {
+    color: var(--ui-orange);
+}
+
+.ui-damage-dps {
+    color: var(--ui-yellow);
+}
+
+.ui-damage-other {
+    color: var(--ui-text);
 }
 
 .ui-dps-label {

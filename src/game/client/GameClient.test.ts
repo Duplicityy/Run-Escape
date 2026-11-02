@@ -3,6 +3,7 @@ import { emptyStats } from "../content/types";
 import { Sim } from "../core/Sim";
 import { createSave } from "../core/save";
 import { makeGrid } from "../core/world/testGrid";
+import { DamageMeter } from "./DamageMeter";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
 import { GameClient } from "./GameClient";
 import { GameStore } from "./GameStore";
@@ -32,11 +33,13 @@ function createClient(sim: Sim, autoAlch: boolean) {
         paused: false,
         shownDps: 0,
         shownDpsTick: 0,
+        damageMeter: new DamageMeter(),
         lastHudUpdate: 0,
         display: {
             menuSpin: false,
             pauseOnBlur: true,
             questTracker: true,
+            damagePanel: false,
             autoAlch,
             movePrediction: false,
         },
@@ -79,6 +82,87 @@ describe("movement prediction", () => {
         client.toggleMovePrediction();
         expect(setPrediction).toHaveBeenLastCalledWith(false);
         vi.unstubAllGlobals();
+    });
+});
+
+function displayOf(client: GameClient): DisplaySettings {
+    return (client as unknown as { display: DisplaySettings }).display;
+}
+
+describe("the damage panel", () => {
+    test("is shut unless it's been opened, and is remembered", () => {
+        const stored = new Map<string, string>();
+        vi.stubGlobal("window", {
+            matchMedia: () => ({ matches: false }),
+            localStorage: {
+                getItem: (key: string) => stored.get(key) ?? null,
+                setItem: (key: string, value: string) => stored.set(key, value),
+            },
+        });
+        expect(loadDisplaySettings().damagePanel).toBe(false);
+        // Settings saved before there was such a thing
+        stored.set("rune-survivors-display", JSON.stringify({ questTracker: false }));
+        expect(loadDisplaySettings().damagePanel).toBe(false);
+        const { client } = createClient(createSim(), false);
+        client.toggleDamagePanel();
+        expect(loadDisplaySettings().damagePanel).toBe(true);
+        client.toggleDamagePanel();
+        expect(loadDisplaySettings().damagePanel).toBe(false);
+        vi.unstubAllGlobals();
+    });
+
+    test("has each weapon's damage on the HUD", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const sim = createSim();
+        const { client, store } = createClient(sim, false);
+        const updateHud = (client as unknown as { updateHud(force: boolean): void }).updateHud;
+        const source = `weapon:${sim.weapons[0].def.id}` as const;
+        sim.damageBySource[source] = 0;
+        updateHud.call(client, true);
+        for (let i = 0; i < 4 * 50; i++) {
+            sim.tick++;
+        }
+        sim.damageBySource[source] = 400;
+        updateHud.call(client, true);
+        const hud = store.getSnapshot().hud!;
+        expect(hud.weapons[0]).toMatchObject({ dps: 100, damage: 400 });
+        expect(hud.otherDps).toBe(0);
+        vi.unstubAllGlobals();
+    });
+
+    test("puts a weapon that's gone (evolved) under none, not Other", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const sim = createSim();
+        const { client, store } = createClient(sim, false);
+        const updateHud = (client as unknown as { updateHud(force: boolean): void }).updateHud;
+        updateHud.call(client, true);
+        sim.tick += 4 * 50;
+        // An old weapon's damage, and a ring of recoil's
+        sim.damageBySource["weapon:evolved_away"] = 600;
+        sim.damageBySource.recoil = 40;
+        updateHud.call(client, true);
+        expect(store.getSnapshot().hud!.otherDps).toBe(10);
+        vi.unstubAllGlobals();
+    });
+
+    // Tab's the panel's (GameInput.takesKey, and the key press) only then
+    test("takes Tab only while the run's being played", () => {
+        const sim = createSim();
+        const { client, store } = createClient(sim, false);
+        const isPlaying = () =>
+            (client as unknown as { isPlaying(): boolean }).isPlaying.call(client);
+        store.set({ overlay: "none" });
+        expect(isPlaying()).toBe(true);
+        // A level up, a casket, the pause menu: Tab moves between their buttons
+        for (const overlay of ["levelUp", "chest", "paused"] as const) {
+            store.set({ overlay });
+            expect(isPlaying()).toBe(false);
+        }
+        // Nor once the run's over
+        store.set({ overlay: "none" });
+        // How a run ends is the sim's business; only that it has matters here
+        Object.defineProperty(sim, "runOver", { value: true });
+        expect(isPlaying()).toBe(false);
     });
 });
 

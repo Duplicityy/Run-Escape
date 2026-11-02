@@ -4,10 +4,11 @@ Everything in the game, map by map and system by system. The [README](../README.
 version and how to run it.
 
 - **WASD** or the arrow keys to move. Weapons fire on their own. **1-4** use your utility items.
-  **Esc** pauses. **Q** shows or hides the quest tracker. The mouse wheel zooms.
+  **Esc** pauses. **Q** shows or hides the quest tracker. **Tab**, or clicking the DPS under the
+  minimap, shows each weapon's damage a second and its total for the run. The mouse wheel zooms.
 - On a touch screen, drag anywhere to move: the stick appears under your thumb. Tap the buttons on
-  screen to pause and use items, with the thumb still on the stick if you like. Phones play
-  sideways, with gear and quests in the pause menu.
+  screen to pause and use items, with the thumb still on the stick if you like. Tap the DPS for each
+  weapon's damage. Phones play sideways, with gear and quests in the pause menu.
 - Enemies drop **bones**; walk near them to collect their experience. Bones lying close together
   gather into one pile worth all of their experience, and it looks the part as it grows: Big
   bones, Dragon bones, Wyvern bones, Lava dragon bones, then Superior dragon bones. Coins gather

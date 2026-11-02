@@ -36,6 +36,7 @@ go stale. Add anything that cost you time to work out.
 | Random events: who turns up, what they do             | `src/game/content/randomEvents.ts`       |
 | Save data and migrations                              | `src/game/core/save.ts`                  |
 | Run flow, camera, input, the HUD's data               | `src/game/client/GameClient.ts`          |
+| The damage panel: each weapon's DPS during a run      | `src/game/client/DamageMeter.ts`         |
 | 3D actors, swooshes, hitsplats                        | `src/game/client/GameView.ts`            |
 | Touch screens: the stick, its buttons, phone layouts  | `docs/DEVELOPMENT.md`, Touch screens     |
 | The game on a phone's home screen (PWA)               | `docs/DEVELOPMENT.md`, Touch screens     |
