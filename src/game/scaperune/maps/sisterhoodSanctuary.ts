@@ -78,9 +78,7 @@ export const DEAD_GRASS = [37717, 37717, 37718, 37718, 37718, 37716];
 export const NIGHTMARE_FLOWERS = [37712, 37713, 37714, 37714, 37715, 37710];
 // The Sanctuary's floor: Morytania's bones and pebbles, and its own bone bits. Its flags
 // (37786 to 37809) are left out: from the camera they read as loose chequered tiles.
-export const CHAMBER_FLOOR = [
-    37786, 37787, 37788, 37789, 37790, 37791, 37792, 37793, 12705, 12910, 12911,
-];
+export const CHAMBER_FLOOR = [12705, 12910, 12911, 33623, 33635];
 // Blood, the Theatre's and the Nightmare's
 export const BLOOD = [652, 653, 654, 37846, 37847, 37848];
 // Lumiere's candles, lit all through the Sanctuary, and Hallowed Night's
@@ -152,12 +150,17 @@ const ALTAR_CLOTHS: Solid[] = [
 const LECTERN: Solid = [37820, 1, 1];
 const BIG_CHEST: Solid = [37845, 2, 2];
 const CRATE: Solid = [37936, 1, 1];
-// The Theatre of Blood's dead: the raiders in Verzik's hall, and the one in Ver Sinhaza
+// The Theatre of Blood's dead: the skeletons in Verzik's hall, the armoured one in Ver Sinhaza,
+// and the mercenaries' bodies and the corpses Xarpus exhumes, which his room's script lays
+// out (they're not in its square). The exhumed one is floor decoration, so it goes by dress.
 const DEAD_RAIDERS: Solid[] = [
     [32735, 2, 1],
-    [32735, 2, 1],
+    [32742, 2, 1],
     [32741, 2, 1],
+    [32754, 1, 1],
+    [32754, 1, 1],
 ];
+const EXHUMED = 32743;
 // The dream's sleepers, the armoured figures that hang round her arena. In the cache they
 // stand on an upper level over the void; LocOverrides.ts lifts them off the ground here.
 const SLEEPERS: Solid[] = [
@@ -205,6 +208,7 @@ export const SOLID_LOCS: Solid[] = [
 // And what's walked through
 export const WALK_THROUGH = [
     DREAM_FLOWER,
+    EXHUMED,
     ...DEAD_GRASS,
     ...NIGHTMARE_FLOWERS,
     ...CHAMBER_FLOOR,
@@ -604,6 +608,10 @@ function placeChamber(sanctuary: Sanctuary): void {
                 if (rng() < 0.7) {
                     sanctuary.dress(pick(rng, BLOOD), LOC_FLOOR_DECORATION, x + dx, y + dy);
                 }
+            }
+            // And now and then one of Xarpus's exhumed beside it
+            if (rng() < 0.3) {
+                sanctuary.dress(EXHUMED, LOC_FLOOR_DECORATION, x - 1, y + 1);
             }
             return true;
         });

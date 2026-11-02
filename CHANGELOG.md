@@ -10,7 +10,7 @@ the version in the corner).
 - Phosani's Nightmare: a boss fight on its own, open once Hallowed Night's beaten. The run is one
   fight in her dream, as the real one is: her dark floor walled round in the Sanctuary's stone, with a barred
   gate north and south, inside the Sisterhood Sanctuary's chamber under Slepe, among its candles,
-  statues, coffins, the Theatre's dead and the dream's sleepers hanging in the dark. No waves, no picks and no items. She
+  statues, coffins, the Theatre's dead (Verzik's skeletons, Ver Sinhaza's, and the bodies and exhumed corpses of Xarpus's room) and the dream's sleepers hanging in the dark. No waves, no picks and no items. She
   rises as you arrive, with everything The Nightmare has, quicker and with more at once, her
   charge from the start, a sweep of petals to step against, and in her last phase a claw on the
   tile you stand on. She charges three times over, her claws come at random round you three times

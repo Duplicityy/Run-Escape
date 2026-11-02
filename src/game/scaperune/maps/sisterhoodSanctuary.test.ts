@@ -112,7 +112,10 @@ describe("the Sisterhood Sanctuary", () => {
         expect(count(37730)).toBe(2);
         expect(count(37783) + count(37784)).toBeGreaterThanOrEqual(8 + 16);
         // The Theatre's dead over the chamber's ground, and the dream's sleepers over it
-        expect(count(32735) + count(32741)).toBeGreaterThanOrEqual(20);
+        expect(count(32735) + count(32741) + count(32742) + count(32754)).toBeGreaterThanOrEqual(
+            20,
+        );
+        expect(count(32743)).toBeGreaterThanOrEqual(3);
         const sleepers = [37732, 37733, 37734, 37735, 37736, 37737].reduce(
             (sum, id) => sum + count(id),
             0,
