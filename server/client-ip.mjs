@@ -10,7 +10,10 @@
 //   container in front). Its X-Forwarded-For says who it saw, last in the
 //   list (what it added itself; anything before that the player could have
 //   made up). TRUSTED_PROXIES adds proxies elsewhere, as addresses or ranges
-//   ("10.1.2.3,10.9.0.0/16").
+//   ("10.1.2.3,10.9.0.0/16"). Anyone else who can reach the server from one
+//   of these addresses can say they're anyone, so only the proxy should be
+//   able to: HOST=127.0.0.1, or in Docker a port published on 127.0.0.1, as
+//   Docker's proxy passes on everyone from its private network.
 // - cloudflare: Cloudflare in front (and maybe a local proxy behind it). Its
 //   CF-Connecting-IP says who connected to it, believed only from
 //   Cloudflare's own addresses.

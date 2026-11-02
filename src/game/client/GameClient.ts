@@ -39,6 +39,7 @@ import { SimEvent, WeaponState } from "../core/entities";
 import { usePortableMath } from "../core/fmath";
 import { CoopAction, applyAction, hasBadNumber } from "../core/lockstep";
 import {
+    NewerSave,
     SaveData,
     SaveStore,
     buyArmouryUpgrade,
@@ -69,7 +70,15 @@ import {
 import { GameAudio } from "./GameAudio";
 import { GameInput } from "./GameInput";
 import { ChestCue, GameSounds, getGameSoundIds } from "./GameSounds";
-import { ChoiceView, GameStore, HudView, QuestTrackView, Screen, SlotView } from "./GameStore";
+import {
+    ChoiceView,
+    GameStore,
+    HudView,
+    QuestTrackView,
+    SaveBlock,
+    Screen,
+    SlotView,
+} from "./GameStore";
 import { GameView } from "./GameView";
 import {
     getBuffViews,
@@ -82,6 +91,7 @@ import { Minimap } from "./Minimap";
 import { Overlay, ScreenPoint } from "./Overlay";
 import { getPlayerPose } from "./PlayerPose";
 import { getBossKillViews, getDamageViews } from "./RunStatsViews";
+import { SaveLock } from "./SaveLock";
 import { CoopLobby, makeLoadout } from "./coop/CoopLobby";
 import { CoopRun, GUEST_BUFFER_FRAMES } from "./coop/CoopRun";
 import { GameStart, GoneReason, Loadout, RoomView, Unlocks, isGameStart } from "./coop/protocol";
@@ -218,10 +228,11 @@ function cleanLoadout(loadout: Loadout | undefined): {
 }
 
 // What a co-op player's loadout gives their hero, no more than the shop can
-function loadoutStats(loadout: Loadout | undefined): Stats {
+export function loadoutStats(loadout: Loadout | undefined): Stats {
     const stats = emptyStats();
     for (const [key, value] of Object.entries(loadout?.metaStats ?? {})) {
-        if (key in stats && typeof value === "number" && Number.isFinite(value)) {
+        // A stat's own name only: "constructor" is in every object
+        if (Object.hasOwn(stats, key) && typeof value === "number" && Number.isFinite(value)) {
             const most = SHOP_MAX[key as keyof Stats] ?? 0;
             stats[key as keyof Stats] = Math.max(Math.min(0, most), Math.min(most, value));
         }
@@ -229,8 +240,9 @@ function loadoutStats(loadout: Loadout | undefined): Stats {
     return stats;
 }
 
-// Each stat with every shop upgrade for it bought
-const SHOP_MAX: Partial<Stats> = {};
+// Each stat with every shop upgrade for it bought (no prototype, so nothing
+// inherited reads as a stat)
+const SHOP_MAX: Partial<Stats> = Object.create(null);
 for (const upgrade of SHOP_UPGRADES) {
     SHOP_MAX[upgrade.stat] = (SHOP_MAX[upgrade.stat] ?? 0) + upgrade.perRank * upgrade.maxRank;
 }
@@ -257,6 +269,7 @@ export class GameClient implements GameFrameHandler {
         overlayCanvas: HTMLCanvasElement,
         store: GameStore,
         saveStore: SaveStore,
+        saveLock: SaveLock,
         options: GameClientOptions,
     ): Promise<GameClient> {
         const workerPool = mapViewer.workerPool;
@@ -291,6 +304,7 @@ export class GameClient implements GameFrameHandler {
             overlayCanvas,
             store,
             saveStore,
+            saveLock,
             options,
         );
     }
@@ -305,6 +319,13 @@ export class GameClient implements GameFrameHandler {
     sim?: Sim;
     paused = false;
     save: SaveData;
+    // The save was written by a newer version of the game, so it's not saved
+    // over (unless the player says so, see saveOverNewer)
+    private newerSave?: NewerSave;
+    // The save couldn't be read and there was no room to keep a copy, so it
+    // stays as it is
+    private saveNoRoom = false;
+    private stopSaveLock?: () => void;
     // Co-op: the room and its relay, and the run being played with it
     readonly coop: CoopLobby;
     private coopRun?: CoopRun;
@@ -350,6 +371,7 @@ export class GameClient implements GameFrameHandler {
         overlayCanvas: HTMLCanvasElement,
         readonly store: GameStore,
         readonly saveStore: SaveStore,
+        readonly saveLock: SaveLock,
         readonly options: GameClientOptions,
     ) {
         this.save = store.getSnapshot().save;
@@ -388,6 +410,8 @@ export class GameClient implements GameFrameHandler {
         document.addEventListener("visibilitychange", this.onVisibilityChange);
         this.cameraRig.pitch = ATTRACT_PITCH;
         this.cameraRig.distance = ATTRACT_DISTANCE;
+        // Before a run starts, so it's with the save as it is now
+        this.stopSaveLock = this.saveLock.listen((held) => this.onSaveLock(held));
 
         // An invite link (?room=CODE) goes straight to the room
         const invite = new URLSearchParams(window.location.search).get("room");
@@ -406,6 +430,7 @@ export class GameClient implements GameFrameHandler {
     }
 
     dispose(): void {
+        this.stopSaveLock?.();
         document.removeEventListener("visibilitychange", this.onVisibilityChange);
         this.stopBackgroundTicker();
         this.coop.close();
@@ -664,6 +689,8 @@ export class GameClient implements GameFrameHandler {
                 }
             }
             this.coopRun = undefined;
+            // Solo now: a hidden tab no longer needs stepping
+            this.stopBackgroundTicker();
             this.store.toast(
                 "Lost the connection to the others. The run goes on without them.",
                 6000,
@@ -753,13 +780,113 @@ export class GameClient implements GameFrameHandler {
         this.persist();
     }
 
-    // Gives the player the save as a file
+    // Gives the player the save as a file. One from a newer game goes as it
+    // is: this game's copy has dropped what it doesn't know.
     exportSave(): void {
-        saveFile("run-escape-save.json", exportSave(this.save), "application/json");
+        const text =
+            (this.newerSave && this.saveStore.read()) ??
+            exportSave(this.save, this.saveStore.gameVersion);
+        saveFile("run-escape-save.json", text, "application/json");
+    }
+
+    // Gives the player a save that couldn't be read, as it was
+    exportUnreadableSave(key: string): void {
+        const text = this.saveStore.readUnreadable(key);
+        if (text !== undefined) {
+            saveFile("run-escape-save-unreadable.json", text, "application/json");
+        }
+    }
+
+    deleteUnreadableSave(key: string): void {
+        this.saveStore.deleteUnreadable(key);
+        this.store.set({ unreadableSaves: this.saveStore.getUnreadable() });
+    }
+
+    closeUnreadableNotice(): void {
+        this.store.set({ unreadableSave: undefined });
+    }
+
+    // Saves here, and the tab that was saving stops
+    takeOverSave(): void {
+        this.saveLock.takeOver();
+    }
+
+    // Saves over the newer game's save from here on, losing what's new in it.
+    // The player's choice (and the only way out when a release is rolled
+    // back), but not for a newer format, which this game can't read.
+    saveOverNewer(): void {
+        if (!this.newerSave || this.newerSave.format) {
+            return;
+        }
+        this.newerSave = undefined;
+        this.saveStore.writeOver();
+        this.persist();
+        this.updateSaveBlock();
+    }
+
+    playWithoutSaving(): void {
+        this.store.set({ saveBlockClosed: true });
+    }
+
+    showSaveBlock(): void {
+        this.store.set({ saveBlockClosed: false });
+    }
+
+    private onSaveLock(held: boolean): void {
+        if (held) {
+            this.reloadSave();
+        } else {
+            this.updateSaveBlock();
+        }
+    }
+
+    // Reads the save again, as the tab that had it last left it
+    private reloadSave(): void {
+        const loaded = this.saveStore.load();
+        this.newerSave = loaded.newer;
+        this.saveNoRoom = loaded.noRoom === true;
+        this.useSave(loaded.save);
+        this.store.set({
+            // With no room for a copy, the panel saying so is the notice
+            unreadableSave: loaded.noRoom ? undefined : loaded.unreadable,
+            unreadableSaves: this.saveStore.getUnreadable(),
+        });
+        this.updateSaveBlock();
+        if (loaded.unreadable) {
+            // It's kept, so the fresh save can go in its place
+            this.persist();
+        } else {
+            this.store.set({ save: structuredClone(this.save) });
+        }
+    }
+
+    private updateSaveBlock(): void {
+        let saveBlock: SaveBlock | undefined;
+        if (this.saveLock.held === false) {
+            saveBlock = { kind: "otherTab" };
+        } else if (this.newerSave) {
+            saveBlock = { kind: "newerGame", ...this.newerSave };
+        } else if (this.saveNoRoom) {
+            saveBlock = { kind: "noRoom" };
+        }
+        // A new reason shows the panel again, and stops a solo run for it
+        // (co-op's goes on for the others)
+        const { saveBlock: was, saveBlockClosed } = this.store.getSnapshot();
+        const changed = saveBlock?.kind !== was?.kind;
+        this.store.set({ saveBlock, saveBlockClosed: saveBlockClosed && !changed });
+        if (saveBlock && changed && !this.coopRun) {
+            this.pause();
+        }
     }
 
     // Swaps in an imported save in place of this one
     replaceSave(save: SaveData): void {
+        this.useSave(save);
+        this.persist();
+    }
+
+    // Plays on with this save
+    private useSave(save: SaveData): void {
         this.save = save;
         // The adventurer and map picked might not be open in it
         const { characterId, mapId } = this.store.getSnapshot();
@@ -775,11 +902,13 @@ export class GameClient implements GameFrameHandler {
         if (!isHardUnlocked(save, this.store.getSnapshot().mapId)) {
             this.store.set({ hard: false });
         }
-        this.persist();
     }
 
     private persist(): void {
-        this.saveStore.save(this.save);
+        // Played without saving, it carries on in memory
+        if (this.saveLock.held && !this.newerSave && !this.saveNoRoom) {
+            this.saveStore.save(this.save);
+        }
         // A fresh object so React sees the change
         this.store.set({ save: structuredClone(this.save) });
     }
@@ -1022,8 +1151,7 @@ export class GameClient implements GameFrameHandler {
             return false;
         }
         if (this.coopRun) {
-            this.coopRun.act(action);
-            return true;
+            return this.coopRun.act(action);
         }
         const done = applyAction(sim, action);
         this.afterAction(action, done);
@@ -1126,7 +1254,10 @@ export class GameClient implements GameFrameHandler {
         if (!sim) {
             return false;
         }
-        if (this.coopRun && sim.rerollsLeft <= 0) {
+        // Checked here too in co-op: an action the host turns away still counts
+        // as this decision's answer (CoopRun.act), so a refused reroll would
+        // hold up the real pick
+        if (this.coopRun && (sim.rerollsLeft <= 0 || sim.choosingHilt)) {
             this.sounds.denied();
             return false;
         }
@@ -1267,9 +1398,9 @@ export class GameClient implements GameFrameHandler {
         const newTrophies = isDevMap(sim.map.id)
             ? []
             : result.trophies.filter((id) => !this.save.trophies.includes(id));
-        // A co-op run's numbers can come from another player's modified game
-        const quests =
-            sim.heroes.length > 1 && hasBadNumber(result) ? [] : recordRun(this.save, result);
+        // A co-op run's numbers can come from another player's modified game,
+        // and a NaN in a solo one's would come back from the save as 0 coins
+        const quests = hasBadNumber(result) ? [] : recordRun(this.save, result);
         this.persist();
         const unlockedMap = locked.find((m) => isMapUnlocked(this.save, m.id));
         const unlockedCharacters = lockedCharacters.filter((c) =>

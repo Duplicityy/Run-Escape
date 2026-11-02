@@ -172,7 +172,7 @@ async function start(): Promise<void> {
     gameSession.protocol.handle("https", (request) =>
         new URL(request.url).origin === relayOrigin
             ? gameSession.fetch(request, { bypassCustomProtocolHandlers: true })
-            : serveGame(gameRoot, request),
+            : serveGame(gameRoot, request, relayOrigin),
     );
     // The game only ever asks for these two
     gameSession.setPermissionRequestHandler((_contents, permission, callback) => {

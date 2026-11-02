@@ -5,10 +5,10 @@ import {
     RELAY_PATH,
     addressKey,
     createRelay,
-    guesserKey,
     isAnyMapOn,
     isMultiplayerOn,
     maxRoomsSetting,
+    networkKey,
 } from "./coop-relay.mjs";
 
 type Message = { t: string; [key: string]: any };
@@ -77,14 +77,16 @@ class RawClient {
     closed: Promise<void>;
     private received = Buffer.alloc(0);
 
-    constructor(port: number, path = RELAY_PATH) {
+    // headers: more of them, each line ending in \r\n
+    constructor(port: number, path = RELAY_PATH, headers = "") {
         this.socket = connectTcp(port, "127.0.0.1");
         this.socket.on("error", () => {});
         this.socket.on("data", (data) => (this.received = Buffer.concat([this.received, data])));
         this.closed = new Promise((resolve) => this.socket.on("close", () => resolve()));
         this.socket.write(
             `GET ${path} HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n` +
-                "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
+                "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n" +
+                `${headers}\r\n`,
         );
     }
 
@@ -154,11 +156,15 @@ describe("co-op relay", () => {
 
     // Everyone here connects from the same address, so the limits on each
     // address are out of the way unless a test sets them
-    // (and rooms take anyone, unlocked maps or not, unless a test says so)
+    // (and rooms take anyone, unlocked maps or not, unless a test says so).
+    // Rooms hear about changes sooner too, so tests needn't wait for them.
     const LOOSE = {
         connectionsPerAddress: 1000,
         roomsPerAddress: 1000,
+        connectionsPerNetwork: 1000,
+        roomsPerNetwork: 1000,
         createsPerMinute: 1000,
+        roomUpdateMs: 5,
         anyMap: true,
     };
 
@@ -296,7 +302,7 @@ describe("co-op relay", () => {
         expect(await page(9)).toMatchObject({ page: 2, pages: 3 });
         // A room that's started or filled up comes off the list
         busy.host.send({ t: "start", game: {} });
-        await busy.guests[0].next("start");
+        await busy.guests[0].roomWhere((r) => r.started);
         browser.send({ t: "list", size: 20 });
         const after = await browser.next("rooms");
         expect(after.total).toBe(5);
@@ -639,7 +645,11 @@ describe("co-op relay", () => {
         });
 
         it("drops a guest that stops reading, rather than keeping all it's sent", async () => {
-            await restart({ bytesPerSecond: Infinity });
+            await restart({
+                bytesPerSecond: Infinity,
+                hostBytesPerSecond: 1e12,
+                hostBurstBytes: 1e12,
+            });
             const { host, code } = await party(0);
             const raw = new RawClient(port());
             await raw.saw("welcome");
@@ -677,7 +687,7 @@ describe("co-op relay", () => {
     });
 
     it("sends a flood of a player's updates on as one, with the latest", async () => {
-        await restart({ memberUpdateMs: 100 });
+        await restart({ roomUpdateMs: 100 });
         const { host, guests } = await party(1);
         await new Promise((resolve) => setTimeout(resolve, 150));
         host.messages.length = 0;
@@ -691,7 +701,7 @@ describe("co-op relay", () => {
     });
 
     it("sends no player updates mid-run, and has them all when it ends", async () => {
-        await restart({ memberUpdateMs: 1 });
+        await restart({ roomUpdateMs: 1 });
         const { host, guests } = await party(1);
         host.send({ t: "start", game: { seed: 5 } });
         await guests[0].next("start");
@@ -755,14 +765,17 @@ describe("co-op relay", () => {
         await host.next("pong");
     });
 
-    it("doesn't let a player's own updates keep a room open", async () => {
+    it("doesn't let a player's own updates or new names keep a room open", async () => {
         await restart({ idleMs: 1000 });
         const { host } = await party(0);
         const start = Date.now();
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await new Promise((resolve) => setTimeout(resolve, 100));
         host.send({ t: "me", characterId: "wizard" });
         await host.roomWhere((r) => r.members[0].characterId === "wizard");
-        relay.sweep(start + 1500);
+        host.send({ t: "rename" });
+        await host.next("named");
+        // Idle since it was made, though not since these
+        relay.sweep(start + 1050);
         expect((await host.next("gone")).reason).toBe("idle");
     });
 
@@ -808,12 +821,93 @@ describe("co-op relay", () => {
         guesser.send({ t: "join", code });
         expect((await guesser.next("error")).message).toMatch(/wrong codes/);
     });
+
+    it("sends the room round once in a while, however fast the host changes it", async () => {
+        await restart({ roomUpdateMs: 100 });
+        const { host, guests } = await party(1);
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        guests[0].messages.length = 0;
+        for (let i = 0; i < 50; i++) {
+            host.send({ t: "settings", mapId: `m${i}` });
+            host.send({ t: "start", game: {} });
+            host.send({ t: "end" });
+        }
+        let updates = 0;
+        await guests[0].roomWhere((r) => {
+            updates++;
+            return r.mapId === "m49" && !r.started;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        updates += guests[0].messages.filter((m) => m.t === "room").length;
+        expect(updates).toBeLessThan(6);
+    });
+
+    // A connection from this address, as a proxy in front says (with PROXY=local)
+    function from(address: string): RawClient {
+        const port = Number(new URL(url).port);
+        return new RawClient(port, RELAY_PATH, `X-Forwarded-For: ${address}\r\n`);
+    }
+
+    it("limits the connections from an IPv6 /48, not only from each /64", async () => {
+        await restart({ proxy: "local", connectionsPerAddress: 1, connectionsPerNetwork: 2 });
+        await from("2001:db8:1:1::1").saw("welcome");
+        await from("2001:db8:1:2::1").saw("welcome");
+        await from("2001:db8:1:3::1").saw("429 Too Many Requests");
+        await from("2001:db8:2:1::1").saw("welcome");
+    });
+
+    it("limits the rooms hosted from an IPv6 /48", async () => {
+        await restart({ proxy: "local", roomsPerNetwork: 1 });
+        const first = from("2001:db8:1:1::1");
+        await first.saw("welcome");
+        first.send({ t: "create", me: {} });
+        await first.saw('"t":"room"');
+        const second = from("2001:db8:1:2::1");
+        await second.saw("welcome");
+        second.send({ t: "create", me: {} });
+        await second.saw("too many rooms");
+    });
+
+    it("keeps a kicked player out from anywhere in their /48", async () => {
+        await restart({ proxy: "local" });
+        const { host, code } = await party(0);
+        const kicked = from("2001:db8:1:1::1");
+        await kicked.saw("welcome");
+        kicked.send({ t: "join", code, me: {} });
+        const { room } = await host.roomWhere((r) => r.members.length === 2);
+        host.send({ t: "kick", id: room.members[1].id });
+        await kicked.saw('"reason":"kicked"');
+        const nextDoor = from("2001:db8:1:2::1");
+        await nextDoor.saw("welcome");
+        nextDoor.send({ t: "join", code, me: {} });
+        await nextDoor.saw("removed you");
+        const elsewhere = from("2001:db8:2:1::1");
+        await elsewhere.saw("welcome");
+        elsewhere.send({ t: "join", code, me: {} });
+        await host.roomWhere(
+            (r) => r.members.length === 2 && r.members[1].id !== room.members[1].id,
+        );
+    });
+
+    it("drops a host that sends its room more than a run does", async () => {
+        await restart({ hostBytesPerSecond: 1000, hostBurstBytes: 4000 });
+        const { host, guests } = await party(1);
+        host.send({ t: "start", game: {} });
+        await guests[0].next("start");
+        host.send({ t: "down", d: { upTo: 1, events: [] } });
+        expect((await guests[0].next("down")).d.upTo).toBe(1);
+        for (let i = 2; i < 12; i++) {
+            host.send({ t: "down", d: { upTo: i, events: [], big: "x".repeat(1000) } });
+        }
+        expect((await guests[0].next("gone")).reason).toBe("hostLeft");
+        expect(guests[0].messages.filter((m) => m.t === "down").length).toBeLessThan(5);
+    });
 });
 
 describe("relay limits by address", () => {
-    it("counts guessing IPv6 addresses by the /48", () => {
-        expect(guesserKey("2001:db8:1:2::/64")).toBe("2001:db8:1::/48");
-        expect(guesserKey("203.0.113.9")).toBe("203.0.113.9");
+    it("puts an IPv6 /64 in its /48, and an IPv4 address on its own", () => {
+        expect(networkKey("2001:db8:1:2::/64")).toBe("2001:db8:1::/48");
+        expect(networkKey("203.0.113.9")).toBe("203.0.113.9");
     });
 
     it("counts an IPv6 address by its /64", () => {

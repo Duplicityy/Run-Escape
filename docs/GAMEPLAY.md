@@ -375,7 +375,8 @@ version and how to run it.
 - Coins and the odd cooked chicken drop too.
 - Enemies get tougher as the run goes on, gently at first and faster after the first few
   minutes.
-- At 15:00 the map's final boss comes. Kill it to win.
+- At 15:00 the map's final boss comes. Kill it to win, even if you fall in the same instant;
+  once it's won, nothing more can hurt you.
 - **Minimap**: the client's, north up, drawn from the map's own minimap images, with the
   client's yellow dots for enemies (orange for elites), a red one for bosses, and caskets and
   power-ups in their colours. Bosses, caskets and power-ups out of range sit on the rim.

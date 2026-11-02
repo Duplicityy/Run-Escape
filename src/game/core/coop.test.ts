@@ -2,11 +2,13 @@ import { getPartyScale } from "../content/coop";
 import { getEnemy } from "../content/enemies";
 import { HARD_XP, getHardScale } from "../content/hard";
 import { getMap } from "../content/maps";
+import { getPowerUp } from "../content/powerups";
 import { getRandomEvent } from "../content/randomEvents";
 import { emptyStats } from "../content/types";
+import { getWeapon } from "../content/weapons";
 import { HeroOptions, Sim, TICKS_PER_SECOND } from "./Sim";
 import { fm, usePortableMath } from "./fmath";
-import { syncHash } from "./lockstep";
+import { applyFrameEvent, syncHash } from "./lockstep";
 import { makeGrid } from "./world/testGrid";
 
 function openField(): string[] {
@@ -89,6 +91,25 @@ describe("co-op", () => {
         expect(createParty(["warrior", "wizard"], 1, 1).player).not.toBe(a.player);
     });
 
+    it("keeps each player's own runes going round when they share the weapon", () => {
+        const sim = createParty(["seer", "seer"]);
+        const [a, b] = sim.heroes;
+        const runes = (index: number) => sim.projectiles.filter((p) => p.orbit && p.hero === index);
+        // Cast on the same tick
+        a.weapons[0].cooldown = b.weapons[0].cooldown = 0;
+        sim.step();
+        expect(runes(0).length).toBeGreaterThan(0);
+        expect(runes(1).length).toBeGreaterThan(0);
+        // Used again by one of them, only that one's are replaced
+        const before = runes(0);
+        const others = runes(1);
+        b.weapons[0].cooldown = 1e9;
+        a.weapons[0].cooldown = 0;
+        sim.step();
+        expect(runes(0).some((p) => before.includes(p))).toBe(false);
+        expect(runes(1)).toEqual(others);
+    });
+
     it("has enemies go for whoever's nearest", () => {
         const sim = createParty(["warrior", "wizard"]);
         const [a, b] = sim.heroes;
@@ -162,6 +183,40 @@ describe("co-op", () => {
         expect(b.player.hp).toBe(b.player.maxHp);
     });
 
+    it("keeps a win from a hit on anyone later in the tick", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        a.revivesLeft = 1;
+        const boss = sim.spawnEnemy(getEnemy("wise_old_man"), "finalBoss", {
+            x: 1040.5,
+            y: 1036.5,
+        })!;
+        sim.as(1, () => sim.damageEnemy(boss, 1e9, 0, b.player.x, b.player.y));
+        expect(sim.state).toBe("victory");
+        sim.as(0, () => sim["damagePlayer"](99999, "goblin", false));
+        expect(sim.state).toBe("victory");
+        expect(a.down).toBe(false);
+        expect(a.revivesLeft).toBe(1);
+    });
+
+    it("wins with the final boss falling in the tick the last player does", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const boss = sim.spawnEnemy(getEnemy("wise_old_man"), "finalBoss", {
+            x: 1040.5,
+            y: 1036.5,
+        })!;
+        for (const h of sim.heroes) {
+            h.revivesLeft = 0;
+        }
+        sim.as(1, () => sim["damagePlayer"](99999, "goblin", false));
+        expect(sim.runOver).toBe(false);
+        sim.as(0, () => sim["damagePlayer"](99999, "goblin", false));
+        expect(sim.state).toBe("dead");
+        // What the first to fall left behind (a projectile, a thrall) gets it
+        sim.as(1, () => sim.damageEnemy(boss, 1e9, 0, boss.x, boss.y));
+        expect(sim.state).toBe("victory");
+    });
+
     it("ends the run when everyone's down or gone", () => {
         const sim = createParty(["warrior", "wizard"]);
         sim.leave(1);
@@ -194,6 +249,41 @@ describe("co-op", () => {
             sim.as(0, () => sim.choose(0));
         }
         expect(sim.state).toBe("playing");
+    });
+
+    it("doesn't let a downed player reroll or skip a level up", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        b.revivesLeft = 0;
+        b.player.hp = 1;
+        b.player.poisonDamage = 5;
+        b.player.poisonEnd = sim.tick + TICKS_PER_SECOND + 1;
+        for (let i = 0; i < TICKS_PER_SECOND + 2; i++) {
+            sim.step();
+        }
+        expect(b.down).toBe(true);
+        sim.xp = 1e4;
+        sim.step();
+        expect(sim.state).toBe("levelUp");
+        expect(b.pendingLevelUps).toBeGreaterThan(0);
+        sim.coins = 1000;
+        const rerolls = b.rerollsLeft;
+        expect(rerolls).toBeGreaterThan(0);
+        expect(sim.as(1, () => sim.reroll())).toBe(false);
+        expect(sim.as(1, () => sim.canSkip)).toBe(false);
+        expect(sim.as(1, () => sim.skip())).toBe(false);
+        // Nor as a guest's actions, over the network
+        applyFrameEvent(sim, { frame: sim.tick, hero: 1, action: { kind: "reroll" } });
+        applyFrameEvent(sim, { frame: sim.tick, hero: 1, action: { kind: "skip" } });
+        expect(b.choices).toEqual([]);
+        expect(b.rerollsLeft).toBe(rerolls);
+        expect(b.skips).toBe(0);
+        expect(sim.coins).toBe(1000);
+        // The player who's up still can
+        expect(sim.as(0, () => sim.reroll())).toBe(true);
+        expect(sim.as(0, () => sim.skip())).toBe(true);
+        expect(a.skips).toBe(1);
+        expect(sim.coins).toBeLessThan(1000);
     });
 
     it("doesn't wait on a player who left", () => {
@@ -254,6 +344,58 @@ describe("co-op", () => {
         sim.step();
         const pickup = sim.takeEvents().find((e) => e.type === "pickup");
         expect(pickup?.hero).toBe(1);
+    });
+
+    it("ends only its own player's timer when a rampage is over", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const bob = getPowerUp("evil_bob");
+        for (const h of sim.heroes) {
+            h.weapons = [];
+            h.player.invulnerable = 1e6;
+        }
+        // Both charge on until their time is up, when the first one's own
+        // timer has already gone
+        sim.as(0, () => sim.usePowerUp(bob));
+        const first = sim.rampages[0];
+        first.passesLeft = 100;
+        play(sim, TICKS_PER_SECOND);
+        sim.as(1, () => sim.usePowerUp(bob));
+        sim.rampages.find((r) => r.hero === 1)!.passesLeft = 100;
+        const theirs = sim.powerUps.find((p) => p.hero === 1)!;
+        const end = theirs.endTick;
+        for (let i = 0; i < 20 * TICKS_PER_SECOND && first.doneTick === -1; i++) {
+            play(sim, 1);
+        }
+        expect(first.doneTick).not.toBe(-1);
+        play(sim, 2);
+        expect(sim.powerUps).toContain(theirs);
+        expect(theirs.endTick).toBe(end);
+    });
+
+    it("keeps each player's burning ground their own", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        const def = getWeapon("toktz_mej_tal");
+        const burn = (index: number) =>
+            sim.as(index, () =>
+                (sim as unknown as Record<string, Function>).burnGround(def.burns, def.levels[0]),
+            );
+        b.player.x = a.player.x;
+        b.player.y = a.player.y;
+        burn(0);
+        const mine = sim.fires[0];
+        // A pulse on someone else's fire lights one of their own, rather
+        // than feeding (and being credited to) the other's
+        burn(1);
+        expect(sim.fires.map((fire) => fire.hero)).toEqual([0, 1]);
+        const theirs = sim.fires[1];
+        // Their fires going out for room are their own oldest
+        for (let i = 1; sim.fires.includes(theirs) && i < 10; i++) {
+            b.player.x = a.player.x + i * 3;
+            burn(1);
+        }
+        expect(sim.fires).not.toContain(theirs);
+        expect(sim.fires).toContain(mine);
     });
 
     it("makes the crowd bigger and tougher for each player", () => {

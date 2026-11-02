@@ -89,6 +89,9 @@ const HEALTH_BAR_GAP = 15 / 128;
 
 const HITSPLAT_MS = 900;
 const MAX_HITSPLATS = 120;
+// Each kind of swoosh, aura and blast is pruned as it's drawn, but a co-op
+// tab that's hidden keeps stepping without drawing, so they're capped too
+const MAX_EFFECTS = 200;
 // The splat a little smaller than the client draws it; the number stays at
 // the font's own size, where it's crisp
 const HITSPLAT_SPRITE_SCALE = 0.85;
@@ -182,6 +185,14 @@ const VISITOR_SHOUT = -1000;
 const VISITOR_SCALE = 1.5;
 type FlashFx = { color: string; start: number };
 
+// Adds an effect, dropping the oldest past MAX_EFFECTS
+function pushCapped<T>(list: T[], item: T): void {
+    if (list.length >= MAX_EFFECTS) {
+        list.shift();
+    }
+    list.push(item);
+}
+
 function lerp(a: number, b: number, t: number): number {
     return a + (b - a) * t;
 }
@@ -271,7 +282,12 @@ export class GameView {
                     break;
                 }
                 case "bossSwing":
-                    this.swings.push({ x: event.x, y: event.y, radius: event.radius, start: now });
+                    pushCapped(this.swings, {
+                        x: event.x,
+                        y: event.y,
+                        radius: event.radius,
+                        start: now,
+                    });
                     break;
                 case "bossShout":
                     // A new line replaces what it was saying
@@ -289,7 +305,7 @@ export class GameView {
                     this.shouts.push({ enemyUid: VISITOR_SHOUT, text: event.text, start: now });
                     break;
                 case "slash":
-                    this.slashes.push({
+                    pushCapped(this.slashes, {
                         x: event.x,
                         y: event.y,
                         dirX: event.dirX,
@@ -302,7 +318,7 @@ export class GameView {
                     });
                     break;
                 case "aura":
-                    this.auras.push({
+                    pushCapped(this.auras, {
                         x: event.x,
                         y: event.y,
                         radius: event.radius,
@@ -311,7 +327,12 @@ export class GameView {
                     });
                     break;
                 case "blast":
-                    this.blasts.push({ x: event.x, y: event.y, radius: event.radius, start: now });
+                    pushCapped(this.blasts, {
+                        x: event.x,
+                        y: event.y,
+                        radius: event.radius,
+                        start: now,
+                    });
                     break;
                 case "bossAbsorbBlast":
                     // Everywhere: there's no getting out of it
@@ -323,7 +344,7 @@ export class GameView {
                         this.flash = { color: powerUp.flash, start: now };
                     }
                     if (powerUp.effect.kind === "nuke") {
-                        this.blasts.push({ x: event.x, y: event.y, radius: 16, start: now });
+                        pushCapped(this.blasts, { x: event.x, y: event.y, radius: 16, start: now });
                     }
                     break;
                 }

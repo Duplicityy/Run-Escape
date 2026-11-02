@@ -130,7 +130,8 @@ export class BossFightView {
         const options = { scale: 1, flash: 0 };
         for (let i = 0; i < bullets.count; i++) {
             const slot = order[i];
-            const attack = sim.bulletSources[source[slot]].attack;
+            // A bullet in the air keeps its source (Sim.freeBulletSources)
+            const attack = sim.bulletSources[source[slot]]!.attack;
             const model = this.assets.get("spot:" + attack.spotAnim);
             if (!model) {
                 continue;
