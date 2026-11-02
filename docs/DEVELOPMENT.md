@@ -177,7 +177,10 @@ else. `npm start` and `npm run preview` run a relay of their own at `/coop`
 **Co-op on desktop.** The app answers every https request itself, so it only reaches a relay built
 into it. Set the `COOP_URL` repository variable (Settings, Secrets and variables, Actions) to
 `wss://example.com/coop`, and the release workflow builds it into the game and the launcher. It
-has to be `wss://`, and the app lets only that address out. Without it there's no Multiplayer.
+has to be `wss://`, and the app lets only that address out: `protocol.handle` in `main.ts` answers
+every other https request itself, and WebSockets, which don't go through it, are kept to the relay
+by the `Content-Security-Policy` header `gameServer.ts` sends (`connect-src`). Without it there's
+no Multiplayer.
 
 The launcher only gets it in a new download, so players on an older one keep playing without
 Multiplayer until they fetch the new zip. Don't raise `minLauncher` for this: the game still runs.
@@ -281,6 +284,10 @@ new launcher, and existing players keep working.
 version does nothing, and neither does one while a draft for this version is waiting. The Actions
 tab's Run workflow button (`workflow_dispatch`) does the same but rebuilds a waiting draft, and it
 only appears once the workflow's on `main`.
+
+The actions it uses are pinned to commits, with the version in a comment beside each. Dependabot
+(`.github/dependabot.yml`) opens a pull request when one has a new release, so don't move them by
+hand.
 
 It builds on Windows, with the OSRS cache kept between runs by `actions/cache` under
 `GAME_CACHE_NAME`. The draft is tagged `v<version>`, with notes from that version's section of

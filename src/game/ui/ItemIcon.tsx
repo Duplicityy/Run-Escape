@@ -19,7 +19,7 @@ import { pixelRatio } from "../../util/DeviceUtil";
 // URLs. Requests made in the same frame go to the worker together. Some icons
 // are interface sprites instead (Piety's prayer icon), padded out to an item
 // icon's size so they line up with the rest.
-class IconCache {
+export class IconCache {
     private workerPool?: RenderDataWorkerPool;
     private readonly urls = new Map<string, string>();
     private readonly waiting = new Map<string, ((url: string) => void)[]>();
@@ -110,20 +110,35 @@ class IconCache {
         this.queued = [];
         const spriteIds = this.queuedSprites;
         this.queuedSprites = [];
-        const [icons, sprites] = await Promise.all([
-            requests.length > 0
-                ? workerPool.queueLoad<ItemIconInput, ItemIconData[], ItemIconLoader>(
-                      new ItemIconLoader(),
-                      { requests },
-                  )
-                : [],
-            spriteIds.length > 0
-                ? workerPool.queueLoad<SpriteDataInput, SpriteImage[], SpriteDataLoader>(
-                      new SpriteDataLoader(),
-                      { spriteIds },
-                  )
-                : [],
-        ]);
+        let icons: ItemIconData[];
+        let sprites: SpriteImage[];
+        try {
+            [icons, sprites] = await Promise.all([
+                requests.length > 0
+                    ? workerPool.queueLoad<ItemIconInput, ItemIconData[], ItemIconLoader>(
+                          new ItemIconLoader(),
+                          { requests },
+                      )
+                    : [],
+                spriteIds.length > 0
+                    ? workerPool.queueLoad<SpriteDataInput, SpriteImage[], SpriteDataLoader>(
+                          new SpriteDataLoader(),
+                          { spriteIds },
+                      )
+                    : [],
+            ]);
+        } catch (e) {
+            // Nothing's left waiting on this batch (a worker that failed), so
+            // the next render asks for its icons again
+            console.error("Loading icons failed", e);
+            for (const { objId, count } of requests) {
+                this.waiting.delete(IconCache.key(objId, count));
+            }
+            for (const id of spriteIds) {
+                this.waiting.delete(IconCache.spriteKey(id));
+            }
+            return;
+        }
         for (const icon of icons) {
             this.resolve(IconCache.key(icon.objId, icon.count), toDataUrl(icon.pixels));
         }

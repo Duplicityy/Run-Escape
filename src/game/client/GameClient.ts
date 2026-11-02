@@ -228,10 +228,11 @@ function cleanLoadout(loadout: Loadout | undefined): {
 }
 
 // What a co-op player's loadout gives their hero, no more than the shop can
-function loadoutStats(loadout: Loadout | undefined): Stats {
+export function loadoutStats(loadout: Loadout | undefined): Stats {
     const stats = emptyStats();
     for (const [key, value] of Object.entries(loadout?.metaStats ?? {})) {
-        if (key in stats && typeof value === "number" && Number.isFinite(value)) {
+        // A stat's own name only: "constructor" is in every object
+        if (Object.hasOwn(stats, key) && typeof value === "number" && Number.isFinite(value)) {
             const most = SHOP_MAX[key as keyof Stats] ?? 0;
             stats[key as keyof Stats] = Math.max(Math.min(0, most), Math.min(most, value));
         }
@@ -239,8 +240,9 @@ function loadoutStats(loadout: Loadout | undefined): Stats {
     return stats;
 }
 
-// Each stat with every shop upgrade for it bought
-const SHOP_MAX: Partial<Stats> = {};
+// Each stat with every shop upgrade for it bought (no prototype, so nothing
+// inherited reads as a stat)
+const SHOP_MAX: Partial<Stats> = Object.create(null);
 for (const upgrade of SHOP_UPGRADES) {
     SHOP_MAX[upgrade.stat] = (SHOP_MAX[upgrade.stat] ?? 0) + upgrade.perRank * upgrade.maxRank;
 }
@@ -1345,9 +1347,9 @@ export class GameClient implements GameFrameHandler {
         const newTrophies = isDevMap(sim.map.id)
             ? []
             : result.trophies.filter((id) => !this.save.trophies.includes(id));
-        // A co-op run's numbers can come from another player's modified game
-        const quests =
-            sim.heroes.length > 1 && hasBadNumber(result) ? [] : recordRun(this.save, result);
+        // A co-op run's numbers can come from another player's modified game,
+        // and a NaN in a solo one's would come back from the save as 0 coins
+        const quests = hasBadNumber(result) ? [] : recordRun(this.save, result);
         this.persist();
         const unlockedMap = locked.find((m) => isMapUnlocked(this.save, m.id));
         const unlockedCharacters = lockedCharacters.filter((c) =>

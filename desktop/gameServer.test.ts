@@ -2,7 +2,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { GAME_ORIGIN, getRelayOrigin, parseRange, resolveGamePath, serveGame } from "./gameServer";
+import {
+    GAME_ORIGIN,
+    contentSecurityPolicy,
+    getRelayOrigin,
+    parseRange,
+    resolveGamePath,
+    serveGame,
+} from "./gameServer";
 
 // CacheFiles.ts sends Number.MAX_SAFE_INTEGER as the end of a resume
 const RESUME_END = "9007199254740991";
@@ -25,6 +32,10 @@ afterAll(() => {
     rmSync(root, { recursive: true, force: true });
     rmSync(path.join(root, "..", "game-server-outside.txt"), { force: true });
 });
+
+function head(pathname: string): Promise<Response> {
+    return serveGame(root, new Request(GAME_ORIGIN + pathname, { method: "HEAD" }));
+}
 
 function get(pathname: string, headers: Record<string, string> = {}): Promise<Response> {
     return serveGame(root, new Request(GAME_ORIGIN + pathname, { headers }));
@@ -170,5 +181,26 @@ describe("serveGame", () => {
         expect((await serveGame(root, elsewhere)).status).toBe(403);
         const post = new Request(GAME_ORIGIN + "/index.html", { method: "POST" });
         expect((await serveGame(root, post)).status).toBe(405);
+    });
+});
+
+describe("contentSecurityPolicy", () => {
+    test("lets the page connect to the app alone, and to the relay if there is one", () => {
+        expect(contentSecurityPolicy(undefined)).toBe("connect-src 'self'");
+        expect(contentSecurityPolicy("https://example.com:8443")).toBe(
+            "connect-src 'self' https://example.com:8443 wss://example.com:8443",
+        );
+    });
+
+    test("is sent with every answer, workers' scripts and refusals included", async () => {
+        expect((await head("/")).headers.get("Content-Security-Policy")).toBe("connect-src 'self'");
+        const relay = "https://relay.example.com";
+        for (const pathname of ["/", "/worker.js", "/missing.js"]) {
+            const request = new Request(GAME_ORIGIN + pathname, { method: "HEAD" });
+            const response = await serveGame(root, request, relay);
+            expect(response.headers.get("Content-Security-Policy")).toBe(
+                `connect-src 'self' ${relay} wss://relay.example.com`,
+            );
+        }
     });
 });

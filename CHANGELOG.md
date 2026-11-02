@@ -8,6 +8,7 @@ the version in the corner).
 ### Changed
 
 - Co-op's server holds up better against anyone trying to flood it or take every room.
+- Desktop: the game can only reach its own files and the co-op server, nothing else.
 
 ### Fixed
 
@@ -34,6 +35,9 @@ the version in the corner).
 - Pressing Enter or Space on a focused casket button no longer resolves the next casket as well.
 - Co-op: a tab left in the background no longer builds up effects to draw all at once when you come
   back.
+- Item icons that failed to draw are tried again, rather than staying blank until the game's
+  reopened.
+- Endless: a run no longer holds on to every boss it's had, so very long ones use less memory.
 
 ## 0.22.1 - 2026-11-02
 
