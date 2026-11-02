@@ -26,6 +26,7 @@ the version in the corner).
 - Co-op: one player's Evil Bob finishing no longer ends another's Evil Bob timer early.
 - Co-op: each player's Toktz-mej-tal burns ground of its own: another player's pulse no longer
   takes over your fire or puts it out.
+- Durial321's task says what it takes: surviving 6:06 in Falador, not 6 minutes.
 
 ## 0.22.1 - 2026-11-02
 

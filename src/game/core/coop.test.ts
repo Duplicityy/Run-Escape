@@ -88,6 +88,25 @@ describe("co-op", () => {
         expect(createParty(["warrior", "wizard"], 1, 1).player).not.toBe(a.player);
     });
 
+    it("keeps each player's own runes going round when they share the weapon", () => {
+        const sim = createParty(["seer", "seer"]);
+        const [a, b] = sim.heroes;
+        const runes = (index: number) => sim.projectiles.filter((p) => p.orbit && p.hero === index);
+        // Cast on the same tick
+        a.weapons[0].cooldown = b.weapons[0].cooldown = 0;
+        sim.step();
+        expect(runes(0).length).toBeGreaterThan(0);
+        expect(runes(1).length).toBeGreaterThan(0);
+        // Used again by one of them, only that one's are replaced
+        const before = runes(0);
+        const others = runes(1);
+        b.weapons[0].cooldown = 1e9;
+        a.weapons[0].cooldown = 0;
+        sim.step();
+        expect(runes(0).some((p) => before.includes(p))).toBe(false);
+        expect(runes(1)).toEqual(others);
+    });
+
     it("has enemies go for whoever's nearest", () => {
         const sim = createParty(["warrior", "wizard"]);
         const [a, b] = sim.heroes;
@@ -322,29 +341,6 @@ describe("co-op", () => {
         sim.step();
         const pickup = sim.takeEvents().find((e) => e.type === "pickup");
         expect(pickup?.hero).toBe(1);
-    });
-
-    it("has an orbit weapon replace only its own player's orbs", () => {
-        const sim = createParty(["warrior", "wizard"]);
-        const runes = getWeapon("elemental_runes");
-        const fire = (index: number) =>
-            sim.as(index, () =>
-                (sim as unknown as Record<string, Function>).fireOrbit(runes, runes.levels[0]),
-            );
-        const orbs = (index: number) =>
-            sim.projectiles
-                .filter((p) => p.orbit && p.weapon === runes && p.hero === index)
-                .map((p) => p.uid);
-        fire(1);
-        const theirs = orbs(1);
-        expect(theirs.length).toBeGreaterThan(0);
-        fire(0);
-        expect(orbs(0).length).toBeGreaterThan(0);
-        expect(orbs(1)).toEqual(theirs);
-        // Their own next ones still take the place of the last
-        fire(1);
-        expect(orbs(1)).toHaveLength(theirs.length);
-        expect(orbs(1).some((uid) => theirs.includes(uid))).toBe(false);
     });
 
     it("ends only its own player's timer when a rampage is over", () => {
