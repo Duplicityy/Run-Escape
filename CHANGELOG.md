@@ -3,6 +3,14 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
+## Unreleased
+
+### Added
+
+- Each weapon's damage during a run: press Tab, or click or tap the DPS under the minimap, to see
+  what each weapon is doing a second right now, its share, and its total. It stays open or shut as
+  you left it.
+
 ## 0.22.1 - 2026-11-02
 
 ### Added

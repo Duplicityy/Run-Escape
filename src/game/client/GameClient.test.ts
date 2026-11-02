@@ -3,6 +3,7 @@ import { emptyStats } from "../content/types";
 import { Sim } from "../core/Sim";
 import { createSave } from "../core/save";
 import { makeGrid } from "../core/world/testGrid";
+import { DamageMeter } from "./DamageMeter";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
 import { GameClient } from "./GameClient";
 import { GameStore } from "./GameStore";
@@ -32,11 +33,13 @@ function createClient(sim: Sim, autoAlch: boolean) {
         paused: false,
         shownDps: 0,
         shownDpsTick: 0,
+        damageMeter: new DamageMeter(),
         lastHudUpdate: 0,
         display: {
             menuSpin: false,
             pauseOnBlur: true,
             questTracker: true,
+            damagePanel: false,
             autoAlch,
             movePrediction: false,
         },
@@ -78,6 +81,48 @@ describe("movement prediction", () => {
         expect(setPrediction).toHaveBeenLastCalledWith(true);
         client.toggleMovePrediction();
         expect(setPrediction).toHaveBeenLastCalledWith(false);
+        vi.unstubAllGlobals();
+    });
+});
+
+describe("the damage panel", () => {
+    test("is shut unless it's been opened, and is remembered", () => {
+        const stored = new Map<string, string>();
+        vi.stubGlobal("window", {
+            matchMedia: () => ({ matches: false }),
+            localStorage: {
+                getItem: (key: string) => stored.get(key) ?? null,
+                setItem: (key: string, value: string) => stored.set(key, value),
+            },
+        });
+        expect(loadDisplaySettings().damagePanel).toBe(false);
+        // Settings saved before there was such a thing
+        stored.set("rune-survivors-display", JSON.stringify({ questTracker: false }));
+        expect(loadDisplaySettings().damagePanel).toBe(false);
+        const { client } = createClient(createSim(), false);
+        client.toggleDamagePanel();
+        expect(loadDisplaySettings().damagePanel).toBe(true);
+        client.toggleDamagePanel();
+        expect(loadDisplaySettings().damagePanel).toBe(false);
+        vi.unstubAllGlobals();
+    });
+
+    test("has each weapon's damage on the HUD", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const sim = createSim();
+        const { client, store } = createClient(sim, false);
+        const updateHud = (client as unknown as { updateHud(force: boolean): void }).updateHud;
+        const source = `weapon:${sim.weapons[0].def.id}` as const;
+        sim.damageBySource[source] = 0;
+        updateHud.call(client, true);
+        for (let i = 0; i < 4 * 50; i++) {
+            sim.tick++;
+        }
+        sim.damageBySource[source] = 400;
+        updateHud.call(client, true);
+        const hud = store.getSnapshot().hud!;
+        expect(hud.weaponDamage).toEqual([{ id: sim.weapons[0].def.id, dps: 100, damage: 400 }]);
+        expect(hud.otherDps).toBe(0);
         vi.unstubAllGlobals();
     });
 });

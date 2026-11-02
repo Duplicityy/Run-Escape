@@ -75,8 +75,9 @@ the browser's cache storage, so later loads are quick.
 ### Controls
 
 **WASD** or the arrow keys to move; weapons fire on their own. **1-4** use your utility items (and
-pick on a level up, where **R** rerolls and **X** skips for coins), **Esc** pauses, **Q** shows or hides the quest tracker, **M** mutes and the
-mouse wheel zooms.
+pick on a level up, where **R** rerolls and **X** skips for coins), **Esc** pauses, **Q** shows or
+hides the quest tracker, **Tab** (or clicking the DPS) shows each weapon's damage, **M** mutes and
+the mouse wheel zooms.
 
 On a phone or tablet, hold it sideways and drag anywhere to move. The buttons on screen pause and
 use your items, and everything else is a tap. To open it full screen from its own icon, pick Add to

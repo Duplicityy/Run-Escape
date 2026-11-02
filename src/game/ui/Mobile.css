@@ -86,9 +86,15 @@
     }
 
     /* Still shown once the quest tracker's title is under the zone */
-    .ui-quest-tracker {
+    .ui-quest-tracker,
+    .ui-damage {
         position: relative;
         z-index: 1;
+    }
+
+    /* Big enough to tap */
+    .ui-dps {
+        padding: 6px 0 6px 10px;
     }
 
     /* Rests in the corner, faint, to say what's there; it jumps to the thumb */
@@ -564,6 +570,23 @@
     .ui-hud-right {
         gap: 0;
         font-size: 15px;
+    }
+
+    /* Beside the DPS rather than under it, left of the item buttons' column
+       however many weapons there are: damage a second only */
+    .ui-damage-panel {
+        position: absolute;
+        top: 0;
+        right: 160px;
+        zoom: 0.75;
+        grid-template-columns: 24px minmax(0, 1fr) auto;
+        margin-top: 0;
+    }
+
+    .ui-damage-head,
+    .ui-damage-total,
+    .ui-damage-other > :last-child {
+        display: none;
     }
 
     .ui-minimap {

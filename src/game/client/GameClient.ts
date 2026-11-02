@@ -59,6 +59,7 @@ import { ArenaGrid } from "../core/world/ArenaGrid";
 import { CameraRig } from "../render/CameraRig";
 import { GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer";
 import { installRecipe } from "../scaperune/squares";
+import { DamageMeter } from "./DamageMeter";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
 import {
     GameAssets,
@@ -320,6 +321,7 @@ export class GameClient implements GameFrameHandler {
     private cameraGround: number | undefined;
     private shownDps = 0;
     private shownDpsTick = 0;
+    private readonly damageMeter = new DamageMeter();
     // Each hero's look, as last baked
     private appearanceVersions: number[] = [];
     // The casket Auto alch last sent off (a co-op one takes a frame to come
@@ -362,6 +364,7 @@ export class GameClient implements GameFrameHandler {
         this.overlay = new Overlay(overlayCanvas);
         this.input = new GameInput(renderer.canvas);
         this.input.onPress = this.onKeyPress;
+        this.input.takesKey = (code) => code === "Tab" && this.sim !== undefined;
         this.input.onBlur = () => {
             this.accumulator = 0;
             // With auto-pause off the run carries on (though a hidden tab
@@ -687,6 +690,10 @@ export class GameClient implements GameFrameHandler {
         this.setDisplay({ questTracker: !this.display.questTracker });
     }
 
+    toggleDamagePanel(): void {
+        this.setDisplay({ damagePanel: !this.display.damagePanel });
+    }
+
     toggleMovePrediction(): void {
         this.setDisplay({ movePrediction: !this.display.movePrediction });
         this.coopRun?.setPrediction(this.display.movePrediction);
@@ -933,6 +940,7 @@ export class GameClient implements GameFrameHandler {
         this.accumulator = 0;
         this.shownDps = 0;
         this.shownDpsTick = 0;
+        this.damageMeter.reset();
         this.appearanceVersions = [];
         this.decisionKey = "";
         this.autoAlchedUid = -1;
@@ -1306,6 +1314,10 @@ export class GameClient implements GameFrameHandler {
         }
         if (code === "KeyQ" && this.sim) {
             this.toggleQuestTracker();
+            return;
+        }
+        if (code === "Tab" && this.sim) {
+            this.toggleDamagePanel();
             return;
         }
         const sim = this.sim;
@@ -1768,6 +1780,18 @@ export class GameClient implements GameFrameHandler {
             this.shownDps = sim.dps;
             this.shownDpsTick = sim.tick;
         }
+        this.damageMeter.sample(sim.tick, sim.damageBySource);
+        const meter = this.damageMeter.read();
+        const weaponDamage = sim.weapons.map((w) => {
+            const source = `weapon:${w.def.id}`;
+            return {
+                id: w.def.id,
+                dps: meter.perSecond[source] ?? 0,
+                damage: meter.totals[source] ?? 0,
+            };
+        });
+        const allDps = Object.values(meter.perSecond).reduce((sum, dps) => sum + dps, 0);
+        const otherDps = Math.max(0, allDps - weaponDamage.reduce((sum, w) => sum + w.dps, 0));
         const hud: HudView = {
             mapId: sim.map.id,
             round: sim.endless ? sim.round : undefined,
@@ -1784,6 +1808,8 @@ export class GameClient implements GameFrameHandler {
             kills: sim.kills,
             coins: sim.coins,
             dps: this.shownDps,
+            weaponDamage,
+            otherDps,
             maxWeapons: sim.maxWeapons,
             maxPassives: sim.maxPassives,
             weapons: sim.weapons.map((w) => {

@@ -1060,7 +1060,14 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
     const hud = ui.hud;
     return (
         <div className="ui-fill ui-run">
-            {hud && <Hud hud={hud} client={client} questTracker={ui.display.questTracker} />}
+            {hud && (
+                <Hud
+                    hud={hud}
+                    client={client}
+                    questTracker={ui.display.questTracker}
+                    damagePanel={ui.display.damagePanel}
+                />
+            )}
             {ui.party.length > 0 && <PartyFrames party={ui.party} />}
             {ui.waitingOn.length > 0 && (ui.overlay === "none" || ui.overlay === "paused") && (
                 <WaitingNote names={ui.waitingOn} />
@@ -1254,10 +1261,12 @@ function Hud({
     hud,
     client,
     questTracker,
+    damagePanel,
 }: {
     hud: HudView;
     client: GameClient;
     questTracker: boolean;
+    damagePanel: boolean;
 }): JSX.Element {
     const bossIn = hud.bossIn;
     return (
@@ -1283,9 +1292,7 @@ function Hud({
                     {hud.quests.length > 0 && (
                         <QuestTracker quests={hud.quests} open={questTracker} client={client} />
                     )}
-                    <div className="ui-dps">
-                        <span className="ui-dps-label">DPS</span> {formatPerSecond(hud.dps)}
-                    </div>
+                    <DamagePanel hud={hud} open={damagePanel} client={client} />
                 </div>
             </div>
             {hud.boss ? (
@@ -1500,6 +1507,85 @@ function LevelUpModal({ ui, client }: ScreenProps): JSX.Element {
                     </div>
                 )}
             </div>
+        </div>
+    );
+}
+
+// The HUD's DPS, and under it each weapon's: click the DPS (or press Tab) to
+// open or shut it. Each weapon's damage a second just now, its share of all
+// of it as a bar, and its damage this run.
+function DamagePanel({
+    hud,
+    open,
+    client,
+}: {
+    hud: HudView;
+    open: boolean;
+    client: GameClient;
+}): JSX.Element {
+    const total = hud.weaponDamage.reduce((sum, w) => sum + w.dps, hud.otherDps);
+    return (
+        <div className="ui-damage">
+            <button
+                className="ui-dps"
+                onClick={() => client.toggleDamagePanel()}
+                title="Show or hide each weapon's damage (Tab)"
+            >
+                <span className="ui-dps-label">DPS</span> {formatPerSecond(hud.dps)}{" "}
+                <span className="ui-dps-toggle">{open ? "▾" : "▸"}</span>
+            </button>
+            {open && (
+                <div className="ui-damage-panel">
+                    <div className="ui-damage-head">
+                        <span />
+                        <span />
+                        <span>DPS</span>
+                        <span>Total</span>
+                    </div>
+                    {hud.weapons.map((slot) => {
+                        const row = hud.weaponDamage.find((w) => w.id === slot.id);
+                        const dps = row?.dps ?? 0;
+                        return (
+                            <div key={slot.id} className="ui-damage-row">
+                                <ItemIcon
+                                    objId={slot.iconObjId}
+                                    spriteId={slot.iconSpriteId}
+                                    size={24}
+                                />
+                                <span className="ui-damage-weapon">
+                                    <span
+                                        className="ui-damage-name"
+                                        style={{ color: slot.rarityColor }}
+                                    >
+                                        {slot.name}
+                                    </span>
+                                    <span className="ui-damage-bar">
+                                        <span
+                                            style={{
+                                                width: `${total > 0 ? (dps / total) * 100 : 0}%`,
+                                            }}
+                                        />
+                                    </span>
+                                </span>
+                                <span className="ui-damage-dps">{formatPerSecond(dps)}</span>
+                                <span className="ui-damage-total">
+                                    <Big value={row?.damage ?? 0} />
+                                </span>
+                            </div>
+                        );
+                    })}
+                    {hud.otherDps >= 0.05 && (
+                        <div className="ui-damage-row ui-damage-other">
+                            <span />
+                            <span className="ui-damage-weapon" title="Items, power-ups and recoil">
+                                Other
+                            </span>
+                            <span className="ui-damage-dps">{formatPerSecond(hud.otherDps)}</span>
+                            <span />
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
