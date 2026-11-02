@@ -218,10 +218,13 @@ describe("saving", () => {
         const store = new GameStore(save);
         const saved: SaveData[] = [];
         let next: LoadedSave = { save: createSave() };
+        const writeOver = vi.fn();
         const saveStore: SaveStore = {
             gameVersion: "0.22.1",
             load: () => next,
             save: (data) => void saved.push(structuredClone(data)),
+            read: () => "stored",
+            writeOver,
             getUnreadable: () => [],
             readUnreadable: () => undefined,
             deleteUnreadable() {},
@@ -237,7 +240,7 @@ describe("saving", () => {
             saveLock.held = now;
             (client as unknown as { onSaveLock(held: boolean): void }).onSaveLock(now);
         };
-        return { client, store, saved, setStored, lockChanged };
+        return { client, store, saved, writeOver, setStored, lockChanged };
     }
 
     test("nothing's saved while another tab has the game", () => {
@@ -276,6 +279,66 @@ describe("saving", () => {
         lockChanged(true);
         expect(store.getSnapshot().saveBlock).toEqual({ kind: "newerGame", gameVersion: "0.23.0" });
         expect(client.save.coins).toBe(70);
+        client.refundUpgrades();
+        expect(saved).toEqual([]);
+    });
+
+    test("saving anyway writes over a newer game's save, but never a newer format", () => {
+        const { client, store, saved, writeOver, setStored, lockChanged } = createSaving(false);
+        setStored({ save: { ...createSave(), coins: 70 }, newer: { gameVersion: "0.23.0" } });
+        lockChanged(true);
+        client.saveOverNewer();
+        expect(writeOver).toHaveBeenCalledTimes(1);
+        expect(saved.map((s) => s.coins)).toEqual([70]);
+        expect(store.getSnapshot().saveBlock).toBeUndefined();
+        // A format this game can't read is never written
+        const format = { gameVersion: "0.24.0", format: true };
+        setStored({ save: createSave(), newer: format });
+        lockChanged(true);
+        client.saveOverNewer();
+        expect(writeOver).toHaveBeenCalledTimes(1);
+        expect(saved).toHaveLength(1);
+        expect(store.getSnapshot().saveBlock).toEqual({ kind: "newerGame", ...format });
+    });
+
+    test("exports a newer game's save as it's stored, not this game's copy of it", async () => {
+        const saveFile = await import("./saveFile");
+        const spy = vi.spyOn(saveFile, "saveFile").mockImplementation(() => {});
+        const { client, setStored, lockChanged } = createSaving(false);
+        setStored({ save: { ...createSave(), coins: 70 }, newer: { gameVersion: "0.23.0" } });
+        lockChanged(true);
+        client.exportSave();
+        expect(spy).toHaveBeenLastCalledWith("run-escape-save.json", "stored", "application/json");
+        // This game's own is marked with its version
+        setStored({ save: { ...createSave(), coins: 80 } });
+        lockChanged(true);
+        client.exportSave();
+        const text = spy.mock.lastCall![1];
+        expect(JSON.parse(text)).toMatchObject({ coins: 80, gameVersion: "0.22.1" });
+        spy.mockRestore();
+    });
+
+    test("another tab taking the save pauses a solo run, once, and not co-op's", () => {
+        const { client, lockChanged } = createSaving(true);
+        const pause = vi.fn();
+        Object.assign(client, { sim: {}, pause });
+        lockChanged(false);
+        expect(pause).toHaveBeenCalledTimes(1);
+        lockChanged(false);
+        expect(pause).toHaveBeenCalledTimes(1);
+        lockChanged(true);
+        Object.assign(client, { coopRun: {} });
+        lockChanged(false);
+        expect(pause).toHaveBeenCalledTimes(1);
+    });
+
+    test("a save that couldn't be read, with no room for a copy, is left as it is", () => {
+        const { client, store, saved, setStored, lockChanged } = createSaving(false);
+        setStored({ save: createSave(), unreadable: "rune-survivors-save", noRoom: true });
+        lockChanged(true);
+        expect(store.getSnapshot().saveBlock).toEqual({ kind: "noRoom" });
+        // The panel saying so is the notice
+        expect(store.getSnapshot().unreadableSave).toBeUndefined();
         client.refundUpgrades();
         expect(saved).toEqual([]);
     });

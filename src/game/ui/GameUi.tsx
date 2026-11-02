@@ -1644,6 +1644,16 @@ function PauseModal({
             <div className="ui-panel rs-border rs-background ui-pause">
                 <h2>{coop ? "Menu" : "Paused"}</h2>
                 {coop && <p className="ui-subtle">The run carries on while you're in here.</p>}
+                {ui.saveBlock && ui.saveBlockClosed && (
+                    <p className="ui-subtle">
+                        <button
+                            className="ui-version ui-save-off"
+                            onClick={() => client.showSaveBlock()}
+                        >
+                            Not saving
+                        </button>
+                    </p>
+                )}
                 <div className="ui-pause-columns">
                     <div className="ui-pause-column">
                         <div className="ui-pause-list">

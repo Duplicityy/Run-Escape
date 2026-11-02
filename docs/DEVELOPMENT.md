@@ -617,16 +617,24 @@ from being lost:
   (Safari before 15.4, or plain http other than localhost) every tab saves, as before.
 - **A newer game's save isn't written over.** Every write marks the save with `gameVersion`
   (`package.json`'s). One from a newer version, or with a `version` above `SAVE_VERSION`, is played
-  but never written, and the player's told to reload. `migrateSave` keeps only the ids it knows,
-  so an older game would otherwise drop new maps, upgrades and items. `SAVE_VERSION` alone can't
+  but not written, and the player's told to reload. `migrateSave` keeps only the ids it knows, so
+  an older game would otherwise drop new maps, upgrades and items. `SAVE_VERSION` alone can't
   tell, as new ids don't raise it. This catches a tab left open over a deploy, and an older branch
-  on the dev server. Import turns one away too.
+  on the dev server. Import turns one away too. Export gives the stored text as it is, not this
+  game's pruned copy. Save anyway (`saveOverNewer`) writes over it after all, losing only what was
+  new: the way out when a release is rolled back, so every player isn't stuck not saving. It isn't
+  offered for a newer `version`, whose format this game can't read. The check comes before
+  `migrateSave`, so a newer save that won't migrate still counts as newer, not unreadable.
 - **One that won't load is kept.** A save that won't parse goes to
   `rune-survivors-save-unreadable-<Date.now()>` (the last two are kept) before a fresh one takes
   its place. The title screen says so, with Export, and Settings lists them to export or delete.
+  With no room in localStorage for the copy, it stays where it is and nothing's written over it;
+  the panel says so (`noRoom`), with Export.
 
-Play without saving closes the panel, and a Not saving button on the title screen opens it again.
-What's bought or earned meanwhile lasts until the tab gets the save back or reloads.
+Play without saving closes the panel, and a Not saving button on the title screen and in the pause
+menu opens it again. What's bought or earned meanwhile lasts until the tab gets the save back or
+reloads: getting the lock reads the stored save, which replaces what this tab had in memory. When
+the lock goes mid-run, a solo run pauses under the panel (co-op's goes on for the others).
 
 The desktop app has one window and plays the newest game it has, so neither tabs nor an older
 game come up there; an export from a newer version is turned away on import, as anywhere.

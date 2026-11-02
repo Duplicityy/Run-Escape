@@ -39,6 +39,7 @@ import { SimEvent, WeaponState } from "../core/entities";
 import { usePortableMath } from "../core/fmath";
 import { CoopAction, applyAction, hasBadNumber } from "../core/lockstep";
 import {
+    NewerSave,
     SaveData,
     SaveStore,
     buyArmouryUpgrade,
@@ -317,8 +318,11 @@ export class GameClient implements GameFrameHandler {
     paused = false;
     save: SaveData;
     // The save was written by a newer version of the game, so it's not saved
-    // over
-    private newerSave?: { gameVersion?: string };
+    // over (unless the player says so, see saveOverNewer)
+    private newerSave?: NewerSave;
+    // The save couldn't be read and there was no room to keep a copy, so it
+    // stays as it is
+    private saveNoRoom = false;
     private stopSaveLock?: () => void;
     // Co-op: the room and its relay, and the run being played with it
     readonly coop: CoopLobby;
@@ -722,9 +726,12 @@ export class GameClient implements GameFrameHandler {
         this.persist();
     }
 
-    // Gives the player the save as a file
+    // Gives the player the save as a file. One from a newer game goes as it
+    // is: this game's copy has dropped what it doesn't know.
     exportSave(): void {
-        const text = exportSave(this.save, this.saveStore.gameVersion);
+        const text =
+            (this.newerSave && this.saveStore.read()) ??
+            exportSave(this.save, this.saveStore.gameVersion);
         saveFile("run-escape-save.json", text, "application/json");
     }
 
@@ -750,6 +757,19 @@ export class GameClient implements GameFrameHandler {
         this.saveLock.takeOver();
     }
 
+    // Saves over the newer game's save from here on, losing what's new in it.
+    // The player's choice (and the only way out when a release is rolled
+    // back), but not for a newer format, which this game can't read.
+    saveOverNewer(): void {
+        if (!this.newerSave || this.newerSave.format) {
+            return;
+        }
+        this.newerSave = undefined;
+        this.saveStore.writeOver();
+        this.persist();
+        this.updateSaveBlock();
+    }
+
     playWithoutSaving(): void {
         this.store.set({ saveBlockClosed: true });
     }
@@ -770,9 +790,11 @@ export class GameClient implements GameFrameHandler {
     private reloadSave(): void {
         const loaded = this.saveStore.load();
         this.newerSave = loaded.newer;
+        this.saveNoRoom = loaded.noRoom === true;
         this.useSave(loaded.save);
         this.store.set({
-            unreadableSave: loaded.unreadable,
+            // With no room for a copy, the panel saying so is the notice
+            unreadableSave: loaded.noRoom ? undefined : loaded.unreadable,
             unreadableSaves: this.saveStore.getUnreadable(),
         });
         this.updateSaveBlock();
@@ -789,14 +811,18 @@ export class GameClient implements GameFrameHandler {
         if (this.saveLock.held === false) {
             saveBlock = { kind: "otherTab" };
         } else if (this.newerSave) {
-            saveBlock = { kind: "newerGame", gameVersion: this.newerSave.gameVersion };
+            saveBlock = { kind: "newerGame", ...this.newerSave };
+        } else if (this.saveNoRoom) {
+            saveBlock = { kind: "noRoom" };
         }
-        // A new reason shows the panel again
+        // A new reason shows the panel again, and stops a solo run for it
+        // (co-op's goes on for the others)
         const { saveBlock: was, saveBlockClosed } = this.store.getSnapshot();
-        this.store.set({
-            saveBlock,
-            saveBlockClosed: saveBlockClosed && saveBlock?.kind === was?.kind,
-        });
+        const changed = saveBlock?.kind !== was?.kind;
+        this.store.set({ saveBlock, saveBlockClosed: saveBlockClosed && !changed });
+        if (saveBlock && changed && !this.coopRun) {
+            this.pause();
+        }
     }
 
     // Swaps in an imported save in place of this one
@@ -826,7 +852,7 @@ export class GameClient implements GameFrameHandler {
 
     private persist(): void {
         // Played without saving, it carries on in memory
-        if (this.saveLock.held && !this.newerSave) {
+        if (this.saveLock.held && !this.newerSave && !this.saveNoRoom) {
             this.saveStore.save(this.save);
         }
         // A fresh object so React sees the change

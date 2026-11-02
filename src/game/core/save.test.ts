@@ -740,9 +740,15 @@ describe("the save in the browser", () => {
         // ...but doesn't take it away
         store.save(loaded.save);
         expect(JSON.parse(stored.get(KEY)!).mapVictories.some_future_map).toBe(3);
+        // What's stored can be had as it is, and written over once the player says so
+        expect(store.read()).toBe(JSON.stringify(newer));
+        store.writeOver();
+        store.save(loaded.save);
+        expect(JSON.parse(stored.get(KEY)!)).toMatchObject({ coins: 70, gameVersion: GAME });
+        expect(JSON.parse(stored.get(KEY)!).mapVictories.some_future_map).toBeUndefined();
         // A newer format, whatever it says
         stored.set(KEY, JSON.stringify({ ...createSave(), version: SAVE_VERSION + 1 }));
-        expect(store.load().newer).toEqual({});
+        expect(store.load().newer).toEqual({ format: true });
         // Updated, it saves again
         const updated = new LocalSaveStore("0.23.0");
         stored.set(KEY, JSON.stringify(newer));
@@ -803,10 +809,11 @@ describe("the save in the browser", () => {
         });
         const store = new LocalSaveStore(GAME);
         const loaded = store.load();
-        expect(loaded.unreadable).toBe(KEY);
+        expect(loaded).toEqual({ save: createSave(), unreadable: KEY, noRoom: true });
         store.save(loaded.save);
         expect(stored.get(KEY)).toBe("{");
         expect(store.readUnreadable(KEY)).toBe("{");
+        expect(store.read()).toBe("{");
     });
 
     test("deleting one that couldn't be read leaves the save alone", () => {

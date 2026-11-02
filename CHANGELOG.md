@@ -14,9 +14,11 @@ the version in the corner).
 - With the game open in two tabs, only one saves, so they no longer undo each other's runs, coins
   and unlocks. The other offers to play there instead.
 - A tab left open over an update no longer wipes progress from the newer version when it saves. It
-  asks you to reload instead.
+  asks you to reload instead, or to save anyway and lose only what was new.
 - A save that can't be read is kept rather than lost. The game tells you, and you can export it
   from Settings.
+- If the game stops saving mid-run, a solo run pauses while it tells you why, and the pause menu
+  says so afterwards.
 - Killing the final boss wins the run, even if a hit lands in the same instant: it no longer counts
   as a death or uses up a ring of life.
 - Co-op: two players with the same orbit weapon, like Elemental runes, no longer wipe out each

@@ -3,7 +3,7 @@ import { GearSlot } from "../content/types";
 import { WeaponStatLine } from "../content/weaponStats";
 import { ChestAction } from "../core/Loot";
 import { RunResult } from "../core/Sim";
-import { SaveData, UnreadableSave } from "../core/save";
+import { NewerSave, SaveData, UnreadableSave } from "../core/save";
 import { DisplaySettings } from "./DisplaySettings";
 import { AudioSettings } from "./GameAudio";
 import { CoopView, OFFLINE } from "./coop/CoopLobby";
@@ -229,9 +229,13 @@ export type TeammateView = {
 
 export type Toast = { id: number; text: string; until: number };
 
-// Why nothing's being saved: the game's open in another tab, or the save's
-// from a newer version of it (which this one would undo)
-export type SaveBlock = { kind: "otherTab" } | { kind: "newerGame"; gameVersion?: string };
+// Why nothing's being saved: the game's open in another tab, the save's from
+// a newer version of it (which this one would undo), or it couldn't be read
+// and there's no room to keep a copy
+export type SaveBlock =
+    | { kind: "otherTab" }
+    | ({ kind: "newerGame" } & NewerSave)
+    | { kind: "noRoom" };
 
 export type UiSnapshot = {
     screen: Screen;
