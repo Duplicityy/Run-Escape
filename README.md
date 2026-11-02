@@ -69,8 +69,10 @@ and open http://localhost:5173.
 
 `npm run download-caches` fetches the game's cache (see [Cache version](#cache-version)) from the
 [OpenRS2 Archive](https://archive.openrs2.org/) into `caches/`; you can also copy a `caches/` folder
-over from another checkout. The first load copies the 227 MB cache into
-the browser's cache storage, so later loads are quick.
+over from another checkout. The download gives up when nothing has arrived for a minute; on a
+connection that drops out for longer, set `CACHE_DOWNLOAD_TIMEOUT_MS` to a longer wait in
+milliseconds. The first load copies the 227 MB cache into the browser's cache storage, so later
+loads are quick.
 
 ### Controls
 
