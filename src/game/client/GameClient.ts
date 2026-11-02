@@ -1201,7 +1201,10 @@ export class GameClient implements GameFrameHandler {
         if (!sim) {
             return false;
         }
-        if (this.coopRun && sim.rerollsLeft <= 0) {
+        // Checked here too in co-op: an action the host turns away still counts
+        // as this decision's answer (CoopRun.act), so a refused reroll would
+        // hold up the real pick
+        if (this.coopRun && (sim.rerollsLeft <= 0 || sim.choosingHilt)) {
             this.sounds.denied();
             return false;
         }

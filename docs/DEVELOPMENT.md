@@ -462,6 +462,11 @@ about 15 times a second at most. The host checks what a guest sends (`cleanMove`
 checks its shape, so whether a player can do it now is the sim's to check: a modified game can
 send anything (a downed player can't choose, reroll or skip, as `isChoosing` says). Nothing
 waits on a slow guest; they see the run a little behind, and catch up at 8 ms a frame at most.
+A decision (a level up, a casket, a random event) is answered once: `CoopRun.act` drops a second
+answer to the same one until the host's frame moves it on, or 3 seconds pass, so a double click
+can't land on the next decision unseen. An action the host turns away counts as an answer too, so
+the client checks what the sim would refuse before sending it (a reroll with none left, or
+during a hilt choice), or a refused action would hold up the real one.
 
 Guests can predict their own **displayed** movement in `client/coop/MovementPrediction.ts`. It's
 a trial for now: the `movePrediction` display setting (Settings and the pause menu) is off by
