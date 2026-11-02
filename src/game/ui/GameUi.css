@@ -1012,11 +1012,13 @@
 }
 
 /* The damage meter, under the quest tracker, and each weapon's under it */
+/* Only the DPS takes clicks: the panel under it lets them through to the
+   game, the mouse wheel's zoom included */
 .ui-damage {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    pointer-events: auto;
+    pointer-events: none;
 }
 
 .ui-dps {
@@ -1028,6 +1030,7 @@
     padding: 0;
     text-shadow: 1px 1px 0 #000;
     cursor: pointer;
+    pointer-events: auto;
 }
 
 .ui-dps-toggle {
@@ -1049,8 +1052,6 @@
     box-shadow: inset 0 0 0 1px var(--ui-edge-light);
     font-size: 15px;
     text-shadow: 1px 1px 0 #000;
-    /* Only the DPS above it takes clicks: taps go through to the game */
-    pointer-events: none;
 }
 
 /* Each row's cells sit in the panel's columns */

@@ -35,6 +35,10 @@ export type SlotView = {
     stats?: string[];
     // Weapons that evolve: the passive it takes, and what's done of it
     evolution?: { passive: string; maxed: boolean; hasPassive: boolean; ready: boolean };
+    // Weapons, for the damage panel: damage a second just now, and damage this
+    // run (since it became what it is, for one that's evolved)
+    dps?: number;
+    damage?: number;
     // The item's own rarity, for the slot's border
     rarityColor: string;
 };
@@ -131,9 +135,8 @@ export type HudView = {
     coins: number;
     // Damage a second just now, every source counted
     dps: number;
-    // The same for each weapon held, in the HUD's order, for the damage panel
-    // (DamageMeter), with what's left over (items, power-ups, recoil)
-    weaponDamage: WeaponDamageView[];
+    // For the damage panel (DamageMeter): what isn't a weapon's (items,
+    // power-ups, recoil), as each weapon's is on its slot
     otherDps: number;
     maxWeapons: number;
     maxPassives: number;
@@ -154,14 +157,6 @@ export type HudView = {
     // The quests this run can get on with: this map's, then the ones done all
     // over, leaving out the ones done before it
     quests: QuestTrackView[];
-};
-
-// A weapon's row in the damage panel: its damage a second just now, and its
-// damage this run (since it became what it is, for one that's evolved)
-export type WeaponDamageView = {
-    id: string;
-    dps: number;
-    damage: number;
 };
 
 // One row of the run's damage: what dealt it (a weapon by its last tier),

@@ -364,7 +364,7 @@ export class GameClient implements GameFrameHandler {
         this.overlay = new Overlay(overlayCanvas);
         this.input = new GameInput(renderer.canvas);
         this.input.onPress = this.onKeyPress;
-        this.input.takesKey = (code) => code === "Tab" && this.sim !== undefined;
+        this.input.takesKey = (code) => code === "Tab" && this.isPlaying();
         this.input.onBlur = () => {
             this.accumulator = 0;
             // With auto-pause off the run carries on (though a hidden tab
@@ -688,6 +688,16 @@ export class GameClient implements GameFrameHandler {
 
     toggleQuestTracker(): void {
         this.setDisplay({ questTracker: !this.display.questTracker });
+    }
+
+    // In a run with nothing over it: Tab is the damage panel's then, and the
+    // browser's (moving between buttons) on every other screen
+    private isPlaying(): boolean {
+        return (
+            this.sim !== undefined &&
+            !this.sim.runOver &&
+            this.store.getSnapshot().overlay === "none"
+        );
     }
 
     toggleDamagePanel(): void {
@@ -1316,7 +1326,7 @@ export class GameClient implements GameFrameHandler {
             this.toggleQuestTracker();
             return;
         }
-        if (code === "Tab" && this.sim) {
+        if (code === "Tab" && this.isPlaying()) {
             this.toggleDamagePanel();
             return;
         }
@@ -1782,16 +1792,6 @@ export class GameClient implements GameFrameHandler {
         }
         this.damageMeter.sample(sim.tick, sim.damageBySource);
         const meter = this.damageMeter.read();
-        const weaponDamage = sim.weapons.map((w) => {
-            const source = `weapon:${w.def.id}`;
-            return {
-                id: w.def.id,
-                dps: meter.perSecond[source] ?? 0,
-                damage: meter.totals[source] ?? 0,
-            };
-        });
-        const allDps = Object.values(meter.perSecond).reduce((sum, dps) => sum + dps, 0);
-        const otherDps = Math.max(0, allDps - weaponDamage.reduce((sum, w) => sum + w.dps, 0));
         const hud: HudView = {
             mapId: sim.map.id,
             round: sim.endless ? sim.round : undefined,
@@ -1808,8 +1808,7 @@ export class GameClient implements GameFrameHandler {
             kills: sim.kills,
             coins: sim.coins,
             dps: this.shownDps,
-            weaponDamage,
-            otherDps,
+            otherDps: meter.otherPerSecond,
             maxWeapons: sim.maxWeapons,
             maxPassives: sim.maxPassives,
             weapons: sim.weapons.map((w) => {
@@ -1825,6 +1824,8 @@ export class GameClient implements GameFrameHandler {
                     stats: weaponStats(w.def, level).map(formatWeaponStat),
                     evolution: getEvolutionView(sim, w),
                     rarityColor: RARITIES[w.def.rarity].color,
+                    dps: meter.perSecond[`weapon:${w.def.id}`] ?? 0,
+                    damage: meter.totals[`weapon:${w.def.id}`] ?? 0,
                 };
             }),
             passives: sim.passives.map((p) => {

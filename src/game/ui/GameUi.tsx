@@ -1526,11 +1526,9 @@ function DamagePanel({
     open: boolean;
     client: GameClient;
 }): JSX.Element {
-    const total = hud.weaponDamage.reduce((sum, w) => sum + w.dps, hud.otherDps);
+    const total = hud.weapons.reduce((sum, w) => sum + (w.dps ?? 0), hud.otherDps);
     // Most damage a second first; ties (weapons yet to hit) keep the HUD's order
-    const rows = hud.weapons
-        .map((slot) => ({ slot, row: hud.weaponDamage.find((w) => w.id === slot.id) }))
-        .sort((a, b) => (b.row?.dps ?? 0) - (a.row?.dps ?? 0));
+    const rows = [...hud.weapons].sort((a, b) => (b.dps ?? 0) - (a.dps ?? 0));
     return (
         <div className="ui-damage">
             <button
@@ -1550,8 +1548,8 @@ function DamagePanel({
                         <span>DPS</span>
                         <span>Total</span>
                     </div>
-                    {rows.map(({ slot, row }) => {
-                        const dps = row?.dps ?? 0;
+                    {rows.map((slot) => {
+                        const dps = slot.dps ?? 0;
                         return (
                             <div key={slot.id} className="ui-damage-row">
                                 <ItemIcon
@@ -1578,8 +1576,8 @@ function DamagePanel({
                                 <span className="ui-damage-dps" title={exact(dps)}>
                                     {formatCompact(dps)}
                                 </span>
-                                <span className="ui-damage-total" title={exact(row?.damage ?? 0)}>
-                                    {formatCompact(row?.damage ?? 0)}
+                                <span className="ui-damage-total" title={exact(slot.damage ?? 0)}>
+                                    {formatCompact(slot.damage ?? 0)}
                                 </span>
                             </div>
                         );

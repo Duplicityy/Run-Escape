@@ -85,6 +85,10 @@ describe("movement prediction", () => {
     });
 });
 
+function displayOf(client: GameClient): DisplaySettings {
+    return (client as unknown as { display: DisplaySettings }).display;
+}
+
 describe("the damage panel", () => {
     test("is shut unless it's been opened, and is remembered", () => {
         const stored = new Map<string, string>();
@@ -121,9 +125,44 @@ describe("the damage panel", () => {
         sim.damageBySource[source] = 400;
         updateHud.call(client, true);
         const hud = store.getSnapshot().hud!;
-        expect(hud.weaponDamage).toEqual([{ id: sim.weapons[0].def.id, dps: 100, damage: 400 }]);
+        expect(hud.weapons[0]).toMatchObject({ dps: 100, damage: 400 });
         expect(hud.otherDps).toBe(0);
         vi.unstubAllGlobals();
+    });
+
+    test("puts a weapon that's gone (evolved) under none, not Other", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const sim = createSim();
+        const { client, store } = createClient(sim, false);
+        const updateHud = (client as unknown as { updateHud(force: boolean): void }).updateHud;
+        updateHud.call(client, true);
+        sim.tick += 4 * 50;
+        // An old weapon's damage, and a ring of recoil's
+        sim.damageBySource["weapon:evolved_away"] = 600;
+        sim.damageBySource.recoil = 40;
+        updateHud.call(client, true);
+        expect(store.getSnapshot().hud!.otherDps).toBe(10);
+        vi.unstubAllGlobals();
+    });
+
+    // Tab's the panel's (GameInput.takesKey, and the key press) only then
+    test("takes Tab only while the run's being played", () => {
+        const sim = createSim();
+        const { client, store } = createClient(sim, false);
+        const isPlaying = () =>
+            (client as unknown as { isPlaying(): boolean }).isPlaying.call(client);
+        store.set({ overlay: "none" });
+        expect(isPlaying()).toBe(true);
+        // A level up, a casket, the pause menu: Tab moves between their buttons
+        for (const overlay of ["levelUp", "chest", "paused"] as const) {
+            store.set({ overlay });
+            expect(isPlaying()).toBe(false);
+        }
+        // Nor once the run's over
+        store.set({ overlay: "none" });
+        // How a run ends is the sim's business; only that it has matters here
+        Object.defineProperty(sim, "runOver", { value: true });
+        expect(isPlaying()).toBe(false);
     });
 });
 

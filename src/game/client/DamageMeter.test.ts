@@ -49,13 +49,36 @@ describe("the damage panel's meter", () => {
         expect(meter.read().perSecond["weapon:whip"]).toBeCloseTo(50);
     });
 
+    it("counts only what isn't a weapon as other, a weapon that's gone included", () => {
+        const meter = new DamageMeter();
+        meter.sample(0, {});
+        meter.sample(2 * SECOND, {
+            "weapon:whip": 100,
+            "weapon:scimitar": 300,
+            recoil: 20,
+            "powerUp:thrall": 40,
+        });
+        expect(meter.read().otherPerSecond).toBeCloseTo(30);
+    });
+
+    it("works a sample out once, and gives that until the next", () => {
+        const meter = new DamageMeter();
+        meter.sample(0, {});
+        meter.sample(SECOND, { "weapon:whip": 100 });
+        const reading = meter.read();
+        meter.sample(SECOND + 10, { "weapon:whip": 999 });
+        expect(meter.read()).toBe(reading);
+        meter.sample(2 * SECOND, { "weapon:whip": 300 });
+        expect(meter.read()).not.toBe(reading);
+    });
+
     it("starts again for a new run", () => {
         const meter = new DamageMeter();
         meter.sample(0, {});
         meter.sample(30 * SECOND, { "weapon:whip": 9000 });
         meter.sample(0, {});
-        expect(meter.read()).toEqual({ perSecond: {}, totals: {} });
+        expect(meter.read()).toEqual({ perSecond: {}, totals: {}, otherPerSecond: 0 });
         meter.reset();
-        expect(meter.read()).toEqual({ perSecond: {}, totals: {} });
+        expect(meter.read()).toEqual({ perSecond: {}, totals: {}, otherPerSecond: 0 });
     });
 });

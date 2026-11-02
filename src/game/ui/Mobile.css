@@ -300,6 +300,16 @@
 
 /* A phone held sideways: about 390 tall against the 720 the UI's laid out for */
 @media (pointer: coarse) and (max-height: 520px) {
+    /* The item buttons' column, which the damage panel keeps left of */
+    :root {
+        --touch-item-size: 54px;
+        --touch-items-gap: 4px;
+        --touch-items-inset: 8px;
+        --touch-items-width: calc(var(--touch-item-size) * 2 + var(--touch-items-gap));
+        --hud-inset: 6px;
+        --damage-panel-zoom: 0.75;
+    }
+
     .ui-panel {
         padding: 8px 12px;
     }
@@ -546,8 +556,8 @@
 
     .ui-hud-top {
         top: calc(var(--safe-top) + 16px);
-        left: calc(var(--safe-left) + 6px);
-        right: calc(var(--safe-right) + 6px);
+        left: calc(var(--safe-left) + var(--hud-inset));
+        right: calc(var(--safe-right) + var(--hud-inset));
     }
 
     .ui-hud-left {
@@ -577,8 +587,13 @@
     .ui-damage-panel {
         position: absolute;
         top: 0;
-        right: 160px;
-        zoom: 0.75;
+        /* From the HUD's edge to past the item buttons' column, and a gap. The
+           panel's zoom scales its own lengths, so this is divided by it. */
+        right: calc(
+            (var(--touch-items-inset) + var(--touch-items-width) + 8px - var(--hud-inset)) /
+                var(--damage-panel-zoom)
+        );
+        zoom: var(--damage-panel-zoom);
         grid-template-columns: 24px minmax(0, 1fr) auto auto;
         margin-top: 0;
     }
@@ -601,15 +616,15 @@
     }
 
     .ui-touch-items {
-        right: calc(var(--safe-right) + 8px);
-        bottom: calc(var(--safe-bottom) + 8px);
-        gap: 4px;
-        width: calc(54px * 2 + 4px);
+        right: calc(var(--safe-right) + var(--touch-items-inset));
+        bottom: calc(var(--safe-bottom) + var(--touch-items-inset));
+        gap: var(--touch-items-gap);
+        width: var(--touch-items-width);
     }
 
     .ui-touch-item-place {
-        width: 54px;
-        height: 54px;
+        width: var(--touch-item-size);
+        height: var(--touch-item-size);
     }
 
     .ui-boss {
