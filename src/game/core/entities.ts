@@ -462,7 +462,9 @@ export type Pickup = {
 
 // Co-op: a boss's copies (content/coop.ts bossCopies), with one boss's
 // hitpoints, experience and loot shared between them
-export type Encounter = { id: number; copies: number };
+// Co-op: what a boss's copies share (see Sim.newEncounter), and whether
+// one of them has said the boss is here, so that the others don't
+export type Encounter = { id: number; copies: number; announced?: boolean };
 
 export type DisguisedBoss = {
     enemyId: string;

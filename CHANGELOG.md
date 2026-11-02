@@ -8,7 +8,7 @@ the version in the corner).
 ### Added
 
 - Co-op revives: stand over a downed teammate for 5 seconds to bring them back. Each player can
-  be revived once a run, with 75% of their hitpoints, and comes back untouchable for 5 minutes.
+  be revived once a run, with 75% of their hitpoints, and comes back untouchable for 5 seconds.
 - Extra co-op revives: a Prayer cape, rarely in a casket or for sale from the Mysterious Old Man,
   lets a teammate revive you once more (with 50%, then 25% of your hitpoints).
 - Hard mode in co-op: the host can turn it on once everyone in the room has it.
@@ -52,6 +52,8 @@ the version in the corner).
 - Item icons that failed to draw are tried again, rather than staying blank until the game's
   reopened.
 - Endless: a run no longer holds on to every boss it's had, so very long ones use less memory.
+- Co-op: waiting on the Multiplayer screen for a room to appear no longer drops the connection
+  after 10 minutes.
 
 ## 0.22.1 - 2026-11-02
 

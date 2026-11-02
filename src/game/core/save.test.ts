@@ -756,6 +756,16 @@ describe("the save in the browser", () => {
         expect(JSON.parse(stored.get(KEY)!).gameVersion).toBe("0.23.0");
     });
 
+    test("JSON that isn't a save is kept too, rather than migrated into a fresh one", () => {
+        const stored = stubStorage();
+        const store = new LocalSaveStore(GAME);
+        stored.set(KEY, '{"x":1}');
+        const loaded = store.load();
+        expect(loaded.save).toEqual(createSave());
+        expect(loaded.unreadable).toMatch(/^rune-survivors-save-unreadable-\d+$/);
+        expect(store.readUnreadable(loaded.unreadable!)).toBe('{"x":1}');
+    });
+
     test("one that can't be read is kept before a fresh one goes in its place", () => {
         const stored = stubStorage();
         const store = new LocalSaveStore(GAME);

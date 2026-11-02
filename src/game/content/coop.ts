@@ -73,7 +73,7 @@ export const REVIVES_PER_PLAYER = 1;
 export const REVIVE_HP = [0.75, 0.5, 0.25];
 export const REVIVE_SECONDS = 5;
 export const REVIVE_RANGE = 1;
-export const REVIVE_IMMUNITY_SECONDS = 5 * 60;
+export const REVIVE_IMMUNITY_SECONDS = 5;
 
 // The Prayer cape's skillcape emote, which a reviver performs over the fallen:
 // the player animation and the graphic that goes with it

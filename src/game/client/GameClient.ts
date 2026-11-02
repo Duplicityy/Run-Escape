@@ -533,7 +533,7 @@ export class GameClient implements GameFrameHandler {
             mine &&
             (anyMap ||
                 !room ||
-                room.members.every((member) => member.unlocks?.[mode].includes(mapId) === true))
+                room.members.every((member) => member.unlocks?.[mode]?.includes(mapId) === true))
         );
     }
 
@@ -642,12 +642,16 @@ export class GameClient implements GameFrameHandler {
             this.sounds.denied();
             return;
         }
+        // The room's modes, which the relay checked everyone has (or takes
+        // anyone for, with anyMap), so the run is what the lobby said
+        const { anyMap } = this.store.getSnapshot().coop;
         const game: GameStart = {
             seed: (Math.random() * 0x7fffffff) | 0,
             mapId: map.id,
             endless:
-                map.fun !== undefined || (room.endless && isEndlessUnlocked(this.save, map.id)),
-            hard: room.hard === true && isHardUnlocked(this.save, map.id),
+                map.fun !== undefined ||
+                (room.endless && (anyMap || isEndlessUnlocked(this.save, map.id))),
+            hard: room.hard === true && (anyMap || isHardUnlocked(this.save, map.id)),
             heroes: room.members.map((member) => ({
                 id: member.id,
                 name: member.name,

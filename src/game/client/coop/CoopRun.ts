@@ -46,8 +46,10 @@ const DECISIONS: ReadonlySet<CoopAction["kind"]> = new Set([
     "leaveEvent",
 ]);
 // After this long with the decision unchanged (the host turned the action
-// away), it can be sent again
-const DECISION_RESEND_MS = 3000;
+// away, or it was lost), it can be sent again: longer than a host stalls for
+// (a tab in the background catching up), so a second answer in the wait
+// can't land on the next decision, and well short of DECIDE_AFTER_MS
+const DECISION_RESEND_MS = 10_000;
 
 export type CoopLink = {
     sendUp(message: UpMessage): void;

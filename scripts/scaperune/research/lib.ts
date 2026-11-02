@@ -1,6 +1,6 @@
 // What the research scripts share: the cache's loaders, a rectangle of the real world as a
 // TileGrid, and the same grid out of a ScapeRune recipe, so real and made maps go through
-// one set of measurements. Run everything here through ~/tools/heavy.sh.
+// one set of measurements. Run these one at a time: each loads the cache.
 import {
     MAP_SQUARE_SIZE,
     TileGrid,

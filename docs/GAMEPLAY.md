@@ -456,9 +456,9 @@ version and how to run it.
       player can be revived once a run, plus once more for each **Prayer cape** they find: a
       rare casket item, or now and then for sale from the Mysterious Old Man, both only in
       co-op. They come back with 75% of their hitpoints, then 50%, then 25% for every revive
-      after, and with none left they're down for good. A revived player can't be hurt for 5
-      minutes, and enemies leave them alone for a teammate instead (unless nobody else is
-      up). Level ups the party had while they were down are theirs to choose once they're
+      after, and with none left they're down for good. For 5 seconds a revived player can't
+      be hurt, and enemies leave them alone for a teammate instead (unless nobody else is
+      up); food, coins and caskets are theirs to pick up all the while. Level ups the party had while they were down are theirs to choose once they're
       back.
     - The pause menu doesn't stop a co-op run. Leaving it takes you out of the party; the host
       leaving ends it for everyone.

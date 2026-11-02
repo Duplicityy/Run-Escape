@@ -102,4 +102,6 @@ for (const id of wanted) {
         );
     }
 }
-fs.writeFileSync(process.argv[4] ?? "/dev/null", JSON.stringify(out));
+if (process.argv[4]) {
+    fs.writeFileSync(process.argv[4], JSON.stringify(out));
+}

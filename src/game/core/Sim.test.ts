@@ -205,6 +205,10 @@ describe("Sim", () => {
         // The player's weapons still fire in the tick they fall
         won.damageEnemy(boss, 1e9, 0, won.player.x, won.player.y);
         expect(won.state).toBe("victory");
+        // And they're standing on the victory screen
+        expect(won.heroes[0].down).toBe(false);
+        expect(won.player.deathTick).toBe(-1);
+        expect(won.player.hp).toBeGreaterThan(0);
 
         const lost = createSim();
         lost.revivesLeft = 0;

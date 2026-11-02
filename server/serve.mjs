@@ -11,6 +11,7 @@
 //   ... -- --max-rooms=1000                # rooms at once, 500 unless it's set
 //                                          # (or MULTIPLAYER_MAX_ROOMS=1000)
 //   MULTIPLAYER_METRICS=off                # no metrics listener (coop-relay.mjs; on by default)
+//   MULTIPLAYER_METRICS_PORT=8788          # where it listens, on the server itself only
 //
 // Without a slim cache in the build it serves the full one from caches/, like
 // `vite preview` does.

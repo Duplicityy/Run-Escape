@@ -655,7 +655,9 @@ export class LocalSaveStore implements SaveStore {
         let newer: NewerSave | undefined;
         try {
             const raw: unknown = JSON.parse(text);
-            if (!raw || typeof raw !== "object") {
+            // Anything that isn't a save (every save has had a version or
+            // coins) is kept rather than migrated into a fresh one
+            if (!raw || typeof raw !== "object" || !("version" in raw || "coins" in raw)) {
                 throw new Error("Not a save");
             }
             // Before it's migrated: a newer game's save might not migrate,

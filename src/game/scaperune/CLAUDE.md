@@ -26,8 +26,8 @@ Design before settings. Noise and scatter on their own give even ground where ev
 nowhere to arrive at, and a map like that can pass every reachability check and still look awful.
 
 The numbers here are measured from the real world with the same code that measures our maps: all 935 populated surface
-squares, and 15 rectangles of real places. The scripts and results are in `scripts/scaperune/research/`. The write-up,
-with sources, is `~/assistant/plans/scaperune-design-research.md` on the team's VM.
+squares, and 15 rectangles of real places. The scripts and results are in `scripts/scaperune/research/`. The write-up
+with sources isn't in the repository (it's on the team's VM); the numbers below are what matters from it.
 
 ### Plan it first
 
@@ -503,8 +503,8 @@ gate, goes in `designed`, as rectangles of tiles, which is the only way out of a
 
 ## Checking a map
 
-**A round.** Each of these is cheap, so go round often. On a small machine run anything that loads the cache through your
-job wrapper, one at a time: on the team's VM that's `~/tools/heavy.sh [seconds] <cmd>`.
+**A round.** Each of these is cheap, so go round often. On a small machine run anything that loads the cache one at a
+time (the team's VM has a job wrapper for that outside the repository; plain `npx tsx` is fine anywhere else).
 
 ```sh
 npx tsx scripts/scaperune/preview.ts out.png map=scaperune_oasis          # from above, and reachability
@@ -660,12 +660,14 @@ Tests don't cover how things look, and this is where most maps fall down. From a
 a preview is the arena and the red dot is the spawn, and the minimap renderer doesn't draw trees or rocks.
 
 ```sh
-npm start        # the dev server, then in another shell, from ~/tools/pw on the team's VM:
-LD_LIBRARY_PATH=~/tools/chromelibs/usr/lib/x86_64-linux-gnu PROFILE=<profile dir> PORT=5173 MAP=scaperune_town \
-    node rs-height.mjs out square:6152:11674:18 side:6152:11674:18:-250
+npm start        # the dev server, then in another shell, the screenshot helper (see below):
+PROFILE=<profile dir> PORT=5173 MAP=scaperune_town node rs-height.mjs out square:6152:11674:18 side:6152:11674:18:-250
 ```
 
-Each stop is `name:x:y[:distance[:pitch]]` and writes `out-name.png`, and `@id` moves to another map. `x` and `y` are world
+`rs-height.mjs` is a Playwright helper on the team's VM, not in the repository: it opens the game headless (with the
+flags under Testing in the browser in the root `CLAUDE.md`) and screenshots each stop. Without it, take the screenshots
+by hand from the dev server. Each stop is `name:x:y[:distance[:pitch]]` and writes `out-name.png`, and `@id` moves to
+another map. `x` and `y` are world
 tiles: `mapX * 64` plus the grid tile. Use a distance of 18, which is the play camera, or it shoots from further out. Look at
 it side-on too, with a pitch nearer 0: from above, hills barely show. On your own, `game.selectMap(id); await game.startRun()`
 in the console, and `game.cameraRig.pitch`. It takes about 2 GB, so one at a time. Don't edit `src` while a browser job runs:
@@ -1403,7 +1405,7 @@ Measured in Node on this VM, on a forest-bound meadow with default settings othe
 Hallowed Night (`maps/hallowedNight.ts`) is the worked example.
 
 - List the recipe in `maps/shippedMaps.ts`. `getRecipe` and `check-maps` read that list. `check-maps` only picks
-  up ids in it or starting `scaperune_`.
+  up ids in it or starting `scaperune_` (but not the palette, prefabs and cliffs sheets).
 - Add a real entry to `MAPS` with `scaperune: true`. That flag gives it what `dev` gives a dev map: smooth ground,
   the open world, the camera ease and collision rebuilt each time.
 - `seasonal: true` keeps it out of the campaign chain and opens it from the start. Without that, adding to `MAPS`
@@ -1416,7 +1418,9 @@ Hallowed Night (`maps/hallowedNight.ts`) is the worked example.
   lines vanish through `smoothField`.
 - Shipped maps aren't held to the catalogue or the look rules, and must stay byte for byte: Hallowed Night imports `Ground`,
   `collision`, `format`, `mapBuild`, `noise`, `prefabs` and `recipe`. After a change to any of those, check that
-  `npx tsx scripts/scaperune/grid-hash.ts halloween` still prints what it did on `main`.
+  `npx tsx scripts/scaperune/grid-hash.ts halloween` still prints what it did on `main`. That hash isn't recorded
+  anywhere yet, so the check needs a second checkout with the cache: record it (in `grid-hash.ts`, and a test in
+  `generator.test.ts` that runs when the cache is there) the next time someone has `main` and the cache to hand.
 
 ### The slim cache
 

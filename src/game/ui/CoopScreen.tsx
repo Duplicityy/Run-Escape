@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { GameClient } from "../client/GameClient";
 import { ReviveView, TeammateView, UiSnapshot } from "../client/GameStore";
@@ -250,7 +250,7 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
                   (m) =>
                       !m.unlocks?.maps.includes(mapId) ||
                       (endless && !m.unlocks.endless.includes(mapId)) ||
-                      (hard && !m.unlocks.hard.includes(mapId)),
+                      (hard && !m.unlocks.hard?.includes(mapId)),
               );
     // A map this game hasn't got (a newer host's) shows as the first
     const map = MAP_BY_ID.get(room.mapId) ?? MAPS[0];
@@ -258,12 +258,15 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
     const withoutEndless = lacking(map.id, true);
     const withoutHard = lacking(map.id, false, true);
     const [copied, setCopied] = useState(false);
+    const copiedTimer = useRef<number | undefined>(undefined);
+    useEffect(() => () => window.clearTimeout(copiedTimer.current), []);
     const copyInvite = () => {
         navigator.clipboard
             ?.writeText(client.getInviteLink(room.code))
             .then(() => {
                 setCopied(true);
-                window.setTimeout(() => setCopied(false), 1500);
+                window.clearTimeout(copiedTimer.current);
+                copiedTimer.current = window.setTimeout(() => setCopied(false), 1500);
             })
             .catch(() => {});
     };

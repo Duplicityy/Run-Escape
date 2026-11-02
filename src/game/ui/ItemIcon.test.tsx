@@ -30,4 +30,23 @@ describe("IconCache", () => {
         expect(queueLoad).toHaveBeenCalledTimes(4);
         error.mockRestore();
     });
+
+    test("icons on screen when a load failed are asked for again in a moment", async () => {
+        vi.useFakeTimers();
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        const queueLoad = vi
+            .fn()
+            .mockRejectedValueOnce(new Error("worker gone"))
+            .mockReturnValue(new Promise(() => {}));
+        const cache = new IconCache();
+        cache.setWorkerPool({ queueLoad } as never);
+        cache.request(4151, 1, vi.fn());
+        await vi.advanceTimersByTimeAsync(1);
+        expect(queueLoad).toHaveBeenCalledTimes(1);
+        // Nothing asked for it again, and the worker still hears of it
+        await vi.advanceTimersByTimeAsync(1100);
+        expect(queueLoad).toHaveBeenCalledTimes(2);
+        error.mockRestore();
+        vi.useRealTimers();
+    });
 });

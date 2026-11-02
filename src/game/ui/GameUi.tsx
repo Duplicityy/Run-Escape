@@ -352,6 +352,13 @@ function SaveSetting({ ui, client }: ScreenProps): JSX.Element {
         if (!file) {
             return;
         }
+        // Nothing's being saved, so an import wouldn't be kept
+        if (ui.saveBlock) {
+            window.alert(
+                "The game isn't saving right now (see the notice on the title screen), so an imported save wouldn't be kept.",
+            );
+            return;
+        }
         let save: SaveData;
         try {
             save = importSave(await file.text(), GAME_VERSION);
@@ -389,6 +396,8 @@ function SaveSetting({ ui, client }: ScreenProps): JSX.Element {
             </button>
             <button
                 className="ui-button ui-button-small"
+                disabled={ui.saveBlock !== undefined}
+                title={ui.saveBlock && "Nothing's being saved right now, so it wouldn't be kept"}
                 onClick={(e) => {
                     fileInput.current?.click();
                     e.currentTarget.blur();

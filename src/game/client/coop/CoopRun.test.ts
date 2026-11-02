@@ -209,7 +209,7 @@ describe("co-op lockstep", () => {
         sim.state = "levelUp";
         sim.choices = [];
         expect(run.act({ kind: "skip" })).toBe(true);
-        clock.now += 2000;
+        clock.now += 9000;
         expect(run.act({ kind: "skip" })).toBe(false);
         clock.now += 1000;
         expect(run.act({ kind: "skip" })).toBe(true);
@@ -346,6 +346,8 @@ describe("co-op lockstep", () => {
         expect(isGameStart({ ...good, hard: "yes" }, 4)).toBe(false);
         expect(isGameStart({ ...good, heroes: Array(5).fill(good.heroes[0]) }, 4)).toBe(false);
         expect(isGameStart({ ...good, heroes: [{ ...good.heroes[0], name: 5 }] }, 4)).toBe(false);
+        // Two heroes with one id would be one player twice over
+        expect(isGameStart({ ...good, heroes: [good.heroes[0], good.heroes[0]] }, 4)).toBe(false);
     });
 
     it("sees a number a save can't hold, and none in a real result", () => {

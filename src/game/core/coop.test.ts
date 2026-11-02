@@ -7,6 +7,7 @@ import { OLD_MAN_OFFERS, getRandomEvent } from "../content/randomEvents";
 import { emptyStats } from "../content/types";
 import { getWeapon } from "../content/weapons";
 import { Hero, HeroOptions, Sim, SimOptions, TICKS_PER_SECOND } from "./Sim";
+import { Enemy } from "./entities";
 import { fm, usePortableMath } from "./fmath";
 import { applyFrameEvent, syncHash } from "./lockstep";
 import { makeGrid } from "./world/testGrid";
@@ -209,6 +210,28 @@ describe("co-op", () => {
         expect(sim.isImmune(b)).toBe(true);
         expect(b.immuneEndTick).toBe(sim.tick + REVIVE_IMMUNITY_SECONDS * TICKS_PER_SECOND);
         expect(sim.takeEvents()).toContainEqual({ type: "heroRevived", by: 0, hero: 1 });
+    });
+
+    it("lets a revived player pick things up while they're immune", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        down(sim, b);
+        standOver(a, b);
+        for (let i = 0; i < REVIVE_SECONDS * TICKS_PER_SECOND; i++) {
+            sim.step();
+        }
+        expect(sim.isImmune(b)).toBe(true);
+        // The teammate's away, so the food and casket at b's feet are b's
+        a.player.x = a.player.prevX = b.player.x + 20;
+        const hp = b.player.hp;
+        sim.dropPickup("food", b.player.x, b.player.y, 10);
+        sim.dropPickup("casket", b.player.x + 0.2, b.player.y, 1, { tier: "easy" });
+        for (let i = 0; i < 5; i++) {
+            sim.step();
+        }
+        expect(sim.pickups).toHaveLength(0);
+        expect(b.player.hp).toBeGreaterThan(hp);
+        expect(b.chests).toHaveLength(1);
     });
 
     it("starts a revive over when the teammate steps away", () => {
@@ -828,6 +851,56 @@ describe("co-op boss encounters", () => {
         expect(sim.state).toBe("victory");
     });
 
+    it("counts a boss's copies as one boss killed, when the last of them falls", () => {
+        const sim = party(2, false);
+        encounter(sim, "count_draynor");
+        const copies = sim.enemies.filter((enemy) => enemy.def.id === "count_draynor");
+        expect(copies).toHaveLength(2);
+        // A hit takes half a boss's hitpoints at most
+        const kill = (copy: Enemy) => {
+            while (!copy.dead) {
+                sim.damageEnemy(copy, 1e9, 0, sim.player.x, sim.player.y);
+            }
+        };
+        kill(copies[0]);
+        expect(sim.bossesKilled).toEqual([]);
+        expect(sim.bossKills).toEqual([]);
+        expect(sim.enemyKills.count_draynor).toBeUndefined();
+        kill(copies[1]);
+        expect(sim.bossesKilled).toEqual(["count_draynor"]);
+        expect(sim.bossKills).toEqual([{ enemyId: "count_draynor", seconds: sim.seconds }]);
+        expect(sim.enemyKills.count_draynor).toBe(1);
+        expect(sim.kills).toBe(2);
+    });
+
+    it("says a disguised boss has appeared once, even with its first copy long gone", () => {
+        const sim = party(2, false, { mapId: "halloween" });
+        encounter(sim, "the_mimic");
+        const caskets = sim.pickups.filter((pickup) => pickup.disguise);
+        expect(caskets).toHaveLength(2);
+        caskets[0].disguise!.openTick = sim.tick;
+        sim.takeEvents();
+        sim.step();
+        expect(sim.takeEvents().filter((event) => event.type === "bossSpawned")).toHaveLength(1);
+        const first = sim.enemies.find((enemy) => enemy.def.id === "the_mimic")!;
+        while (!first.dead) {
+            sim.damageEnemy(first, 1e9, 0, sim.player.x, sim.player.y);
+        }
+        // Its corpse is cleared away before the second casket opens
+        for (let i = 0; i < 60 * TICKS_PER_SECOND; i++) {
+            sim.step();
+            if (!sim.enemies.some((enemy) => enemy.def.id === "the_mimic")) {
+                break;
+            }
+        }
+        expect(sim.enemies.some((enemy) => enemy.def.id === "the_mimic")).toBe(false);
+        caskets[1].disguise!.openTick = sim.tick;
+        sim.takeEvents();
+        sim.step();
+        expect(sim.enemies.filter((enemy) => enemy.def.id === "the_mimic")).toHaveLength(1);
+        expect(sim.takeEvents().filter((event) => event.type === "bossSpawned")).toHaveLength(0);
+    });
+
     it.each([false, true])("multiplies Hallowed Night's earlier bosses with hard=%s", (hard) => {
         const sim = party(4, hard, { mapId: "halloween" });
         const count = hard ? 4 : 2;
@@ -844,7 +917,8 @@ describe("co-op boss encounters", () => {
         const mimics = sim.enemies.filter((enemy) => enemy.def.id === "the_mimic");
         expect(mimics).toHaveLength(count);
         // One Mimic's hitpoints between them, and the first to open says so
-        const hp = sim.map.events.find((event) => event.enemyId === "the_mimic")!.hp;
+        const event = sim.map.events.find((event) => event.enemyId === "the_mimic")!;
+        const hp = "hp" in event ? event.hp : undefined;
         const one = sim.spawnEnemy(getEnemy("the_mimic"), "boss", undefined, hp)!;
         for (const mimic of mimics) {
             expect(Math.abs(mimic.maxHp - one.maxHp / count)).toBeLessThanOrEqual(1);

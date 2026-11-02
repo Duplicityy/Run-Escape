@@ -23,6 +23,7 @@ go stale. Add anything that cost you time to work out.
 | The Windows app, its game updates, releases           | `docs/DEVELOPMENT.md`, Desktop           |
 | The app's main process and update code                | `desktop/`                               |
 | The release workflow                                  | `.github/workflows/release.yml`          |
+| The checks on a pull request                          | `.github/workflows/check.yml`            |
 | What's in the game, map by map                        | `docs/GAMEPLAY.md`                       |
 | Getting it running, controls, cache version           | `README.md`                              |
 | What changed in each version                          | `CHANGELOG.md`                           |
@@ -143,7 +144,8 @@ npx tsx scripts/cache/validate-decoders.ts    # after touching a decoder or chan
 
 ## Tests on the release build
 
-The release workflow is the only place `npm test` runs on its own, and a failure there stops the
+`.github/workflows/check.yml` runs the type check and `npm test` on every pull request, without
+the game's cache. The release workflow runs the tests with it, and a failure there stops the
 desktop build.
 
 - **It runs everything, on a busy machine.** It has the game's cache, so `generator.test.ts` runs

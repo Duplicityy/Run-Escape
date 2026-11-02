@@ -1115,16 +1115,22 @@ describe("co-op relay", () => {
         await raw.saw("503 Service Unavailable");
     });
 
-    it("closes a connection in no room that's done nothing, but not one in a room", async () => {
-        await restart({ idleConnectionMs: 1000 });
+    it("closes a connection in no room that only pings, not one browsing or in a room", async () => {
+        await restart({ idleConnectionMs: 500 });
         const { host } = await party(0);
         const idle = await connect();
-        idle.send({ t: "list" });
-        await idle.next("rooms");
-        relay.sweep(Date.now() + 2000);
+        const browsing = await connect();
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        idle.send({ t: "ping" });
+        await idle.next("pong");
+        browsing.send({ t: "list" });
+        await browsing.next("rooms");
+        relay.sweep(Date.now());
         await new Promise<void>((resolve) => {
             idle.socket.onclose = () => resolve();
         });
+        browsing.send({ t: "ping" });
+        await browsing.next("pong");
         host.send({ t: "ping" });
         await host.next("pong");
     });
@@ -1206,6 +1212,22 @@ describe("co-op relay", () => {
         expect(updates).toBeLessThan(6);
     });
 
+    it("takes a room off the open list the moment it starts, update waiting or not", async () => {
+        await restart({ roomUpdateMs: 1000 });
+        const { host, code } = await party(0, true);
+        const browser = await connect();
+        browser.send({ t: "list" });
+        expect((await browser.next("rooms")).rooms.map((r: { code: string }) => r.code)).toEqual([
+            code,
+        ]);
+        // The first change goes round at once, and the start waits its turn
+        host.send({ t: "settings", mapId: "draynor" });
+        host.send({ t: "start", game: {} });
+        await host.next("start");
+        browser.send({ t: "list" });
+        expect((await browser.next("rooms")).rooms).toEqual([]);
+    });
+
     // A connection from this address, as a proxy in front says (with PROXY=local)
     function from(address: string): RawClient {
         const port = Number(new URL(url).port);
@@ -1232,7 +1254,7 @@ describe("co-op relay", () => {
         await second.saw("too many rooms");
     });
 
-    it("keeps a kicked player out from anywhere in their /48", async () => {
+    it("keeps a kicked player out from their /64, not their neighbours in the /48", async () => {
         await restart({ proxy: "local" });
         const { host, code } = await party(0);
         const kicked = from("2001:db8:1:1::1");
@@ -1241,16 +1263,44 @@ describe("co-op relay", () => {
         const { room } = await host.roomWhere((r) => r.members.length === 2);
         host.send({ t: "kick", id: room.members[1].id });
         await kicked.saw('"reason":"kicked"');
+        const again = from("2001:db8:1:1::2");
+        await again.saw("welcome");
+        again.send({ t: "join", code, me: {} });
+        await again.saw("removed you");
         const nextDoor = from("2001:db8:1:2::1");
         await nextDoor.saw("welcome");
         nextDoor.send({ t: "join", code, me: {} });
-        await nextDoor.saw("removed you");
-        const elsewhere = from("2001:db8:2:1::1");
-        await elsewhere.saw("welcome");
-        elsewhere.send({ t: "join", code, me: {} });
         await host.roomWhere(
             (r) => r.members.length === 2 && r.members[1].id !== room.members[1].id,
         );
+    });
+
+    it("slows down guessing from a whole /48, without one address shutting it out", async () => {
+        await restart({
+            proxy: "local",
+            wrongCodesPerMinute: 2,
+            wrongCodesPerNetworkPerMinute: 4,
+        });
+        const { code } = await party(0);
+        const guess = async (address: string, times: number) => {
+            const client = from(address);
+            await client.saw("welcome");
+            for (let i = 0; i < times; i++) {
+                client.send({ t: "join", code: "ZZZZZ" });
+                await client.saw("no room");
+            }
+            return client;
+        };
+        // An address at its limit has to wait, but its neighbour doesn't
+        const first = await guess("2001:db8:1:1::1", 2);
+        first.send({ t: "join", code, me: {} });
+        await first.saw("wrong codes");
+        await guess("2001:db8:1:2::1", 2);
+        // Now the whole /48 is at its limit
+        const third = from("2001:db8:1:3::1");
+        await third.saw("welcome");
+        third.send({ t: "join", code, me: {} });
+        await third.saw("wrong codes");
     });
 
     it("drops a host that sends its room more than a run does", async () => {

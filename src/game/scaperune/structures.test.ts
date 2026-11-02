@@ -206,7 +206,8 @@ describe("set pieces", () => {
                 }),
             );
         }
-    });
+        // Three walled maps: a few seconds on the release runner
+    }, 20_000);
 });
 
 describe("city walls", () => {

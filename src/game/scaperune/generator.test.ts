@@ -72,7 +72,7 @@ describe("generateMap", () => {
         const b = generateMap(settings({ seed: 5, rivers: 1 }), context);
         expect(writeTerrain(a, 64, 64)).toEqual(writeTerrain(b, 64, 64));
         expect(writeLocs(a, 64, 64)).toEqual(writeLocs(b, 64, 64));
-    });
+    }, 15_000);
 
     it("makes a different map from another seed", () => {
         const a = generateMap(settings({ seed: 5 }), context);
@@ -234,31 +234,36 @@ describe("generateMap", () => {
     };
     const PLAY_SETTINGS = ["waveSet", "enemyDensity", "brightness"];
 
-    it.each(Object.keys(CHANGES) as SettingKey[])("does something with %s", (key) => {
-        const [value, needs] = CHANGES[key] as [unknown, Partial<GeneratorSettings>?];
-        const before = settings({ seed: 21, ...needs });
-        const after = { ...before, [key]: value };
-        if (PLAY_SETTINGS.includes(key)) {
-            const was = generatedRecipe("a", 70, 134, before).play;
-            expect(generatedRecipe("a", 70, 134, after).play).not.toEqual(was);
-            return;
-        }
-        const a = generateMap(before, context);
-        const b = generateMap(after, context);
-        const sameSize = a.sizeX === b.sizeX && a.sizeY === b.sizeY;
-        // Terrain in a square of it, and locs all over: a few things can be anywhere on a map
-        const sameLocs =
-            a.locs.length === b.locs.length &&
-            a.locs.every((loc, i) => {
-                const { id, x, y, rotation } = b.locs[i];
-                return loc.id === id && loc.x === x && loc.y === y && loc.rotation === rotation;
-            });
-        const sameMap =
-            sameSize &&
-            writeTerrain(a, 64, 64).join() === writeTerrain(b, 64, 64).join() &&
-            sameLocs;
-        expect(sameMap).toBe(false);
-    });
+    it.each(Object.keys(CHANGES) as SettingKey[])(
+        "does something with %s",
+        (key) => {
+            const [value, needs] = CHANGES[key] as [unknown, Partial<GeneratorSettings>?];
+            const before = settings({ seed: 21, ...needs });
+            const after = { ...before, [key]: value };
+            if (PLAY_SETTINGS.includes(key)) {
+                const was = generatedRecipe("a", 70, 134, before).play;
+                expect(generatedRecipe("a", 70, 134, after).play).not.toEqual(was);
+                return;
+            }
+            const a = generateMap(before, context);
+            const b = generateMap(after, context);
+            const sameSize = a.sizeX === b.sizeX && a.sizeY === b.sizeY;
+            // Terrain in a square of it, and locs all over: a few things can be anywhere on a map
+            const sameLocs =
+                a.locs.length === b.locs.length &&
+                a.locs.every((loc, i) => {
+                    const { id, x, y, rotation } = b.locs[i];
+                    return loc.id === id && loc.x === x && loc.y === y && loc.rotation === rotation;
+                });
+            const sameMap =
+                sameSize &&
+                writeTerrain(a, 64, 64).join() === writeTerrain(b, 64, 64).join() &&
+                sameLocs;
+            expect(sameMap).toBe(false);
+            // Two maps each, a few seconds on the release runner
+        },
+        15_000,
+    );
 
     it("runs land past the arena when the boundary isn't the sea", () => {
         const full = settings({ boundary: "forest", ponds: 0 });

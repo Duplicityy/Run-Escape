@@ -11,7 +11,8 @@ export type Loadout = {
 
 // The maps a player has unlocked, and has endless and hard mode for, which
 // rooms go by unless the relay takes anyone (MULTIPLAYER_ANY_MAP)
-export type Unlocks = { maps: string[]; endless: string[]; hard: string[] };
+// A relay from before 0.23.0 sends no hard
+export type Unlocks = { maps: string[]; endless: string[]; hard?: string[] };
 
 export type MemberView = {
     id: string;
@@ -92,7 +93,8 @@ export function isGameStart(value: unknown, maxParty: number): value is GameStar
                 typeof hero.name === "string" &&
                 hero.name.length <= 64 &&
                 typeof hero.characterId === "string",
-        )
+        ) &&
+        new Set(game.heroes.map((hero) => hero.id)).size === game.heroes.length
     );
 }
 

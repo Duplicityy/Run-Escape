@@ -361,7 +361,9 @@
     transform: translateX(-50%);
     padding: 6px 16px;
     color: var(--ui-yellow);
-    white-space: nowrap;
+    /* As wide as its line, and wrapping on a phone narrower than it */
+    width: max-content;
+    max-width: calc(100% - 32px);
     text-align: center;
 }
 

@@ -120,8 +120,8 @@ Docker, leave `HOST` alone inside the container and publish the port on the host
 from its private network.
 
 The relay takes 800 connections in all, so give it room with `LimitNOFILE` if you raise that. A
-connection in no room that's done nothing for 10 minutes is closed, as is a room left alone for
-half an hour.
+connection in no room that's done nothing but ping for 10 minutes is closed (browsing the list
+counts as doing something: a player waiting for a room), as is a room left alone for half an hour.
 
 Headers from anyone else are ignored, so they can't be made up to get round the limits. Behind a
 proxy with `PROXY` unset, the relay says so once. `TRUSTED_PROXIES` (`"10.1.2.3,10.9.0.0/16"`)
@@ -136,11 +136,11 @@ Its limits, at the top of `server/coop-relay.mjs`:
 | What                          | Limit                                                                                                 |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Rooms on the relay            | 500, or `MULTIPLAYER_MAX_ROOMS`; past that, making one says they're all taken (and the menu shows it) |
-| Connections from one address  | 16 (a household or LAN party behind one address), and 64 from one IPv6 /48                            |
+| Connections from one address  | 16 (a household or LAN party behind one address), and 128 from one IPv6 /48                           |
 | Rooms hosted from one address | 4, and 16 from one IPv6 /48                                                                           |
 | Rooms made from one address   | 10 a minute                                                                                           |
 | Rooms joined from one address | 12 a minute (joining and leaving are each a room update for everyone in it)                           |
-| Wrong room codes              | 20 a minute from one address or IPv6 /48, then it has to wait                                         |
+| Wrong room codes              | 20 a minute from one address, and 80 from its IPv6 /48, then it has to wait                           |
 | A room with nothing happening | closed after 30 minutes (pings, looking at the list, and players' own updates and names don't count)  |
 | A room hearing how it is      | at most once each 250 ms, with the latest, however often it changes                                   |
 | What a host sends its room    | 64 KB/s (a run's start and frames), saving up to 256 KB; a host past it is dropped                    |
@@ -152,8 +152,9 @@ Its limits, at the top of `server/coop-relay.mjs`:
 | Waiting to go out to one      | 1 MB: a connection that stops reading is dropped                                                      |
 
 An IPv6 address counts by its /64, which is what one home or server gets, and its /48 has looser
-limits of its own, as one person can easily have all of a /48's /64s. A kicked player can't rejoin
-that room from the same address, or from anywhere in the same IPv6 /48. A room update carries
+limits of its own: one person can easily have all of a /48's /64s, but a mobile provider can put
+many homes in one, so nothing is refused for a /48 that one of its homes alone would get. A kicked
+player can't rejoin that room from the same address (their /64). A room update carries
 everyone's loadout to everyone, so the relay encodes it once and sends it at most each 250 ms
 however fast the room changes. The host's frames, nearly all of what comes through, go on as they
 came without the depth check: the relay never encodes them again, which is what a deep message
@@ -532,7 +533,8 @@ scripts/dev/render-stats.ts lumbridge    what a map costs to draw, without a bro
                                          counts what spots draw, --bake is memory per map's actors)
 ```
 
-Tests: `npm test`.
+Tests: `npm test`. `.github/workflows/check.yml` runs them with the type check on every pull
+request (without the game's cache, so `generator.test.ts` skips its long map check there).
 
 URL flags: `?room=ABCDE` joins a co-op room (the invite link), `?autostart=wizard` starts a run right away, `?stress=300` adds 300 goblins, `?viewer=1`
 opens the original map viewer (loaded only then), `?bgtick` (dev only) keeps the game running in a
@@ -552,7 +554,7 @@ checks its shape, so whether a player can do it now is the sim's to check: a mod
 send anything (a downed player can't choose, reroll or skip, as `isChoosing` says). Nothing
 waits on a slow guest; they see the run a little behind, and catch up at 8 ms a frame at most.
 A decision (a level up, a casket, a random event) is answered once: `CoopRun.act` drops a second
-answer to the same one until the host's frame moves it on, or 3 seconds pass, so a double click
+answer to the same one until the host's frame moves it on, or 10 seconds pass, so a double click
 can't land on the next decision unseen. An action the host turns away counts as an answer too, so
 the client checks what the sim would refuse before sending it (a reroll with none left, or
 during a hilt choice), or a refused action would hold up the real one.
@@ -644,7 +646,8 @@ use is `revive` (the Prayer cape): `rollCasketItem` only gives it a weight in a 
 "take" grants it at once through `gainRevive` rather than stashing it, and the old man's offer
 carries it as an `EventOption` of kind `revive`. Each adds to `Hero.extraRevives`. The immunity holds
 `player.invulnerable` every tick, the way the sled does, and `nearestHero` and `useSpawnHero`
-skip an immune hero while anyone else is up. The reviver's emote (`REVIVE_SEQ`) is baked with
+skip an immune hero while anyone else is up (pickups go by `nearestUpHero`, which doesn't: a
+revived player can still eat). The reviver's emote (`REVIVE_SEQ`) is baked with
 every player look through `getPlayerAttackSeqs`, and its graphic (`REVIVE_SPOTANIM`) with the
 base bake.
 Bosses come as copies (`bossCopies` there), spawned together by `Sim.spawnBosses`: each by a

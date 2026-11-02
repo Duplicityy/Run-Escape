@@ -102,8 +102,9 @@ const MAX_ROOMS = 500;
 const MAX_CONNECTIONS_PER_ADDRESS = 16;
 const MAX_ROOMS_PER_ADDRESS = 4;
 // And on each IPv6 /48 (see networkKey), which one person can have 65,536
-// /64s of. Looser, as some providers put many homes in one.
-const MAX_CONNECTIONS_PER_NETWORK = 64;
+// /64s of. Looser, as some providers (mobile ones above all) put many homes
+// in one: enough that a busy evening on one of them isn't turned away.
+const MAX_CONNECTIONS_PER_NETWORK = 128;
 const MAX_ROOMS_PER_NETWORK = 16;
 const MAX_CREATES_PER_MINUTE = 10;
 // Joining's a room update for everyone in it, and so's leaving: enough to look
@@ -111,16 +112,20 @@ const MAX_CREATES_PER_MINUTE = 10;
 const MAX_JOINS_PER_MINUTE = 12;
 // Connections in all, below a server's usual limit of 1,024 open files
 const MAX_CONNECTIONS = 800;
-// A connection that's in no room and has done nothing for this long is closed
-// (a room left alone goes by IDLE_MS)
+// A connection that's in no room and has done nothing but ping for this long
+// is closed (a room left alone goes by IDLE_MS)
 const IDLE_CONNECTION_MS = 10 * 60_000;
 // Room codes that don't exist, tried from one address, before it has to wait
 const MAX_WRONG_CODES_PER_MINUTE = 20;
+// And from its whole IPv6 /48, so that a guesser moving along their /64s is
+// caught, without one of them shutting their neighbours out
+const MAX_WRONG_CODES_PER_NETWORK_PER_MINUTE = 80;
 // A room nobody's done anything in for this long is closed
 const IDLE_MS = 30 * 60_000;
-// Messages that don't count as doing anything, for IDLE_MS and
-// IDLE_CONNECTION_MS: pings, browsing, and a player's own updates and name,
-// which could otherwise be sent now and then to hold a room for ever
+// Messages that don't count as doing anything in a room, for IDLE_MS: pings,
+// browsing, and a player's own updates and name, which could otherwise be
+// sent now and then to hold a room for ever. A connection in no room only
+// idles on pings (IDLE_CONNECTION_MS): browsing the list is waiting for a room.
 const IDLE_MESSAGES = new Set(["ping", "list", "me", "rename"]);
 // Bigger than any real loadout (the shop's bonuses, unlocked items and
 // Armoury); a bigger one is dropped rather than sent round the room
@@ -502,8 +507,8 @@ export function addressKey(address) {
 }
 
 // The network an address (from addressKey) is on: itself, or an IPv6 /48,
-// which one person can easily have 65,536 /64s of. Guessing codes and kicks go
-// by it, and it has limits of its own on top of each address's.
+// which one person can easily have 65,536 /64s of. It has limits of its own on
+// top of each address's, looser ones: a provider can put many homes in one.
 export function networkKey(address) {
     return address.endsWith("::/64") ? `${address.split(":").slice(0, 3).join(":")}::/48` : address;
 }
@@ -600,6 +605,7 @@ export function createRelay(limits = {}) {
         roomsPerNetwork = MAX_ROOMS_PER_NETWORK,
         createsPerMinute = MAX_CREATES_PER_MINUTE,
         wrongCodesPerMinute = MAX_WRONG_CODES_PER_MINUTE,
+        wrongCodesPerNetworkPerMinute = MAX_WRONG_CODES_PER_NETWORK_PER_MINUTE,
         joinsPerMinute = MAX_JOINS_PER_MINUTE,
         maxConnections = MAX_CONNECTIONS,
         bytesPerSecond = MAX_BYTES_PER_SECOND,
@@ -643,6 +649,7 @@ export function createRelay(limits = {}) {
     const connectionsFromNetwork = new Map();
     const createdFrom = new Map();
     const wrongCodesFrom = new Map();
+    const wrongCodesFromNetwork = new Map();
     const joinedFrom = new Map();
     let nextRoomOrder = 1;
     // The open rooms as the list shows them, worked out again only after a
@@ -824,6 +831,8 @@ export function createRelay(limits = {}) {
     // Tells everyone in a room how it is now, if it's been a while, and
     // otherwise once when it has, with the latest (see ROOM_UPDATE_MS)
     function roomChanged(room) {
+        // The list's stale as soon as the room is, sent round now or later
+        openRooms = undefined;
         if (room.updateTimer) {
             room.updateWaiting = true;
             return;
@@ -959,12 +968,15 @@ export function createRelay(limits = {}) {
         return under;
     }
 
-    // Whether this network has tried too many codes that don't exist lately
-    function guessing(network) {
+    // Whether this address, or its whole network, has tried too many codes
+    // that don't exist lately
+    function guessing(client) {
         const now = Date.now();
+        const lately = (times, key) =>
+            (times.get(key) ?? []).filter((t) => now - t < 60_000).length;
         return (
-            (wrongCodesFrom.get(network) ?? []).filter((t) => now - t < 60_000).length >=
-            wrongCodesPerMinute
+            lately(wrongCodesFrom, client.address) >= wrongCodesPerMinute ||
+            lately(wrongCodesFromNetwork, client.network) >= wrongCodesPerNetworkPerMinute
         );
     }
 
@@ -1059,6 +1071,9 @@ export function createRelay(limits = {}) {
     // payload: the message's bytes as they came, for passing on
     function handle(client, message, payload) {
         const room = client.room;
+        if (message.t !== "ping") {
+            client.lastActive = Date.now();
+        }
         if (!IDLE_MESSAGES.has(message.t)) {
             client.lastActive = Date.now();
             if (room) {
@@ -1127,8 +1142,9 @@ export function createRelay(limits = {}) {
                     members: [client],
                     order: nextRoomOrder++,
                     lastActive: Date.now(),
-                    // The networks of players the host's kicked, so they
-                    // can't come back from another /64 of theirs either
+                    // The addresses (an IPv6 one by its /64) of players the
+                    // host's kicked: not their whole /48, which other homes
+                    // can share
                     kicked: new Set(),
                     // What the host can send through it now (see
                     // MAX_HOST_BYTES_PER_SECOND), as of when
@@ -1143,7 +1159,7 @@ export function createRelay(limits = {}) {
                 return;
             }
             case "join": {
-                if (guessing(client.network)) {
+                if (guessing(client)) {
                     error("That's a lot of wrong codes. Wait a minute and try again.");
                     return;
                 }
@@ -1151,11 +1167,12 @@ export function createRelay(limits = {}) {
                     typeof message.code === "string" ? message.code.toUpperCase().slice(0, 16) : "";
                 const target = rooms.get(code);
                 if (!target) {
-                    underLimit(wrongCodesFrom, client.network, Infinity);
+                    underLimit(wrongCodesFrom, client.address, Infinity);
+                    underLimit(wrongCodesFromNetwork, client.network, Infinity);
                     error(`There's no room ${code || "with that code"}.`);
                     return;
                 }
-                if (target.kicked.has(client.network)) {
+                if (target.kicked.has(client.address)) {
                     error("The host has removed you from that room.");
                     return;
                 }
@@ -1261,7 +1278,7 @@ export function createRelay(limits = {}) {
                 }
                 const kicked = room.members.find((m) => m.id === message.id && m !== client);
                 if (kicked) {
-                    room.kicked.add(kicked.network);
+                    room.kicked.add(kicked.address);
                     leaveRoom(kicked, "kicked");
                 }
                 return;
@@ -1443,7 +1460,7 @@ export function createRelay(limits = {}) {
                 client.connection.close(1001);
             }
         }
-        for (const times of [createdFrom, wrongCodesFrom, joinedFrom]) {
+        for (const times of [createdFrom, wrongCodesFrom, wrongCodesFromNetwork, joinedFrom]) {
             for (const [address, at] of times) {
                 if (at.every((t) => now - t >= 60_000)) {
                     times.delete(address);
