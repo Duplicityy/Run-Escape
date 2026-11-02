@@ -17,6 +17,8 @@ the version in the corner).
   asks you to reload instead.
 - A save that can't be read is kept rather than lost. The game tells you, and you can export it
   from Settings.
+- Killing the final boss wins the run, even if a hit lands in the same instant: it no longer counts
+  as a death or uses up a ring of life.
 
 ## 0.22.1 - 2026-11-02
 
