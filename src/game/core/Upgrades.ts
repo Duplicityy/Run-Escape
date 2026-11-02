@@ -10,7 +10,12 @@ import {
 import { RARITIES, Rarity, atLeast, rollRarity } from "../content/rarity";
 import { CombatStyle, PassiveDef } from "../content/types";
 import { isAvailable } from "../content/unlocks";
-import { WeaponStatLine, weaponStatChanges, weaponStats } from "../content/weaponStats";
+import {
+    WeaponStatLine,
+    formatWeaponBonus,
+    weaponStatChanges,
+    weaponStats,
+} from "../content/weaponStats";
 import { WEAPONS, getWeapon } from "../content/weapons";
 import { Rng } from "./Rng";
 import { PassiveState, WeaponState } from "./entities";
@@ -24,7 +29,15 @@ export const MAX_PASSIVES = 4;
 // which sets how big it is.
 export type UpgradeChoice =
     | { kind: "newWeapon"; weaponId: string; quality: Rarity }
-    | { kind: "weaponLevel"; weaponId: string; level: number; quality: Rarity }
+    | {
+          kind: "weaponLevel";
+          weaponId: string;
+          level: number;
+          quality: Rarity;
+          // Past the last level: the weapon's damage bonus before this pick,
+          // for the card's before and after
+          bonus?: number;
+      }
     | { kind: "evolve"; weaponId: string; into: string }
     // The godsword's blade becomes the weapon of the hilt picked (see
     // WeaponDef.hilts), at the same level
@@ -120,6 +133,24 @@ export function getOverlevelDamage(quality: Rarity): number {
     return OVERLEVEL_DAMAGE * RARITIES[quality].power;
 }
 
+// A weapon's bonus after a level past the last, of this quality: it
+// multiplies everything the weapon had, so a 15% pick takes +477% to +564%,
+// not +492%
+export function overlevelBonus(bonus: number, quality: Rarity): number {
+    return (1 + bonus) * (1 + getOverlevelDamage(quality)) - 1;
+}
+
+// A weapon's damage bonus on a card for a level past the last, as the HUD's
+// tooltip shows it: "Damage bonus +477% → +564%"
+function bonusStat(value: number, before: number): WeaponStatLine {
+    return {
+        label: "Damage bonus",
+        value: formatWeaponBonus(value),
+        from: formatWeaponBonus(before),
+        better: value >= before,
+    };
+}
+
 // A passive's stat on a level up card, like a weapon's: "Damage +5%", or
 // with what it was before, "Damage +25% → +30%"
 function passiveStat(passive: PassiveDef, value: number, before?: number): WeaponStatLine {
@@ -157,6 +188,13 @@ export function describeChoice(choice: UpgradeChoice): ChoiceDescription {
                     text: `This weapon does ${damage}% more damage.`,
                     iconObjId: top.objId ?? weapon.iconObjId,
                     quality: choice.quality,
+                    // What it adds up to once taken, since "15% more" at
+                    // +477% reads like +492% but multiplies to +564%
+                    ...(choice.bonus !== undefined && {
+                        stats: [
+                            bonusStat(overlevelBonus(choice.bonus, choice.quality), choice.bonus),
+                        ],
+                    }),
                 };
             }
             const level = weapon.levels[choice.level - 1];
@@ -300,6 +338,7 @@ export function rollChoices(
                     weaponId: weapon.def.id,
                     level: weapon.level + 1,
                     quality: rollRarity(random, luck),
+                    ...(weapon.level >= weapon.def.levels.length && { bonus: weapon.bonus }),
                 }),
                 weight: WEAPON_LEVEL_WEIGHT,
             });

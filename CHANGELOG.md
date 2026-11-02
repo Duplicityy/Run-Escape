@@ -24,6 +24,8 @@ the version in the corner).
 - Co-op bosses come as a pair, or one for each player on hard mode, by trippy22. Between them
   they have one boss's hitpoints and loot, so a party fights more bosses rather than bigger ones.
 - The Bow of Faerdhinen counts as a crystal bow for the Crystal armour set's bonus.
+- A weapon level past its last (in endless runs) shows the weapon's damage bonus before and after
+  on its card. Each pick multiplies what the weapon has, so a 15% pick at +477% gives +564%.
 
 ### Fixed
 

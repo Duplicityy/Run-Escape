@@ -30,7 +30,7 @@ import { formatStats } from "../content/stats";
 import { TROPHY_BY_ID } from "../content/trophies";
 import { Stats, emptyStats } from "../content/types";
 import { LOCKABLE_ITEMS, describeUnlockTask, isAvailable } from "../content/unlocks";
-import { formatWeaponStat, weaponStats } from "../content/weaponStats";
+import { formatWeaponBonus, formatWeaponStat, weaponStats } from "../content/weaponStats";
 import { getWeapon } from "../content/weapons";
 import { ChestAction } from "../core/Loot";
 import { Hero, HeroOptions, Sim, TICKS_PER_SECOND } from "../core/Sim";
@@ -2042,7 +2042,7 @@ export class GameClient implements GameFrameHandler {
                     level: w.level,
                     maxLevel: w.def.levels.length,
                     iconObjId: level.objId ?? w.def.iconObjId,
-                    detail: w.bonus > 0 ? `+${Math.round(w.bonus * 100)}% damage` : "",
+                    detail: w.bonus > 0 ? `${formatWeaponBonus(w.bonus)} damage` : "",
                     stats: weaponStats(w.def, level).map(formatWeaponStat),
                     evolution: getEvolutionView(sim, w),
                     rarityColor: RARITIES[w.def.rarity].color,
