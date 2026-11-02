@@ -35,6 +35,7 @@ import { MapReward, describeUnlockTask, getMapRewards } from "../content/unlocks
 import { WeaponStatLine } from "../content/weaponStats";
 import { WEAPONS, getWeapon } from "../content/weapons";
 import {
+    NewerSaveError,
     SaveData,
     getNextUpgradeCost,
     importSave,
@@ -55,6 +56,7 @@ import { ItemIcon } from "./ItemIcon";
 import { NoticePanel } from "./NoticePanel";
 import { QuestScreen } from "./QuestScreen";
 import { RerollButton } from "./RerollButton";
+import { SaveBlockPanel, UnreadableSavePanel } from "./SavePanels";
 import { SkipButton } from "./SkipButton";
 import { RotateNotice, TouchControls, enterFullscreen } from "./TouchControls";
 import { GAME_VERSION } from "./changelog";
@@ -140,6 +142,9 @@ export function GameUi({ store, client }: Props): JSX.Element {
             onClickCapture={onClickCapture}
         >
             {screen}
+            {ui.saveBlock && !ui.saveBlockClosed && (
+                <SaveBlockPanel block={ui.saveBlock} client={client} />
+            )}
             {isCoarsePointer && <RotateNotice />}
         </div>
     );
@@ -349,9 +354,13 @@ function SaveSetting({ ui, client }: ScreenProps): JSX.Element {
         }
         let save: SaveData;
         try {
-            save = importSave(await file.text());
-        } catch {
-            window.alert(`${file.name} isn't a Run Escape save.`);
+            save = importSave(await file.text(), GAME_VERSION);
+        } catch (e) {
+            window.alert(
+                e instanceof NewerSaveError
+                    ? `${file.name} is from a newer version of Run Escape. Reload to get it, then import.`
+                    : `${file.name} isn't a Run Escape save.`,
+            );
             return;
         }
         const describe = (s: SaveData) =>
@@ -398,6 +407,45 @@ function SaveSetting({ ui, client }: ScreenProps): JSX.Element {
     );
 }
 
+// Saves that couldn't be read, kept as they were
+function UnreadableSaveSettings({ ui, client }: ScreenProps): JSX.Element {
+    return (
+        <>
+            {ui.unreadableSaves.map(({ key, time }) => {
+                const when = new Date(time).toLocaleString();
+                return (
+                    <Setting
+                        key={key}
+                        name="Unreadable save"
+                        text={`From ${when}. Export it to mend by hand or ask for help on the Discord.`}
+                    >
+                        <button
+                            className="ui-button ui-button-small"
+                            onClick={(e) => {
+                                client.exportUnreadableSave(key);
+                                e.currentTarget.blur();
+                            }}
+                        >
+                            Export
+                        </button>
+                        <button
+                            className="ui-button ui-button-small"
+                            onClick={(e) => {
+                                e.currentTarget.blur();
+                                if (window.confirm(`Delete the save from ${when} for good?`)) {
+                                    client.deleteUnreadableSave(key);
+                                }
+                            }}
+                        >
+                            Delete
+                        </button>
+                    </Setting>
+                );
+            })}
+        </>
+    );
+}
+
 // Behind the title screen's Settings button
 function SettingsPanel({
     ui,
@@ -431,6 +479,7 @@ function SettingsPanel({
                 <section className="ui-settings-section">
                     <h3>Save</h3>
                     <SaveSetting ui={ui} client={client} />
+                    <UnreadableSaveSettings ui={ui} client={client} />
                 </section>
             </div>
             <div className="ui-row">
@@ -472,6 +521,9 @@ function TitleStat({ name, value }: { name: string; value: string | number }): J
 
 function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
     const save = ui.save;
+    // The panel saying the game isn't saving is over everything, so the title's
+    // own wait till it's gone
+    const savePanel = ui.saveBlock !== undefined && !ui.saveBlockClosed;
     const [changelogOpen, setChangelogOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     // The notice, until it's closed (once for each new one)
@@ -495,7 +547,13 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
     }, [notice]);
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
-            if (notice) {
+            if (savePanel) {
+                return;
+            } else if (ui.unreadableSave) {
+                if (e.code === "Escape") {
+                    client.closeUnreadableNotice();
+                }
+            } else if (notice) {
                 if (e.code === "Enter" || e.code === "Space" || e.code === "Escape") {
                     closeNotice();
                 }
@@ -514,7 +572,7 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [client, changelogOpen, settingsOpen, notice, closeNotice]);
+    }, [client, changelogOpen, settingsOpen, notice, closeNotice, ui.unreadableSave, savePanel]);
     if (changelogOpen) {
         return (
             <div className="ui-fill ui-center">
@@ -596,6 +654,14 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
                 </div>
             </div>
             <div className="ui-title-utils">
+                {ui.saveBlock && ui.saveBlockClosed && (
+                    <button
+                        className="ui-version ui-save-off"
+                        onClick={() => client.showSaveBlock()}
+                    >
+                        Not saving
+                    </button>
+                )}
                 {import.meta.env.DEV && <MapGeneratorButton client={client} />}
                 <button className="ui-version" onClick={() => setChangelogOpen(true)}>
                     v{GAME_VERSION} · What's new
@@ -611,7 +677,11 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
                 <DiscordLink />
                 <GitHubLink />
             </div>
-            {notice && <NoticePanel notice={notice} onClose={closeNotice} />}
+            {savePanel ? null : ui.unreadableSave ? (
+                <UnreadableSavePanel keptAs={ui.unreadableSave} client={client} />
+            ) : (
+                notice && <NoticePanel notice={notice} onClose={closeNotice} />
+            )}
         </div>
     );
 }

@@ -3,7 +3,7 @@ import { GearSlot } from "../content/types";
 import { WeaponStatLine } from "../content/weaponStats";
 import { ChestAction } from "../core/Loot";
 import { RunResult } from "../core/Sim";
-import { SaveData } from "../core/save";
+import { SaveData, UnreadableSave } from "../core/save";
 import { DisplaySettings } from "./DisplaySettings";
 import { AudioSettings } from "./GameAudio";
 import { CoopView, OFFLINE } from "./coop/CoopLobby";
@@ -229,11 +229,22 @@ export type TeammateView = {
 
 export type Toast = { id: number; text: string; until: number };
 
+// Why nothing's being saved: the game's open in another tab, or the save's
+// from a newer version of it (which this one would undo)
+export type SaveBlock = { kind: "otherTab" } | { kind: "newerGame"; gameVersion?: string };
+
 export type UiSnapshot = {
     screen: Screen;
     loadingText: string;
     loadingProgress: number;
     save: SaveData;
+    // Set while nothing's being saved, and closed to play on without saving
+    saveBlock?: SaveBlock;
+    saveBlockClosed: boolean;
+    // The save couldn't be read when it loaded: where it's kept, for the notice
+    unreadableSave?: string;
+    // Saves that couldn't be read, kept to be exported
+    unreadableSaves: UnreadableSave[];
     characterId: string;
     // The map the next run is on, and whether it's endless and on hard mode
     // (once the map's been beaten)
@@ -294,6 +305,8 @@ export class GameStore {
             loadingText: "Loading Lumbridge",
             loadingProgress: 0,
             save,
+            saveBlockClosed: false,
+            unreadableSaves: [],
             characterId: save.unlockedCharacters[0] ?? "warrior",
             mapId: "lumbridge",
             endless: false,

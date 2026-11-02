@@ -297,13 +297,15 @@ src/game/
     Loot.ts           what's in a casket, the inventory
     save.ts           versioned save with migrations, shop, unlocks (maps, and the adventurers
                       and items earned by tasks), the gear found and the Armoury's upgrades,
-                      quests (and the kills and caskets they count)
+                      quests (and the kills and caskets they count), and LocalSaveStore (the
+                      save in localStorage: see Saves)
   scaperune/ maps that aren't in OSRS: a seeded generator, recipes, prefabs cut from the real world.
             Dev-only but for the recipes in maps/shippedMaps.ts, with a temporary Map generator
             button on the dev server's title screen. Its CLAUDE.md is the guide to making one
   client/   GameClient (run flow, camera, input), GameView (3D actors + 2D overlay),
             BossFightView (a phased boss's ground marks, bullets and entrance),
-            GameAssets (what gets baked), GameStore (state for the React UI)
+            GameAssets (what gets baked), GameStore (state for the React UI), SaveLock (one
+            tab saves at a time)
     coop/     CoopLobby (the relay connection and the room), CoopRun (a run's lockstep, host or
               guest), protocol (the messages)
   render/   GameWebGLRenderer (the map viewer's renderer with the game's passes), CameraRig
@@ -549,7 +551,8 @@ longest), worked out once after each change rather than for every request; the m
 page every 5 seconds, and again when joining fails (a room that filled up or started meanwhile).
 
 To try it locally, `npm start` and open the game in two windows (one private, for a
-save of its own), make a room in one and join it from the other.
+save of its own), make a room in one and join it from the other. A second ordinary window says the
+game's open in another tab, and Play without saving lets it play (see Saves).
 
 ### Touch screens
 
@@ -577,6 +580,34 @@ Everything touch only hangs off `pointer: coarse`, so a mouse and keyboard never
 
 To test it, Playwright's `isMobile` and `hasTouch` turn on `pointer: coarse`, and CDP's
 `Input.dispatchTouchEvent` sends real multi-touch. Mouse clicks don't test any of this.
+
+### Saves
+
+The save is in localStorage under `rune-survivors-save` (`LocalSaveStore` in `core/save.ts`). A
+tab loads it once and writes the whole of it back after each run or purchase, so these keep one
+from being lost:
+
+- **One tab at a time.** `client/SaveLock.ts` holds the Web Lock `run-escape-save` for as long as
+  the tab's open. Another tab doesn't save, and says the game's open elsewhere: Play here takes the
+  lock, and the tab that had it stops saving. When the tab with it closes, the next one gets it.
+  A tab reads the save again whenever it gets the lock, so it carries on from where the other left
+  off. Never rename the lock, or an old tab and a new one won't see each other. Without Web Locks
+  (Safari before 15.4, or plain http other than localhost) every tab saves, as before.
+- **A newer game's save isn't written over.** Every write marks the save with `gameVersion`
+  (`package.json`'s). One from a newer version, or with a `version` above `SAVE_VERSION`, is played
+  but never written, and the player's told to reload. `migrateSave` keeps only the ids it knows,
+  so an older game would otherwise drop new maps, upgrades and items. `SAVE_VERSION` alone can't
+  tell, as new ids don't raise it. This catches a tab left open over a deploy, and an older branch
+  on the dev server. Import turns one away too.
+- **One that won't load is kept.** A save that won't parse goes to
+  `rune-survivors-save-unreadable-<Date.now()>` (the last two are kept) before a fresh one takes
+  its place. The title screen says so, with Export, and Settings lists them to export or delete.
+
+Play without saving closes the panel, and a Not saving button on the title screen opens it again.
+What's bought or earned meanwhile lasts until the tab gets the save back or reloads.
+
+The desktop app has one window and plays the newest game it has, so neither tabs nor an older
+game come up there; an export from a newer version is turned away on import, as anywhere.
 
 ### Notice
 
