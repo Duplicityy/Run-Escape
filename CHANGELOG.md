@@ -23,6 +23,7 @@ the version in the corner).
 - Co-op bosses come as a pair, or one for each player on hard mode, by trippy22. Between them
   they have one boss's hitpoints and loot, so a party fights more bosses rather than bigger ones.
 - Desktop: the game can only reach its own files and the co-op server, nothing else.
+- The Bow of Faerdhinen counts as a crystal bow for the Crystal armour set's bonus.
 
 ### Fixed
 

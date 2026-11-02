@@ -3579,6 +3579,11 @@ describe("sets", () => {
         crystal.metaStats.cooldown = 1;
         crystal.updateStats();
         expect(ticks()).toBe(Math.max(5, Math.round(bow.cooldown * TICKS_PER_SECOND * 0.4)));
+        // The Bow of Faerdhinen is a crystal bow too
+        crystal.addWeapon("bow_of_faerdhinen");
+        expect(crystal["getEffectiveLevel"](crystal.weapons[1]).damage).toBeCloseTo(
+            getWeapon("bow_of_faerdhinen").levels[0].damage * 1.2,
+        );
         // Virtus: auras cover more ground
         const aura = armed("ice_burst", "wizard");
         aura.equip("virtus_mask");

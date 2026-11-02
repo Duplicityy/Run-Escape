@@ -28,7 +28,7 @@ export const SETS: SetDef[] = [
         needed: 2,
         bonus: "crystal bows and staves hit 20% harder and are 15% faster",
         weapons: {
-            ids: ["crystal_bow", "crystal_staff", "corrupted_bow"],
+            ids: ["crystal_bow", "corrupted_bow", "bow_of_faerdhinen", "crystal_staff"],
             damage: 0.2,
             cooldown: 0.15,
         },
