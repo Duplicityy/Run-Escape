@@ -72,6 +72,15 @@ and open http://localhost:5173.
 over from another checkout. The first load copies the 227 MB cache into
 the browser's cache storage, so later loads are quick.
 
+For a manual download, use the cache in the table above and extract the contents of the
+archive's `cache/` directory into `caches/osrs-241_2026-09-30/`, alongside `info.json` and
+`keys.json`. Keep `caches/caches.json` from the downloader. Unused index files, including
+`main_file_cache.idx16` and `main_file_cache.idx23`, are intentionally absent in this archive;
+the loader skips their empty metadata entries. Do not create placeholder files.
+Run `npx tsx scripts/cache/validate-decoders.ts` from this directory to check the cache.
+No texture export or slim-cache generation is needed for local development. Keep the game pane
+visible during loading: a hidden editor browser can suspend rendering at zero percent.
+
 ### Controls
 
 **WASD** or the arrow keys to move; weapons fire on their own. **1-4** use your utility items (and

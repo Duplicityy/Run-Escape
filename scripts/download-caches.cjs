@@ -36,6 +36,20 @@ function getGameCacheName() {
     return /GAME_CACHE_NAME = "([^"]+)"/.exec(source)[1];
 }
 
+async function fetchArchive(url) {
+    const timeout = Number(process.env.CACHE_DOWNLOAD_TIMEOUT_MS ?? 30 * 60_000);
+    if (!Number.isSafeInteger(timeout) || timeout <= 0 || timeout > 2_147_483_647) {
+        throw new Error("CACHE_DOWNLOAD_TIMEOUT_MS must be a positive integer up to 2147483647");
+    }
+    const response = await fetch(url, { signal: AbortSignal.timeout(timeout) });
+    if (!response.ok) {
+        throw new Error(
+            `Archive request failed: ${response.status} ${response.statusText} (${url})`,
+        );
+    }
+    return response;
+}
+
 // The newest count caches, or with onlyName just the one that would be put in
 // caches/<onlyName>/
 async function downloadCaches(count, onlyName) {
@@ -44,7 +58,7 @@ async function downloadCaches(count, onlyName) {
         fs.mkdirSync("caches/", { recursive: true });
     }
 
-    const resp = await fetch("https://archive.openrs2.org/caches.json");
+    const resp = await fetchArchive("https://archive.openrs2.org/caches.json");
     const json = await resp.json();
 
     const caches = json.filter(
@@ -168,14 +182,14 @@ async function downloadCache(cache, cacheDir) {
 }
 
 async function fetchCacheFiles(cache) {
-    const resp = await fetch(
+    const resp = await fetchArchive(
         `https://archive.openrs2.org/caches/${cache.scope}/${cache.id}/disk.zip`,
     );
     return resp.arrayBuffer();
 }
 
 async function fetchXteas(cache) {
-    const resp = await fetch(
+    const resp = await fetchArchive(
         `https://archive.openrs2.org/caches/${cache.scope}/${cache.id}/keys.json`,
     );
     const keys = await resp.json();
@@ -327,7 +341,10 @@ if (process.argv.length > 2) {
 downloadCaches(downloadCount, onlyName).then(
     () => process.exit(0),
     (e) => {
-        console.error(e.message);
+        console.error("Cache download failed:", e.message);
+        console.error(
+            "Retry when the archive is reachable; adjust CACHE_DOWNLOAD_TIMEOUT_MS for slow connections.",
+        );
         process.exit(1);
     },
 );
