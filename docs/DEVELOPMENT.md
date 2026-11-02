@@ -521,10 +521,16 @@ them), and the host can only pick what everyone in the room has, so nobody skips
 without it is told "You need Barrows unlocked to join this room", and the open list shows that room
 as locked to them. Each player's game sends the maps it has (`unlocks`), checked by the relay on
 joining, on the host changing the map, endless or hard mode, and at the start. Whether the run's on
-hard mode goes out in `GameStart`, like endless, so every player's copy plays the same. `MULTIPLAYER_ANY_MAP=on` (or `--any-map`) lets anyone
-into any room instead, and a win then opens that map for a player who hadn't got there. With no
-accounts, a player's maps are their game's word: this keeps fair players fair rather than stopping
-a cheat.
+hard mode goes out in `GameStart`, like endless, so every player's copy plays the same.
+`MULTIPLAYER_ANY_MAP=on` (or `--any-map`) lets anyone into any room instead, and a win then opens
+that map for a player who hadn't got there. With no accounts, a player's maps are their game's word:
+this keeps fair players fair rather than stopping a cheat.
+
+A room's map, endless and hard mode are the relay's: the host's game sends `settings` and shows
+what comes back in the room update, never a pick of its own, so a refused one changes nothing. A
+host picking a map keeps endless and hard mode on only where everyone has them for it
+(`GameClient.roomHas`), which is what the relay would refuse otherwise. The title screen's own
+pick (`mapId`, `endless`, `hard` in the store) is only for solo runs and for making a room.
 
 A game that's given a map or adventurer it hasn't got (from a newer or made-up game)
 leaves the room rather than playing a run it can't, and other players' shop bonuses are kept within

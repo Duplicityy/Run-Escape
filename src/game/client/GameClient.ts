@@ -84,7 +84,7 @@ import { getPlayerPose } from "./PlayerPose";
 import { getBossKillViews, getDamageViews } from "./RunStatsViews";
 import { CoopLobby, makeLoadout } from "./coop/CoopLobby";
 import { CoopRun, GUEST_BUFFER_FRAMES } from "./coop/CoopRun";
-import { GameStart, GoneReason, Loadout, Unlocks, isGameStart } from "./coop/protocol";
+import { GameStart, GoneReason, Loadout, RoomView, Unlocks, isGameStart } from "./coop/protocol";
 import { saveFile } from "./saveFile";
 
 // 20ms: the OSRS client tick, also the unit of animation frame lengths
@@ -433,38 +433,82 @@ export class GameClient implements GameFrameHandler {
         this.coop.setMe({ characterId });
     }
 
+    // The map for the next run. Hosting a room, it's the room's map: the relay
+    // says it back in a room update, which the lobby shows, so nothing's
+    // changed here until it has. Endless and hard mode stay on where everyone
+    // has them for the new map, as the relay insists.
     selectMap(mapId: string): void {
-        if (isMapUnlocked(this.save, mapId)) {
-            const snapshot = this.store.getSnapshot();
-            const endless = snapshot.endless && isEndlessUnlocked(this.save, mapId);
-            const hard = snapshot.hard && isHardUnlocked(this.save, mapId);
-            this.store.set({ mapId, endless, hard });
-            if (this.coop.isHost) {
-                this.coop.setMap(mapId, endless, hard);
-            }
+        if (!isMapUnlocked(this.save, mapId)) {
+            return;
         }
+        const room = this.hostedRoom();
+        if (room) {
+            this.coop.setMap(
+                mapId,
+                room.endless && this.roomHas("endless", mapId),
+                room.hard && this.roomHas("hard", mapId),
+            );
+            return;
+        }
+        const snapshot = this.store.getSnapshot();
+        this.store.set({
+            mapId,
+            endless: snapshot.endless && isEndlessUnlocked(this.save, mapId),
+            hard: snapshot.hard && isHardUnlocked(this.save, mapId),
+        });
     }
 
-    // Endless runs, for a map that's been beaten
+    // Endless runs, for a map that's been beaten (the room's, hosting one)
     toggleEndless(): void {
-        const { mapId, endless, hard } = this.store.getSnapshot();
+        const room = this.hostedRoom();
+        if (room) {
+            if (room.endless || this.roomHas("endless", room.mapId)) {
+                this.coop.setMap(room.mapId, !room.endless, room.hard);
+            }
+            return;
+        }
+        const { mapId, endless } = this.store.getSnapshot();
         if (endless || isEndlessUnlocked(this.save, mapId)) {
             this.store.set({ endless: !endless });
-            if (this.coop.isHost) {
-                this.coop.setMap(mapId, !endless, hard);
-            }
         }
     }
 
-    // Hard mode, for a map that's been beaten
+    // Hard mode, for a map that's been beaten (the room's, hosting one)
     toggleHard(): void {
-        const { mapId, endless, hard } = this.store.getSnapshot();
+        const room = this.hostedRoom();
+        if (room) {
+            if (room.hard || this.roomHas("hard", room.mapId)) {
+                this.coop.setMap(room.mapId, room.endless, !room.hard);
+            }
+            return;
+        }
+        const { mapId, hard } = this.store.getSnapshot();
         if (hard || isHardUnlocked(this.save, mapId)) {
             this.store.set({ hard: !hard });
-            if (this.coop.isHost) {
-                this.coop.setMap(mapId, endless, !hard);
-            }
         }
+    }
+
+    // The room this player hosts, whose map and modes are the relay's to
+    // change
+    private hostedRoom(): RoomView | undefined {
+        return this.coop.isHost ? this.coop.room : undefined;
+    }
+
+    // Whether a map's endless or hard mode can be on in the room: this player
+    // has it, and so does everyone else (unless the relay takes anyone), as
+    // the relay checks before it takes a setting
+    private roomHas(mode: "endless" | "hard", mapId: string): boolean {
+        const mine =
+            mode === "endless"
+                ? isEndlessUnlocked(this.save, mapId)
+                : isHardUnlocked(this.save, mapId);
+        const { room, anyMap } = this.store.getSnapshot().coop;
+        return (
+            mine &&
+            (anyMap ||
+                !room ||
+                room.members.every((member) => member.unlocks?.[mode].includes(mapId) === true))
+        );
     }
 
     // ---- Co-op menus ----
