@@ -69,7 +69,15 @@ import {
 import { GameAudio } from "./GameAudio";
 import { GameInput } from "./GameInput";
 import { ChestCue, GameSounds, getGameSoundIds } from "./GameSounds";
-import { ChoiceView, GameStore, HudView, QuestTrackView, Screen, SlotView } from "./GameStore";
+import {
+    ChoiceView,
+    GameStore,
+    HudView,
+    QuestTrackView,
+    SaveBlock,
+    Screen,
+    SlotView,
+} from "./GameStore";
 import { GameView } from "./GameView";
 import {
     getBuffViews,
@@ -82,6 +90,7 @@ import { Minimap } from "./Minimap";
 import { Overlay, ScreenPoint } from "./Overlay";
 import { getPlayerPose } from "./PlayerPose";
 import { getBossKillViews, getDamageViews } from "./RunStatsViews";
+import { SaveLock } from "./SaveLock";
 import { CoopLobby, makeLoadout } from "./coop/CoopLobby";
 import { CoopRun, GUEST_BUFFER_FRAMES } from "./coop/CoopRun";
 import { GameStart, GoneReason, Loadout, Unlocks, isGameStart } from "./coop/protocol";
@@ -257,6 +266,7 @@ export class GameClient implements GameFrameHandler {
         overlayCanvas: HTMLCanvasElement,
         store: GameStore,
         saveStore: SaveStore,
+        saveLock: SaveLock,
         options: GameClientOptions,
     ): Promise<GameClient> {
         const workerPool = mapViewer.workerPool;
@@ -291,6 +301,7 @@ export class GameClient implements GameFrameHandler {
             overlayCanvas,
             store,
             saveStore,
+            saveLock,
             options,
         );
     }
@@ -305,6 +316,10 @@ export class GameClient implements GameFrameHandler {
     sim?: Sim;
     paused = false;
     save: SaveData;
+    // The save was written by a newer version of the game, so it's not saved
+    // over
+    private newerSave?: { gameVersion?: string };
+    private stopSaveLock?: () => void;
     // Co-op: the room and its relay, and the run being played with it
     readonly coop: CoopLobby;
     private coopRun?: CoopRun;
@@ -350,6 +365,7 @@ export class GameClient implements GameFrameHandler {
         overlayCanvas: HTMLCanvasElement,
         readonly store: GameStore,
         readonly saveStore: SaveStore,
+        readonly saveLock: SaveLock,
         readonly options: GameClientOptions,
     ) {
         this.save = store.getSnapshot().save;
@@ -388,6 +404,8 @@ export class GameClient implements GameFrameHandler {
         document.addEventListener("visibilitychange", this.onVisibilityChange);
         this.cameraRig.pitch = ATTRACT_PITCH;
         this.cameraRig.distance = ATTRACT_DISTANCE;
+        // Before a run starts, so it's with the save as it is now
+        this.stopSaveLock = this.saveLock.listen((held) => this.onSaveLock(held));
 
         // An invite link (?room=CODE) goes straight to the room
         const invite = new URLSearchParams(window.location.search).get("room");
@@ -406,6 +424,7 @@ export class GameClient implements GameFrameHandler {
     }
 
     dispose(): void {
+        this.stopSaveLock?.();
         document.removeEventListener("visibilitychange", this.onVisibilityChange);
         this.stopBackgroundTicker();
         this.coop.close();
@@ -705,11 +724,89 @@ export class GameClient implements GameFrameHandler {
 
     // Gives the player the save as a file
     exportSave(): void {
-        saveFile("run-escape-save.json", exportSave(this.save), "application/json");
+        const text = exportSave(this.save, this.saveStore.gameVersion);
+        saveFile("run-escape-save.json", text, "application/json");
+    }
+
+    // Gives the player a save that couldn't be read, as it was
+    exportUnreadableSave(key: string): void {
+        const text = this.saveStore.readUnreadable(key);
+        if (text !== undefined) {
+            saveFile("run-escape-save-unreadable.json", text, "application/json");
+        }
+    }
+
+    deleteUnreadableSave(key: string): void {
+        this.saveStore.deleteUnreadable(key);
+        this.store.set({ unreadableSaves: this.saveStore.getUnreadable() });
+    }
+
+    closeUnreadableNotice(): void {
+        this.store.set({ unreadableSave: undefined });
+    }
+
+    // Saves here, and the tab that was saving stops
+    takeOverSave(): void {
+        this.saveLock.takeOver();
+    }
+
+    playWithoutSaving(): void {
+        this.store.set({ saveBlockClosed: true });
+    }
+
+    showSaveBlock(): void {
+        this.store.set({ saveBlockClosed: false });
+    }
+
+    private onSaveLock(held: boolean): void {
+        if (held) {
+            this.reloadSave();
+        } else {
+            this.updateSaveBlock();
+        }
+    }
+
+    // Reads the save again, as the tab that had it last left it
+    private reloadSave(): void {
+        const loaded = this.saveStore.load();
+        this.newerSave = loaded.newer;
+        this.useSave(loaded.save);
+        this.store.set({
+            unreadableSave: loaded.unreadable,
+            unreadableSaves: this.saveStore.getUnreadable(),
+        });
+        this.updateSaveBlock();
+        if (loaded.unreadable) {
+            // It's kept, so the fresh save can go in its place
+            this.persist();
+        } else {
+            this.store.set({ save: structuredClone(this.save) });
+        }
+    }
+
+    private updateSaveBlock(): void {
+        let saveBlock: SaveBlock | undefined;
+        if (this.saveLock.held === false) {
+            saveBlock = { kind: "otherTab" };
+        } else if (this.newerSave) {
+            saveBlock = { kind: "newerGame", gameVersion: this.newerSave.gameVersion };
+        }
+        // A new reason shows the panel again
+        const { saveBlock: was, saveBlockClosed } = this.store.getSnapshot();
+        this.store.set({
+            saveBlock,
+            saveBlockClosed: saveBlockClosed && saveBlock?.kind === was?.kind,
+        });
     }
 
     // Swaps in an imported save in place of this one
     replaceSave(save: SaveData): void {
+        this.useSave(save);
+        this.persist();
+    }
+
+    // Plays on with this save
+    private useSave(save: SaveData): void {
         this.save = save;
         // The adventurer and map picked might not be open in it
         const { characterId, mapId } = this.store.getSnapshot();
@@ -725,11 +822,13 @@ export class GameClient implements GameFrameHandler {
         if (!isHardUnlocked(save, this.store.getSnapshot().mapId)) {
             this.store.set({ hard: false });
         }
-        this.persist();
     }
 
     private persist(): void {
-        this.saveStore.save(this.save);
+        // Played without saving, it carries on in memory
+        if (this.saveLock.held && !this.newerSave) {
+            this.saveStore.save(this.save);
+        }
         // A fresh object so React sees the change
         this.store.set({ save: structuredClone(this.save) });
     }

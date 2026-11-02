@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { emptyStats } from "../content/types";
 import { Sim } from "../core/Sim";
-import { createSave } from "../core/save";
+import { LoadedSave, SaveData, SaveStore, createSave } from "../core/save";
 import { makeGrid } from "../core/world/testGrid";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
 import { GameClient } from "./GameClient";
@@ -208,5 +208,85 @@ describe("auto alch", () => {
         expect(store.getSnapshot().overlay).toBe("dead");
         expect(sim.chests.length).toBe(1);
         expect(sim.coins).toBe(coins);
+    });
+});
+
+describe("saving", () => {
+    // The client and what it saves to, with a lock that's held or not
+    function createSaving(held: boolean) {
+        const save = createSave();
+        const store = new GameStore(save);
+        const saved: SaveData[] = [];
+        let next: LoadedSave = { save: createSave() };
+        const saveStore: SaveStore = {
+            gameVersion: "0.22.1",
+            load: () => next,
+            save: (data) => void saved.push(structuredClone(data)),
+            getUnreadable: () => [],
+            readUnreadable: () => undefined,
+            deleteUnreadable() {},
+        };
+        const saveLock = { held, listen: () => () => {}, takeOver() {} };
+        const client: GameClient = Object.create(GameClient.prototype);
+        Object.assign(client, { save, store, saveStore, saveLock, coop: { setMe() {} } });
+        // What's in storage, as another tab left it
+        const setStored = (loaded: LoadedSave) => {
+            next = loaded;
+        };
+        const lockChanged = (now: boolean) => {
+            saveLock.held = now;
+            (client as unknown as { onSaveLock(held: boolean): void }).onSaveLock(now);
+        };
+        return { client, store, saved, setStored, lockChanged };
+    }
+
+    test("nothing's saved while another tab has the game", () => {
+        const { client, store, saved, lockChanged } = createSaving(true);
+        lockChanged(false);
+        expect(store.getSnapshot().saveBlock).toEqual({ kind: "otherTab" });
+        client.refundUpgrades();
+        expect(saved).toEqual([]);
+        // Played on without saving, the panel goes, and the button to open it
+        // again comes
+        client.playWithoutSaving();
+        expect(store.getSnapshot().saveBlockClosed).toBe(true);
+        client.showSaveBlock();
+        expect(store.getSnapshot().saveBlockClosed).toBe(false);
+    });
+
+    test("getting the game back reads the save as the other tab left it", () => {
+        const { client, store, saved, setStored, lockChanged } = createSaving(false);
+        lockChanged(false);
+        client.playWithoutSaving();
+        setStored({ save: { ...createSave(), coins: 300 } });
+        lockChanged(true);
+        expect(client.save.coins).toBe(300);
+        expect(store.getSnapshot().save.coins).toBe(300);
+        expect(store.getSnapshot().saveBlock).toBeUndefined();
+        client.refundUpgrades();
+        expect(saved.map((s) => s.coins)).toEqual([300]);
+        // Losing it again shows the panel again
+        lockChanged(false);
+        expect(store.getSnapshot().saveBlockClosed).toBe(false);
+    });
+
+    test("a save from a newer game is played but not saved", () => {
+        const { client, store, saved, setStored, lockChanged } = createSaving(false);
+        setStored({ save: { ...createSave(), coins: 70 }, newer: { gameVersion: "0.23.0" } });
+        lockChanged(true);
+        expect(store.getSnapshot().saveBlock).toEqual({ kind: "newerGame", gameVersion: "0.23.0" });
+        expect(client.save.coins).toBe(70);
+        client.refundUpgrades();
+        expect(saved).toEqual([]);
+    });
+
+    test("a save that couldn't be read is kept, told about, and a fresh one saved", () => {
+        const { client, store, saved, setStored, lockChanged } = createSaving(false);
+        setStored({ save: createSave(), unreadable: "rune-survivors-save-unreadable-1" });
+        lockChanged(true);
+        expect(store.getSnapshot().unreadableSave).toBe("rune-survivors-save-unreadable-1");
+        expect(saved).toEqual([createSave()]);
+        client.closeUnreadableNotice();
+        expect(store.getSnapshot().unreadableSave).toBeUndefined();
     });
 });

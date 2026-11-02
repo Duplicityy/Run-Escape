@@ -543,6 +543,12 @@
     opacity: 1;
 }
 
+/* Played on without saving: opens the panel saying why again */
+.ui-version.ui-save-off {
+    color: var(--ui-red);
+    opacity: 1;
+}
+
 /* Adventurer and map select: a panel down each side, so the adventurer picked
    stands in view between them, and a bar along the bottom. In each panel the
    list scrolls on its own if the window's too short for it, and the details

@@ -13,11 +13,13 @@ import "./GameApp.css";
 import { GAME_CACHE_NAME, deleteOtherGameCaches, findGameCache } from "./cache";
 import { GameClient } from "./client/GameClient";
 import { GameStore } from "./client/GameStore";
+import { SaveLock } from "./client/SaveLock";
 import { MAPS } from "./content/maps";
 import { LocalSaveStore } from "./core/save";
 import { GameWebGLRenderer } from "./render/GameWebGLRenderer";
 import { GameUi } from "./ui/GameUi";
 import { iconCache } from "./ui/ItemIcon";
+import { GAME_VERSION } from "./ui/changelog";
 
 WebFont.load({
     custom: {
@@ -27,6 +29,9 @@ WebFont.load({
 
 // Each worker has its own heap, and a phone has little memory to spare for them
 const workerPool = RenderDataWorkerPool.create(isCoarsePointer ? 2 : 4);
+
+// The page's claim on the save, held until it closes
+const saveLock = new SaveLock();
 
 if (import.meta.hot) {
     // The renderer, workers and a run in progress can't be swapped out live, so
@@ -92,8 +97,9 @@ async function loadViewer(
 }
 
 export function GameApp(): JSX.Element {
-    const saveStore = useMemo(() => new LocalSaveStore(), []);
-    const store = useMemo(() => new GameStore(saveStore.load()), [saveStore]);
+    const saveStore = useMemo(() => new LocalSaveStore(GAME_VERSION), []);
+    // Read again once this tab has the save lock
+    const store = useMemo(() => new GameStore(saveStore.load().save), [saveStore]);
     const [errorMessage, setErrorMessage] = useState<string>();
     const [loaded, setLoaded] = useState<Loaded>();
     const [client, setClient] = useState<GameClient>();
@@ -128,10 +134,18 @@ export function GameApp(): JSX.Element {
         let disposed = false;
         let created: GameClient | undefined;
         const params = new URLSearchParams(window.location.search);
-        GameClient.create(loaded.mapViewer, loaded.renderer, overlayRef.current, store, saveStore, {
-            stress: parseInt(params.get("stress") ?? "0") || 0,
-            autostart: params.get("autostart") ?? undefined,
-        })
+        GameClient.create(
+            loaded.mapViewer,
+            loaded.renderer,
+            overlayRef.current,
+            store,
+            saveStore,
+            saveLock,
+            {
+                stress: parseInt(params.get("stress") ?? "0") || 0,
+                autostart: params.get("autostart") ?? undefined,
+            },
+        )
             .then((gameClient) => {
                 if (disposed) {
                     gameClient.dispose();

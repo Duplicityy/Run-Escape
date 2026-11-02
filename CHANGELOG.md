@@ -9,6 +9,15 @@ the version in the corner).
 
 - Co-op's server holds up better against anyone trying to flood it or take every room.
 
+### Fixed
+
+- With the game open in two tabs, only one saves, so they no longer undo each other's runs, coins
+  and unlocks. The other offers to play there instead.
+- A tab left open over an update no longer wipes progress from the newer version when it saves. It
+  asks you to reload instead.
+- A save that can't be read is kept rather than lost. The game tells you, and you can export it
+  from Settings.
+
 ## 0.22.1 - 2026-11-02
 
 ### Added
