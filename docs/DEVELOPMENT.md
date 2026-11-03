@@ -420,7 +420,7 @@ src/game/
   client/GameTouch.ts, ui/TouchControls.tsx, ui/Mobile.css   touch screens (see Touch screens)
 server/     coop-relay.mjs: co-op's rooms, and passes each run's frames between its players
 src/mapviewer/webgl/actor/   actor renderer: baked animation frames drawn anywhere in the world,
-                             any number of them, one multi-draw per pass
+                             any number of them, one multi-draw per segment and pass
 src/mapviewer/worker/        RegionDataLoader (collision and heights for the whole arena in one
                              scene build), ItemIconLoader (inventory icons drawn like the client)
                              SoundLoader (sound effects synthesized off the main thread),
@@ -482,12 +482,37 @@ Enemies are baked when a run starts, for that map (`getMapEnemies`, `GameAssets.
 place of the last map's: they're most of the actors' memory, and a map uses few of them. It goes by
 the enemy ids it finds in the map's waves, events and bosses, and in those enemies, so a new way for
 an enemy to bring on another needs nothing added. An enemy that isn't baked anyway (the console's
-`spawnBoss`) gets baked when it's first drawn, and shows up a moment later.
+`spawnBoss`) gets baked when it's first drawn, and shows up a moment later. On a touch screen the
+enemies are dropped when a run ends and the menus come back (a big map's are a lot of memory to
+keep on a menu), so playing the map again bakes them again.
+
+Enemies that would bake the same model are baked once (`GameAssets.mergeRequests`): the same NPC
+with the same first animation (Nex's four phases), the same outfit, the same scenery. The merged
+model has all of their animations, and the other enemies' keys point to it. A request's body is
+everything its bake reads (`getRequestBody`), so a new field on a bake request goes in there too.
+
+A bake is cut into small tasks (`getBakeTasks`: an NPC or player model each, the spot animations,
+items and scenery a batch at a time), and each goes on the GPU as it lands, as a page of its own.
+Baking a map's worth in one go per worker held all of it in the main thread at once, a spike of
+hundreds of MB at the start of a run on the big maps, the likeliest moment for a phone to lose the
+tab. The worker sends buffers cut to their length, not the doubled ones it grew.
+
+A player is baked with the swings of the weapons they hold (`getRunAttackSeqs`) rather than every
+weapon's, so a new weapon re-bakes them (it changes their `appearanceVersion`). Until it lands
+the old model draws, and a swing it hasn't got shows the stance's animation instead.
+`getPlayerAttackSeqs` is every weapon's, for the slim cache.
 
 A baked animation is a posed copy of the model per frame, so what an enemy costs is its triangles
 times its frames. A skeletal animation (the Colosseum's bosses, the gryphon, the naguas) has a pose
 for every client tick, and baking each one made Varlamore's enemies several times any other map's,
 too much for a phone. `ActorBakeLoader` samples those every `SKELETAL_TICK_STEP` ticks instead.
+
+Indices are 16-bit, which halves the index buffer, about a quarter of a bake. WebGL2 has no base
+vertex for a draw, so `ActorBakeSegments` cuts a bake's vertices into segments of up to 65,536,
+never splits a frame between two (and an animation only if it doesn't fit in one), and counts each
+frame's indices from its segment's first vertex. Each segment is drawn with a vertex array that
+starts there (`ActorSegment`), so a page is a draw per segment that has something on screen. A
+model with more vertices in one frame than that has its whole bake fall back to 32-bit.
 `render-stats.ts --bake` shows each map's total and the heaviest actors, so a new boss can be
 checked against the other maps before a phone finds it.
 
@@ -657,8 +682,8 @@ carries it as an `EventOption` of kind `revive`. Each adds to `Hero.extraRevives
 `player.invulnerable` every tick, the way the sled does, and `nearestHero` and `useSpawnHero`
 skip an immune hero while anyone else is up (pickups go by `nearestUpHero`, which doesn't: a
 revived player can still eat). The reviver's emote (`REVIVE_SEQ`) is baked with
-every player look through `getPlayerAttackSeqs`, and its graphic (`REVIVE_SPOTANIM`) with the
-base bake.
+every player look in co-op through `getRunAttackSeqs`, and its graphic (`REVIVE_SPOTANIM`) with
+the base bake.
 Bosses come as copies (`bossCopies` there), spawned together by `Sim.spawnBosses`: each by a
 different player, clear of the others, sharing one boss's hitpoints, experience and loot through
 their `Encounter`, so the first says so and the last to fall drops the loot. A boss with its own
