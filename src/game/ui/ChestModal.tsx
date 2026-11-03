@@ -6,6 +6,7 @@ import { ChestAction } from "../core/Loot";
 import "./ChestModal.css";
 import { Coins } from "./Coins";
 import { ItemIcon } from "./ItemIcon";
+import { KeyHint } from "./PadHint";
 import { RerollButton } from "./RerollButton";
 
 // Opening a reward casket: it drops in, rattles harder and harder while it
@@ -400,7 +401,7 @@ function ChestCard({
                         disabled={button.disabled}
                         onClick={() => onAction(button.action)}
                     >
-                        <span className="ui-choice-key">{i + 1}</span> {button.label}
+                        <KeyHint keyLabel={String(i + 1)} /> {button.label}
                     </button>
                 ))}
             </div>

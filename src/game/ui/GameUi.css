@@ -2041,3 +2041,64 @@
 .ui-result .ui-row {
     justify-content: center;
 }
+
+/* A controller's highlight: GamePad.ts moves the focus with the d-pad. White,
+   as yellow and green are rarities' borders */
+:root[data-input="pad"] :focus {
+    outline: 3px solid #fff;
+    outline-offset: 3px;
+}
+
+/* A controller button's icon in place of a key: wider than a digit */
+.ui-choice-key.ui-pad-key,
+.ui-inv-key.ui-pad-key {
+    width: auto;
+    min-width: 14px;
+    line-height: 0;
+}
+
+.ui-pad-key img {
+    width: 22px;
+    height: 22px;
+    vertical-align: middle;
+}
+
+.ui-inv-key.ui-pad-key img {
+    width: 16px;
+    height: 16px;
+}
+
+/* The title's how-to-play line, with a controller's icons */
+.ui-hint-pad .ui-pad-icon {
+    width: 18px;
+    height: 18px;
+    vertical-align: middle;
+}
+
+/* What a controller's buttons do: in the pause menu and settings */
+.ui-pad-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ui-pad-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ui-pad-control-icons {
+    display: flex;
+    gap: 2px;
+    min-width: 92px;
+}
+
+.ui-pad-control-icons .ui-pad-icon {
+    width: 22px;
+    height: 22px;
+}
+
+.ui-pad-control-text {
+    color: var(--ui-white);
+}

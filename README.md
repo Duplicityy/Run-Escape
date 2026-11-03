@@ -87,6 +87,13 @@ On a phone or tablet, hold it sideways and drag anywhere to move. The buttons on
 use your items, and everything else is a tap. To open it full screen from its own icon, pick Add to
 Home Screen or Install app in your browser's menu.
 
+A controller works too, in the browser and the desktop app. The left stick or d-pad moves, the
+shoulder buttons and triggers use your four items, Start pauses (and enters the map you've picked), View (Share on PlayStation) shows
+the damage panel and pressing the left stick the quest tracker. On a level up, a casket or any menu,
+the d-pad moves a highlight and A (cross) presses it; B (circle) goes back, X (square) rerolls and
+Y (triangle) skips. Its buttons show on screen while you're using it. A controller the browser
+doesn't recognise the layout of only moves.
+
 ### Tests and tools
 
 ```sh
