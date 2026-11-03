@@ -17,54 +17,65 @@ go stale. Add anything that cost you time to work out.
 
 ## Where things are
 
-| Looking for                                           | Go to                                    |
-| ----------------------------------------------------- | ---------------------------------------- |
-| How the code is laid out, scripts, URL flags, hosting | `docs/DEVELOPMENT.md`                    |
-| The Windows app, its game updates, releases           | `docs/DEVELOPMENT.md`, Desktop           |
-| The app's main process and update code                | `desktop/`                               |
-| The release workflow                                  | `.github/workflows/release.yml`          |
-| The checks on a pull request                          | `.github/workflows/check.yml`            |
-| What's in the game, map by map                        | `docs/GAMEPLAY.md`                       |
-| Getting it running, controls, cache version           | `README.md`                              |
-| What changed in each version                          | `CHANGELOG.md`                           |
-| How to add a weapon, enemy, map and so on             | `.claude/rules/adding-content.md`        |
-| Weapons, enemies, items, maps, shop (plain data)      | `src/game/content/`                      |
-| The game itself: tick, combat, spawning, levels       | `src/game/core/Sim.ts`                   |
-| Level up choices, and when a weapon can evolve        | `src/game/core/Upgrades.ts`              |
-| Evolution recipes, for the UI                         | `src/game/content/evolutions.ts`         |
-| Hard mode's numbers (each map's are on its `MapDef`)  | `src/game/content/hard.ts`               |
-| Co-op's numbers: the party's scaling, boss copies     | `src/game/content/coop.ts`               |
-| Caskets and the inventory                             | `src/game/core/Loot.ts`                  |
-| Random events: who turns up, what they do             | `src/game/content/randomEvents.ts`       |
-| Save data and migrations                              | `src/game/core/save.ts`                  |
-| One tab saving, newer saves, unreadable ones          | `docs/DEVELOPMENT.md`, Saves             |
-| Run flow, camera, input, the HUD's data               | `src/game/client/GameClient.ts`          |
-| The damage panel: each weapon's DPS during a run      | `src/game/client/DamageMeter.ts`         |
-| 3D actors, swooshes, hitsplats                        | `src/game/client/GameView.ts`            |
-| Touch screens: the stick, its buttons, phone layouts  | `docs/DEVELOPMENT.md`, Touch screens     |
-| The game on a phone's home screen (PWA)               | `docs/DEVELOPMENT.md`, Touch screens     |
-| React screens and the HUD                             | `src/game/ui/GameUi.tsx`                 |
-| Weapon stat lines on cards, pause and tooltips        | `src/game/content/weaponStats.ts`        |
-| How the player stands and runs with each weapon       | `src/game/content/stances.ts`            |
-| Stat names and types                                  | `src/game/content/stats.ts`, `types.ts`  |
-| Balance bot                                           | `scripts/game/simulate-run.ts`           |
-| Co-op: how it works, hosting its relay                | `docs/DEVELOPMENT.md` (Co-op)            |
-| Co-op relay server                                    | `server/coop-relay.mjs`                  |
-| Co-op lockstep and rooms; the lobby UI                | `src/game/client/coop/`, `ui/CoopScreen` |
-| Finding ids in the cache                              | `scripts/cache/`                         |
-| ScapeRune: making maps that aren't in OSRS            | `src/game/scaperune/CLAUDE.md`           |
-| What a frame costs, and what's culled                 | `docs/DEVELOPMENT.md`, `scripts/dev/`    |
+| Looking for                                            | Go to                                                                  |
+| ------------------------------------------------------ | ---------------------------------------------------------------------- |
+| How the code is laid out, scripts, URL flags, hosting  | `docs/DEVELOPMENT.md`                                                  |
+| The Windows app, its game updates, releases            | `docs/DEVELOPMENT.md`, Desktop                                         |
+| The app's main process and update code                 | `desktop/`                                                             |
+| The release workflow                                   | `.github/workflows/release.yml`                                        |
+| The checks on a pull request                           | `.github/workflows/check.yml`                                          |
+| What's in the game, map by map                         | `docs/GAMEPLAY.md`                                                     |
+| Getting it running, controls, cache version            | `README.md`                                                            |
+| What changed in each version                           | `CHANGELOG.md`                                                         |
+| How to add a weapon, enemy, map and so on              | `.claude/rules/adding-content.md`                                      |
+| Weapons, enemies, items, maps, shop (plain data)       | `src/game/content/`                                                    |
+| Weapon damage controls                                 | `docs/BALANCE.md`                                                      |
+| The game itself: tick, combat, spawning, levels        | `src/game/core/Sim.ts`                                                 |
+| Level up choices, and when a weapon can evolve         | `src/game/core/Upgrades.ts`                                            |
+| Evolution recipes, for the UI                          | `src/game/content/evolutions.ts`                                       |
+| Hard mode's numbers (each map's are on its `MapDef`)   | `src/game/content/hard.ts`                                             |
+| Co-op's numbers: the party's scaling, boss copies      | `src/game/content/coop.ts`                                             |
+| Caskets and the inventory                              | `src/game/core/Loot.ts`                                                |
+| Phosani's Nightmare, the one-fight map (its arena too) | `src/game/content/phosani.ts`, `scaperune/maps/sisterhoodSanctuary.ts` |
+| Her fight: its design and playtest record              | `docs/design/phosanis-nightmare.md`                                    |
+| Random events: who turns up, what they do              | `src/game/content/randomEvents.ts`                                     |
+| Save data and migrations                               | `src/game/core/save.ts`                                                |
+| One tab saving, newer saves, unreadable ones           | `docs/DEVELOPMENT.md`, Saves                                           |
+| Run flow, camera, input, the HUD's data                | `src/game/client/GameClient.ts`                                        |
+| The damage panel: each weapon's DPS during a run       | `src/game/client/DamageMeter.ts`                                       |
+| 3D actors, swooshes, hitsplats                         | `src/game/client/GameView.ts`                                          |
+| Touch screens: the stick, its buttons, phone layouts   | `docs/DEVELOPMENT.md`, Touch screens                                   |
+| Controllers: which pad, its buttons, menus' highlight  | `docs/DEVELOPMENT.md`, Controllers                                     |
+| The game on a phone's home screen (PWA)                | `docs/DEVELOPMENT.md`, Touch screens                                   |
+| React screens and the HUD                              | `src/game/ui/GameUi.tsx`                                               |
+| Weapon stat lines on cards, pause and tooltips         | `src/game/content/weaponStats.ts`                                      |
+| How the player stands and runs with each weapon        | `src/game/content/stances.ts`                                          |
+| Stat names and types                                   | `src/game/content/stats.ts`, `types.ts`                                |
+| Balance bot                                            | `scripts/game/simulate-run.ts`                                         |
+| Weapon attack benchmark                                | `scripts/game/measure-weapon-dps.ts`                                   |
+| Co-op: how it works, hosting its relay                 | `docs/DEVELOPMENT.md` (Co-op)                                          |
+| Co-op relay server                                     | `server/coop-relay.mjs`                                                |
+| The same relay on Cloudflare, and its setup            | `server/cloudflare/`                                                   |
+| Co-op lockstep and rooms; the lobby UI                 | `src/game/client/coop/`, `ui/CoopScreen`                               |
+| Co-op flags: where players are from                    | `docs/DEVELOPMENT.md` (Co-op, Flags)                                   |
+| Finding ids in the cache                               | `scripts/cache/`                                                       |
+| ScapeRune: making maps that aren't in OSRS             | `src/game/scaperune/CLAUDE.md`                                         |
+| Raids: rooms, points, chests, teleporters, expert      | `src/game/content/raids.ts`                                            |
+| The Theatre of Blood's bosses                          | `src/game/content/theatre.ts`                                          |
+| What a frame costs, and what's culled                  | `docs/DEVELOPMENT.md`, `scripts/dev/`                                  |
+| Frame cap, lost graphics, the HUD's two stores         | `docs/DEVELOPMENT.md`, Keeping it light                                |
 
 `src/game/core/` has no DOM or rendering. The UI reads from `GameClient` and `GameStore`, and never
 changes the sim directly.
 
 Co-op guests can predict movement, only for display (`client/coop/MovementPrediction.ts` and
-`PlayerPose.ts`). It's a trial, off unless the player turns on `movePrediction` in
-`DisplaySettings`, so a guest's `CoopRun.prediction` is often undefined. Keep predicted positions
+`PlayerPose.ts`). It's on by default, but a player can turn `movePrediction` off in
+`DisplaySettings`, so a guest's `CoopRun.prediction` can be undefined. Keep predicted positions
 out of `Sim` and its hashes. Movement sequence echoes are acknowledged when their host frame is
 applied; preserve them when coalescing queued moves. Movement rules shared by simulation and
 prediction live in `core/PlayerMovement.ts`. Keep the delayed-network tests in
-`MovementPrediction.test.ts` covering corrections, fallbacks and changes to movement.
+`MovementPrediction.test.ts` covering corrections, fallbacks, changes to movement, stalls and
+resends, and the camera's steadiness (an echo of an unchanged move mustn't re-time the picture).
 
 ## Commands
 
@@ -118,7 +129,7 @@ PARTY=4 MAP=barrows META=max ARMOURY=max npx tsx scripts/game/simulate-run.ts ""
   the old and new code. `META=max` buys every shop upgrade, so a new one changes those results.
 - **Run every map that's affected**, not only Lumbridge. A change can help one map and hurt another.
 - For a change to one combat style, compare all three styles, so you can see the gap between them.
-- For a change to co-op's balance (`content/coop.ts`, or anything a party does differently), run
+- For a change to co-op's balance (`content/balance.ts`, `content/coop.ts`, or anything a party does differently), run
   `PARTY=2` and `PARTY=4` too. The bot plays each player on their own, with no teamwork.
 - For hard mode's numbers, compare `HARD=1` with normal on the same seeds, and use at least 6 seeds:
   with 3, a lower multiplier can come out harder. Go by wins as well as how long runs last: the bot
@@ -203,9 +214,14 @@ desktop build.
   New shop upgrades, ids and optional fields don't need one. Write the save only through
   `GameClient.persist()`: it doesn't write while another tab has `SaveLock` or the save is from a
   newer game. Never rename the lock, `run-escape-save`, any more than the keys.
+  Skills live in `skillPages` by combat style, with separate ranks, spending and refund records;
+  each page can allocate `coins + max(page.upgradesSpent)`. Only the maximum investment is reserved;
+  use `getSkillCoins(save, style)` for a page's balance. Always pass the intended style to skill
+  operations and run loadouts.
 - **Determinism**: the sim only uses its seeded `Rng`, never `Math.random`. Co-op runs the same sim
   on every player's browser, so in `src/game/core/` trigonometry goes through `fm` (`fm.sin`,
   `fm.cos`, `fm.atan2`, `fm.hypot`, `fm.acos`, `fm.pow`) from `core/fmath.ts`, never `Math`'s.
+  `core/runHash.test.ts` pins seeded runs: a speed-up or tidy must leave them as they are.
 - **Heroes**: `sim.player`, `sim.stats`, `sim.weapons` and the like are the current hero's (one for
   each co-op player). Anything a hero leaves behind (a projectile, a thrall) keeps a `hero` index.
   A solo run must play exactly as before; co-op's tests are in `core/coop.test.ts`.

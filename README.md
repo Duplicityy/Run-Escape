@@ -25,7 +25,7 @@ built on [rs-map-viewer](https://github.com/dennisdev/rs-map-viewer), the code b
 - **6 fun maps**, open from the start and endless: the Grand Exchange's scammers, East Varrock's
   F2P pkers past the Wilderness Ditch, Falador on 6 June 2006, Last Man Standing, Castle Wars and
   Pest Control.
-- **33 adventurers**, each with a starting weapon and a bonus, unlocked by beating maps and doing
+- **34 adventurers**, each with a starting weapon and a bonus, unlocked by beating maps and doing
   tasks on them.
 - **Weapons that upgrade the OSRS way** (bronze to dragon, Fire Strike to Fire Wave) and
   **evolve** with the right passive (a maxed dragon scimitar with Piety becomes the Abyssal whip),
@@ -35,8 +35,10 @@ built on [rs-map-viewer](https://github.com/dennisdev/rs-map-viewer), the code b
   Inquisitor's, Crystal) and an **Armoury** to upgrade it for good between runs.
 - **Co-op** for up to four players: rooms by invite code or open to all, everyone with their own
   adventurer, shared levels, and the run going on while anyone's standing.
+- **Phosani's Nightmare**, a boss fight on its own once Hallowed Night's beaten: no waves, no
+  picks and no items, only the Inquisitor's crossbow and her, quicker and with more at once.
 - **Endless mode** and **hard mode** for every map you've beaten, **skills** to train with the coins
-  you bank, and **quests** that pay out over many runs.
+  you bank on independent Melee, Ranged and Magic pages, and **quests** that pay out over many runs.
 
 [docs/GAMEPLAY.md](docs/GAMEPLAY.md) goes through all of it, map by map. [CHANGELOG.md](CHANGELOG.md)
 has what changed in each version.
@@ -84,6 +86,13 @@ the mouse wheel zooms.
 On a phone or tablet, hold it sideways and drag anywhere to move. The buttons on screen pause and
 use your items, and everything else is a tap. To open it full screen from its own icon, pick Add to
 Home Screen or Install app in your browser's menu.
+
+A controller works too, in the browser and the desktop app. The left stick or d-pad moves, the
+shoulder buttons and triggers use your four items, Start pauses (and enters the map you've picked), View (Share on PlayStation) shows
+the damage panel and pressing the left stick the quest tracker. On a level up, a casket or any menu,
+the d-pad moves a highlight and A (cross) presses it; B (circle) goes back, X (square) rerolls and
+Y (triangle) skips. Its buttons show on screen while you're using it. A controller the browser
+doesn't recognise the layout of only moves.
 
 ### Tests and tools
 
@@ -143,7 +152,7 @@ Issues and pull requests are welcome.
   [LICENSE](LICENSE))
 - [RuneLite](https://github.com/runelite/runelite)
 - [OpenRS2 Archive](https://archive.openrs2.org/) and [RuneScape Archive](https://rs-archive.github.io/) - caches
-- [OSRS Wiki](https://oldschool.runescape.wiki/) - item spawns and sound ids
+- [OSRS Wiki](https://oldschool.runescape.wiki/) - item spawns, sound ids and music recordings
 - [2004scape](https://github.com/2004scape/Server) and [2009scape](https://gitlab.com/2009scape/2009scape) - NPC spawns
 - [RuneStar](https://github.com/RuneStar/fonts) - fonts
 - [Blurite](https://github.com/blurite/pathfinder) - pathfinding

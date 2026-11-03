@@ -11,6 +11,37 @@ function changes(weaponId: string, level: number): string[] {
 }
 
 describe("weapon stats", () => {
+    test("cards and tooltips include global evolution tuning without changing weapon data", () => {
+        const base = getWeapon("scimitar");
+        const evolved = getWeapon("abyssal_whip");
+        const profile = { evolved: 0.5 };
+        const first = { ...evolved.levels[0], damage: 42 };
+        const next = { ...evolved.levels[1], damage: 48 };
+        expect(weaponStats(base, base.levels[7], profile).map(formatWeaponStat)).toContain(
+            "Damage 32",
+        );
+        expect(weaponStats(evolved, first, profile).map(formatWeaponStat)).toContain("Damage 21");
+        expect(first.damage).toBe(42);
+        expect(weaponStatChanges(evolved, first, next, profile).map(formatWeaponStat)).toContain(
+            "Damage 21 → 24",
+        );
+    });
+
+    test("global class and weapon tuning also applies to displayed venom", () => {
+        const def = getWeapon("smoke_barrage");
+        const profile = {
+            all: 0.8,
+            styles: { magic: { evolved: 0.5 } },
+            weapons: { smoke_barrage: 0.5 },
+        };
+        const lines = weaponStats(def, { ...def.levels[0], damage: 13, venom: 7 }, profile).map(
+            formatWeaponStat,
+        );
+        expect(lines).toContain("Damage 2.6");
+        expect(lines).toContain("Venom 1.4/s");
+        expect(lines).toContain(`Attacks ${(1 / def.levels[0].cooldown).toFixed(2)}/s`);
+    });
+
     test("a level up shows what it changes, before and after", () => {
         expect(changes("scimitar", 3)).toEqual(["Damage 16 → 21", "Knockback 0.5 → 0.7"]);
         expect(changes("scimitar", 6)).toEqual(["Attacks 0.74/s → 0.80/s"]);

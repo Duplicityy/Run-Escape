@@ -3,7 +3,86 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
-## Unreleased
+## 0.24.0 - 2026-11-03
+
+### Added
+
+- Raids, by Okaeri: the Theatre of Blood, a new section on the map screen. Six rooms one after
+  another, each with its own waves and then its boss in its real room from OSRS, fought as a
+  bullet hell. It's a melee raid: its bosses take far less from missiles and magic.
+  - Raid points for each room, more for a fast, clean kill: they pay coins, buy food and potions from
+    a supply chest between rooms, and better your chance of a purple from the chest at the end.
+  - The Theatre's uniques for the Collection log, Lil' Zik, and two weapons: the Ghrazi rapier for
+    beating it, and the Holy Scythe of Vitur for beating it on hard.
+  - The raid runs through Morytania: each room fights its waves in a real place, from the woods
+    outside Canifis to Vampyrium. Bones and coins left on a hall floor go with you to its boss.
+  - Teleporters: once you've killed a room's boss, its hall has a portal straight to it (three a raid),
+    to get back to the boss you're learning quicker.
+  - Beat the raid on hard for expert mode, with more of the real raid's mechanics, twice the coins
+    and Lil' Zik's looks.
+- Phosani's Nightmare: a boss fight on its own, open once Hallowed Night's beaten. One fight in
+  the Sisterhood Sanctuary under Slepe, with no waves, picks or items: everything The Nightmare
+  has, quicker, plus bullet hell patterns, eggs that hatch parasites and husks that hold you where
+  you stand. Everyone plays the Inquisitor, an adventurer made for the fight, with the Armadyl
+  crossbow. It has a hard mode and a quest, and beating her brings the Nightmare staff, whose
+  claws come up under enemies around you.
+- Controller support, by Okaeri: move with the stick or d-pad, use items with the shoulder buttons
+  and triggers, and pick level ups, caskets and menus with the d-pad and A. The hints show your
+  controller's buttons, Xbox, PlayStation or Switch.
+- Firemaking, a new skill, by Okaeri: up to 3 banishes a run. Banish a weapon or passive on a level
+  up (pick another instead), or a casket's item (it's alched), and it won't be offered again that
+  run. Banishing a set's piece banishes the whole set.
+- Separate Melee, Ranged and Magic skill pages, by Deivid Smarzaro. Each can spend the full gold
+  budget without taking gold from the others, refunds only touch the page you're on, and exported
+  saves keep them.
+- Single rank refunds, by Deivid Smarzaro: refund a skill rank with its arrow button, or right-click
+  on desktop, without resetting the rest.
+- Multiplayer shows where players are from: each open room has its host's flag and each player in
+  a room theirs, the world list's own flags (a country without one shows its letters). Turn off
+  Co-op flag in Settings to keep yours to yourself, unless you host an open room.
+- A Frame rate setting, in Settings and the pause menu: Auto (60 on phones and tablets, no cap on
+  a desktop), 30, 60 or Unlimited.
+
+### Changed
+
+- Co-op movement prediction, by trippy22: on by default when you join a game, and smoother: no
+  camera nudges as you walk, no creeping or sliding back after you stop, and a glide rather than a
+  jump after a dropped connection. It can still be turned off in Settings.
+- Evolutions, rebalanced by trippy22: most gain less damage over their maxed base weapons, while
+  keeping an upgrade at every level.
+- Endless runs, by Okaeri: from about round 4, levels come about a dozen a round rather than
+  thirty, so a weapon you pour everything into keeps up with the rounds rather than outgrowing
+  them, and a long run gets harder instead of its numbers running away. The first rounds level as
+  before.
+- The game is lighter, most of all on phones: a run takes less memory to start, each frame does
+  less work, and menus draw at 30 frames a second at most.
+
+### Fixed
+
+- Weapon cards and tooltips include fixed damage adjustments, including venom. Fixed by trippy22.
+- Weaker poison and burning ground no longer take ownership of a stronger lingering effect. Fixed
+  by trippy22.
+- Co-op: a guest who misses some of the host's updates gets them again, rather than freezing.
+  With a relay that supports it, a dropped connection reconnects within a few seconds and the run
+  carries on. Fixed by Okaeri.
+- Co-op: an item used just as the connection drops is used once it's back, and someone who joined,
+  left or started a run just before a drop is remembered that way. Fixed by trippy22.
+- Co-op: after buying from the Mysterious Old Man, or banishing a level up's reward, the menu's
+  buttons work straight away, rather than doing nothing for a few seconds.
+- Huge numbers stay short: the damage panel, stats and hitsplats go on past trillions to Qa,
+  Qi, Sx and on, then powers of ten, rather than growing digit by digit. Fixed by Okaeri.
+- In very long endless runs, bones no longer stop dropping once coins and food have built up
+  around the map.
+- The Nightmare's charge wind-up and sleepwalker animations tore her model apart, on Hallowed
+  Night as well: they belonged to her other form.
+- A phone taking the graphics away mid-run pauses a solo run, and Reload ends it keeping its coins
+  and quests.
+- Class skill tabs stay grouped on the left, with the selected page pressed in and green
+  immediately, even while hovered. Fixed by Deivid Smarzaro.
+- Coin icons stay visible while a changed stack size loads after buying or refunding skills. Fixed
+  by Deivid Smarzaro.
+- Maxed skills no longer look buyable, and touch long presses no longer refund ranks by accident.
+  Fixed by Deivid Smarzaro.
 
 ## 0.23.0 - 2026-11-02
 

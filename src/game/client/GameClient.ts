@@ -3,7 +3,6 @@ import { MapViewer } from "../../mapviewer/MapViewer";
 import { ActorRenderer } from "../../mapviewer/webgl/actor/ActorRenderer";
 import { RegionData, RegionDataInput } from "../../mapviewer/worker/RegionData";
 import { RegionDataLoader } from "../../mapviewer/worker/RegionDataLoader";
-import massacre from "../../media/music/massacre.ogg";
 import { CollisionFlag } from "../../rs/pathfinder/flag/CollisionFlag";
 import { isCoarsePointer } from "../../util/DeviceUtil";
 import { CHARACTERS, getCharacter } from "../content/characters";
@@ -16,25 +15,28 @@ import {
     FUN_MAPS,
     MAPS,
     MAP_BY_ID,
+    RAID_MAPS,
     getArenaRegion,
     getMap,
+    getMapCharacter,
     isDevMap,
     isFunMap,
 } from "../content/maps";
 import { formatPassiveValue, getPassive } from "../content/passives";
 import { getPowerUp } from "../content/powerups";
 import { QUESTS, canDoQuestOn, describeQuest } from "../content/quests";
+import { RAID_TELEPORTS } from "../content/raids";
 import { RARITIES, Rarity } from "../content/rarity";
 import { SHOP_UPGRADES } from "../content/shop";
 import { formatStats } from "../content/stats";
 import { TROPHY_BY_ID } from "../content/trophies";
-import { Stats, emptyStats } from "../content/types";
+import { CombatStyle, Stats, emptyStats } from "../content/types";
 import { LOCKABLE_ITEMS, describeUnlockTask, isAvailable } from "../content/unlocks";
 import { formatWeaponBonus, formatWeaponStat, weaponStats } from "../content/weaponStats";
 import { getWeapon } from "../content/weapons";
 import { ChestAction } from "../core/Loot";
 import { Hero, HeroOptions, Sim, TICKS_PER_SECOND } from "../core/Sim";
-import { canEvolve, describeChoice, getEvolutionHint } from "../core/Upgrades";
+import { UpgradeChoice, canEvolve, describeChoice, getEvolutionHint } from "../core/Upgrades";
 import { SimEvent, WeaponState } from "../core/entities";
 import { usePortableMath } from "../core/fmath";
 import { CoopAction, applyAction, hasBadNumber } from "../core/lockstep";
@@ -49,24 +51,35 @@ import {
     getFinishedQuests,
     getMetaStats,
     getQuestProgress,
+    getRaidPortals,
     isEndlessRecord,
     isEndlessUnlocked,
+    isExpertUnlocked,
     isHardUnlocked,
     isMapUnlocked,
     recordRun,
+    refundUpgrade,
     refundUpgrades,
 } from "../core/save";
 import { ArenaGrid } from "../core/world/ArenaGrid";
-import { CameraRig } from "../render/CameraRig";
-import { GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer";
+import { CameraRig, MAX_CAMERA_DISTANCE, getGroundReach } from "../render/CameraRig";
+import { CameraReach, GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer";
 import { installRecipe } from "../scaperune/squares";
 import { DamageMeter } from "./DamageMeter";
-import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
+import {
+    DisplaySettings,
+    FrameRate,
+    frameCap,
+    loadDisplaySettings,
+    saveDisplaySettings,
+} from "./DisplaySettings";
 import {
     GameAssets,
+    HINT_ARROW_SPRITE,
     HITSPLAT_SPRITES,
-    getCharacterAppearance,
+    getOfferedAttackSeqs,
     getRunAppearance,
+    getRunAttackSeqs,
 } from "./GameAssets";
 import { GameAudio } from "./GameAudio";
 import { GameInput } from "./GameInput";
@@ -74,12 +87,14 @@ import { ChestCue, GameSounds, getGameSoundIds } from "./GameSounds";
 import {
     ChoiceView,
     GameStore,
+    HudNumbers,
     HudView,
     QuestTrackView,
     ReviveView,
     SaveBlock,
     Screen,
     SlotView,
+    shareUnchanged,
 } from "./GameStore";
 import { GameView } from "./GameView";
 import {
@@ -102,6 +117,10 @@ import { saveFile } from "./saveFile";
 // 20ms: the OSRS client tick, also the unit of animation frame lengths
 export const TICK_MS = 1000 / TICKS_PER_SECOND;
 const MAX_TICKS_PER_FRAME = 10;
+// A solo run makes up a late frame's ticks this many a frame at most, rather than
+// all in the next one, so one slow frame doesn't make the next slow too. Every
+// tick still runs: it's at most MAX_TICKS_PER_FRAME behind, as before.
+const SOLO_TICKS_PER_FRAME = 4;
 // A co-op guest that's fallen well behind the host catches up this fast
 const MAX_CATCH_UP_TICKS = 120;
 // A frame spends this long at most on catching up, so a slow phone stays
@@ -118,10 +137,18 @@ const DPS_HOLD_TICKS = TICKS_PER_SECOND / 2;
 const TITLE_MAP = MAPS[0];
 
 // Recordings of the OSRS music tracks maps play (MapDef.music), from the OSRS
-// Wiki
-const MUSIC: Record<string, string> = {
-    Massacre: massacre,
-};
+// Wiki, in src/media/music: a track's file is its name in lower case with
+// underscores (massacre.ogg, the_bane_of_ashihama.ogg). A track with no
+// recording there plays nothing, so a map can name one before it's in.
+const MUSIC_FILES = import.meta.glob("../../media/music/*.ogg", {
+    eager: true,
+    import: "default",
+}) as Record<string, string>;
+
+function musicFor(track: string): string | undefined {
+    const file = track.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+    return MUSIC_FILES[`../../media/music/${file}.ogg`];
+}
 
 // Title screen camera: lower and slowly circling the character (RS angle units
 // per tick), or settling in front of them when it's not to spin
@@ -136,10 +163,40 @@ const RUN_DISTANCE = 18;
 // How long the camera takes to follow the ground up a slope on a dev map, in ms: without this,
 // it lurches at every crease in tall ground
 const CAMERA_GROUND_EASE = 110;
+// In a raid's boss room the camera leans this much of the way towards where the boss stands, up
+// to so many tiles, so a big boss isn't under the HUD at the top; and how long that takes, in ms
+const BOSS_LEAN = 0.4;
+const BOSS_LEAN_MAX = 2.5;
+const BOSS_LEAN_EASE = 350;
 // Closer on a phone held sideways: it shows as much to each side as a desktop
 // window does, and the player stays big enough to see
 const PHONE_RUN_DISTANCE = 15;
 const PHONE_MAX_HEIGHT = 520;
+
+// How far past the arena the camera can get: a run's is behind the player, zoomed
+// all the way out, and the title screen's circles them
+const CAMERA_REACH: CameraReach = {
+    behind: getGroundReach(RUN_PITCH, MAX_CAMERA_DISTANCE),
+    around: getGroundReach(ATTRACT_PITCH, ATTRACT_DISTANCE),
+};
+
+// The world fades out past the arena's edge. A ScapeRune map's world carries on: it
+// has scenery there (scaperune/CLAUDE.md).
+function setPlayArea(
+    renderer: GameWebGLRenderer,
+    arena: { baseX: number; baseY: number; sizeX: number; sizeY: number },
+    scaperune: boolean,
+): void {
+    const { baseX, baseY, sizeX, sizeY } = arena;
+    const open = scaperune ? OPEN_WORLD_MARGIN : 0;
+    renderer.setPlayArea(
+        baseX - open,
+        baseY - open,
+        baseX + sizeX + open,
+        baseY + sizeY + open,
+        CAMERA_REACH,
+    );
+}
 
 // The level up's rewards, as the UI shows them
 // What a new endless round brings, for its toast
@@ -191,7 +248,7 @@ function getEvolutionView(sim: Sim, weapon: WeaponState): SlotView["evolution"] 
 
 function getChoiceViews(sim: Sim): ChoiceView[] {
     const style = getCharacter(sim.characterId).style;
-    return sim.choices.map((choice) => {
+    return sim.choices.map((choice, index) => {
         const { title, text, iconObjId, iconSpriteId, quality, stats } = describeChoice(choice);
         const rarity = quality ? RARITIES[quality] : undefined;
         return {
@@ -206,6 +263,8 @@ function getChoiceViews(sim: Sim): ChoiceView[] {
             rarity: rarity && { name: rarity.name, color: rarity.color },
             stats,
             evolves: getEvolutionHint(choice, sim.weapons, sim.passives, style, sim.unlockedItems),
+            banishable: sim.canBanishChoice(index),
+            banished: sim.isBanishedChoice(index),
         };
     });
 }
@@ -262,6 +321,9 @@ export type GameClientOptions = {
     stress: number;
     // Start a run with this character straight away (testing)
     autostart?: string;
+    // ?raidtest on the dev server: solo runs with a raid's rooms two minutes apart and every
+    // level up at its max (SimTesting); "short" for the rooms alone
+    raidTest?: "max" | "short";
 };
 
 export class GameClient implements GameFrameHandler {
@@ -274,6 +336,8 @@ export class GameClient implements GameFrameHandler {
         saveLock: SaveLock,
         options: GameClientOptions,
     ): Promise<GameClient> {
+        // Before the first map squares load, so they're only what the title screen needs
+        setPlayArea(renderer, getArenaRegion(TITLE_MAP), false);
         const workerPool = mapViewer.workerPool;
         const regionPromise = workerPool.queueLoad<RegionDataInput, RegionData, RegionDataLoader>(
             new RegionDataLoader(),
@@ -285,13 +349,16 @@ export class GameClient implements GameFrameHandler {
 
         const actors = await renderer.getActorRenderer();
         const assets = new GameAssets(workerPool, renderer, actors);
-        const spritesPromise = assets.loadSprites(Object.values(HITSPLAT_SPRITES));
+        const spritesPromise = assets.loadSprites([
+            ...Object.values(HITSPLAT_SPRITES),
+            HINT_ARROW_SPRITE,
+        ]);
         store.set({ loadingText: "Summoning monsters", loadingProgress: 10 });
         await assets.loadBase((done, total) => {
             store.set({ loadingProgress: 10 + Math.round((done / total) * 70) });
         });
         store.set({ loadingText: "Dressing up", loadingProgress: 85 });
-        await assets.setPlayerAppearance(getCharacterAppearance(store.getSnapshot().characterId));
+        await assets.setCharacterLook(store.getSnapshot().characterId);
         store.set({ loadingText: `Building ${TITLE_MAP.name}`, loadingProgress: 95 });
         const grid = new ArenaGrid(await regionPromise);
         await soundsPromise;
@@ -341,11 +408,17 @@ export class GameClient implements GameFrameHandler {
     private lastHudUpdate = 0;
     // Where the camera thinks the ground is, on a dev map
     private cameraGround: number | undefined;
+    // How far the camera's leaning towards a raid boss (BOSS_LEAN)
+    private cameraLean = { x: 0, y: 0 };
     private shownDps = 0;
+    // The world's brightness as last set: a raid hall can draw darker than its map
+    private shownBrightness = 1;
     private shownDpsTick = 0;
     private readonly damageMeter = new DamageMeter();
     // Each hero's look, as last baked
     private appearanceVersions: number[] = [];
+    // Each hero's level-up choices their look was last baked for
+    private lookChoices: (UpgradeChoice[] | undefined)[] = [];
     // The casket Auto alch last sent off (a co-op one takes a frame to come
     // back, and shouldn't go twice)
     private autoAlchedUid = -1;
@@ -388,6 +461,20 @@ export class GameClient implements GameFrameHandler {
         this.input = new GameInput(renderer.canvas);
         this.input.onPress = this.onKeyPress;
         this.input.takesKey = (code) => code === "Tab" && this.isPlaying();
+        this.input.pads.onConnect = (pad) =>
+            this.store.toast(
+                pad.standard
+                    ? `${pad.name} connected.`
+                    : `${pad.name} connected. Its buttons aren't on a layout the browser knows, so only its stick works.`,
+                pad.standard ? 3000 : 7000,
+            );
+        // A controller going flat mid-run pauses it, as leaving the window does
+        this.input.pads.onDisconnect = (pad) => {
+            this.store.toast(`${pad.name} disconnected.`, 4000);
+            if (this.sim && !this.coopRun && this.store.getSnapshot().overlay === "none") {
+                this.pause();
+            }
+        };
         this.input.onBlur = () => {
             this.accumulator = 0;
             // With auto-pause off the run carries on (though a hidden tab
@@ -409,6 +496,18 @@ export class GameClient implements GameFrameHandler {
         this.coop.onLeft = (id) => this.toCoopRun((run) => run.playerLeft(id));
         this.coop.onGone = (reason) => this.onCoopGone(reason);
         this.coop.onClosed = () => this.onCoopClosed();
+        this.coop.onReconnecting = () => {
+            if (this.coopRun) {
+                this.store.toast("Connection dropped. Reconnecting...", 4000);
+            }
+        };
+        this.coop.onResumed = () => {
+            if (this.coopRun) {
+                this.store.toast("Reconnected.", 2000);
+            }
+            this.toCoopRun((run) => run.resumed());
+        };
+        this.coop.onMapChanged = () => this.coop.setMe({ loadout: this.getLoadout() });
         // Co-op's offered only where there's a relay to play it through
         this.coop.checkAvailable();
         document.addEventListener("visibilitychange", this.onVisibilityChange);
@@ -457,9 +556,9 @@ export class GameClient implements GameFrameHandler {
         }
         this.store.set({ characterId });
         if (!this.sim) {
-            this.assets.setPlayerAppearance(getCharacterAppearance(characterId));
+            this.assets.setCharacterLook(characterId);
         }
-        this.coop.setMe({ characterId });
+        this.coop.setMe({ characterId, loadout: this.getLoadout() });
     }
 
     // The map for the next run. Hosting a room, it's the room's map: the relay
@@ -484,6 +583,7 @@ export class GameClient implements GameFrameHandler {
             mapId,
             endless: snapshot.endless && isEndlessUnlocked(this.save, mapId),
             hard: snapshot.hard && isHardUnlocked(this.save, mapId),
+            expert: snapshot.expert && isExpertUnlocked(this.save, mapId),
         });
     }
 
@@ -514,6 +614,16 @@ export class GameClient implements GameFrameHandler {
         const { mapId, hard } = this.store.getSnapshot();
         if (hard || isHardUnlocked(this.save, mapId)) {
             this.store.set({ hard: !hard });
+        }
+    }
+
+    // A raid's expert mode, once it's been beaten on hard. Solo only for now: co-op's rooms
+    // don't carry it.
+    toggleExpert(): void {
+        const { mapId, expert, hard } = this.store.getSnapshot();
+        if (expert || isExpertUnlocked(this.save, mapId)) {
+            // Expert's hard mode too
+            this.store.set({ expert: !expert, hard: !expert || hard });
         }
     }
 
@@ -549,6 +659,7 @@ export class GameClient implements GameFrameHandler {
             characterId: this.store.getSnapshot().characterId,
             loadout: this.getLoadout(),
             unlocks: this.getUnlocks(),
+            hideCountry: !this.display.coopFlag,
         });
         await this.coop.connect();
     }
@@ -613,7 +724,7 @@ export class GameClient implements GameFrameHandler {
     // The maps this player has, and has endless and hard mode for, which rooms
     // go by
     private getUnlocks(): Unlocks {
-        const ids = [...MAPS, ...FUN_MAPS].map((m) => m.id);
+        const ids = [...MAPS, ...RAID_MAPS, ...FUN_MAPS].map((m) => m.id);
         return {
             maps: ids.filter((id) => isMapUnlocked(this.save, id)),
             endless: ids.filter((id) => isEndlessUnlocked(this.save, id)),
@@ -622,9 +733,16 @@ export class GameClient implements GameFrameHandler {
     }
 
     private getLoadout(): Loadout {
-        return makeLoadout(getMetaStats(this.save), [...this.save.unlockedItems], {
-            ...this.save.armoury,
-        });
+        const characterId =
+            (this.coop.room && getMap(this.coop.room.mapId).fun?.character) ??
+            this.store.getSnapshot().characterId;
+        return makeLoadout(
+            getMetaStats(this.save, getCharacter(characterId).style),
+            [...this.save.unlockedItems],
+            {
+                ...this.save.armoury,
+            },
+        );
     }
 
     // The host's Start: everyone's ready, so off to the room's map. The relay
@@ -659,7 +777,7 @@ export class GameClient implements GameFrameHandler {
                 id: member.id,
                 name: member.name,
                 characterId:
-                    map.fun?.character ??
+                    getMapCharacter(map) ??
                     (CHARACTERS.some((c) => c.id === member.characterId)
                         ? member.characterId
                         : CHARACTERS[0].id),
@@ -718,8 +836,8 @@ export class GameClient implements GameFrameHandler {
         this.updateHud(true);
     }
 
-    buyUpgrade(upgradeId: string): void {
-        if (buyUpgrade(this.save, upgradeId)) {
+    buyUpgrade(upgradeId: string, style: CombatStyle = "melee"): void {
+        if (buyUpgrade(this.save, upgradeId, style)) {
             this.sounds.buy();
             this.persist();
         } else {
@@ -791,14 +909,32 @@ export class GameClient implements GameFrameHandler {
         this.coopRun?.setPrediction(this.display.movePrediction);
     }
 
+    // The room hears at once, and the rooms list from the next update. An open
+    // room's host shows theirs either way (the relays' shownCountry).
+    toggleCoopFlag(): void {
+        this.setDisplay({ coopFlag: !this.display.coopFlag });
+        this.coop.setMe({ hideCountry: !this.display.coopFlag });
+    }
+
+    // Takes hold from the next frame (update)
+    setFrameRate(frameRate: FrameRate): void {
+        this.setDisplay({ frameRate });
+    }
+
     private setDisplay(changes: Partial<DisplaySettings>): void {
         this.display = { ...this.display, ...changes };
         saveDisplaySettings(this.display);
         this.store.set({ display: this.display });
     }
 
-    refundUpgrades(): void {
-        refundUpgrades(this.save);
+    refundUpgrade(upgradeId: string, style: CombatStyle = "melee"): void {
+        if (refundUpgrade(this.save, upgradeId, style)) {
+            this.persist();
+        }
+    }
+
+    refundUpgrades(style: CombatStyle = "melee"): void {
+        refundUpgrades(this.save, style);
         this.persist();
     }
 
@@ -947,6 +1083,13 @@ export class GameClient implements GameFrameHandler {
                 RegionDataLoader
             >(new RegionDataLoader(), getArenaRegion(getMap(mapId)));
             grid = new ArenaGrid(region);
+            // Only the title screen's and this map's are kept: a phone needn't
+            // hold every map played
+            for (const id of this.grids.keys()) {
+                if (id !== TITLE_MAP.id) {
+                    this.grids.delete(id);
+                }
+            }
             this.grids.set(mapId, grid);
         }
         return grid;
@@ -994,7 +1137,8 @@ export class GameClient implements GameFrameHandler {
             map.fun !== undefined ||
             (this.store.getSnapshot().endless && isEndlessUnlocked(this.save, mapId));
         const hard = this.store.getSnapshot().hard && isHardUnlocked(this.save, mapId);
-        const characterId = map.fun?.character ?? this.store.getSnapshot().characterId;
+        const expert = this.store.getSnapshot().expert && isExpertUnlocked(this.save, mapId);
+        const characterId = getMapCharacter(map) ?? this.store.getSnapshot().characterId;
         if (!(await this.travelTo(mapId, "characters"))) {
             return;
         }
@@ -1003,14 +1147,20 @@ export class GameClient implements GameFrameHandler {
             grid: this.grid,
             mapId,
             characterId,
-            metaStats: getMetaStats(this.save),
+            metaStats: getMetaStats(this.save, getCharacter(characterId).style),
             seed: (Math.random() * 0x7fffffff) | 0,
             spawnX: map.spawn.x,
             spawnY: map.spawn.y,
             unlockedItems: new Set(this.save.unlockedItems),
             endless,
             hard,
+            expert,
+            raidTeleports: RAID_TELEPORTS,
+            raidPortals: getRaidPortals(this.save, mapId),
             armoury: { ...this.save.armoury },
+            testing: this.options.raidTest
+                ? { raidRoomSeconds: 120, maxLevelUps: this.options.raidTest === "max" }
+                : undefined,
         });
         for (let i = 0; i < this.options.stress; i++) {
             sim.spawnEnemy(getEnemy("goblin"), "normal");
@@ -1121,9 +1271,11 @@ export class GameClient implements GameFrameHandler {
         this.renderer.setSmoothTerrain(map.scaperune === true);
         this.grid.exactGround = map.scaperune === true;
         this.cameraGround = undefined;
+        this.cameraLean = { x: 0, y: 0 };
         this.renderer.setBrightness(map.brightness ?? 1);
+        this.shownBrightness = map.brightness ?? 1;
         this.minimap.setMap(map);
-        const music = map.music && MUSIC[map.music];
+        const music = map.music && musicFor(map.music);
         if (music) {
             this.audio.playMusic(music);
         } else {
@@ -1137,6 +1289,7 @@ export class GameClient implements GameFrameHandler {
         this.shownDpsTick = 0;
         this.damageMeter.reset();
         this.appearanceVersions = [];
+        this.lookChoices = [];
         this.decisionKey = "";
         this.autoAlchedUid = -1;
         this.coopStopped = false;
@@ -1161,6 +1314,9 @@ export class GameClient implements GameFrameHandler {
             revive: undefined,
         });
         this.updateHud(true);
+        // A run that begins with picks to make (a boss fight's) shows them now:
+        // the loop only steps the sim once they're made
+        this.syncOverlay();
         if (this.coopRun?.isHost && this.coopRun.waitingForLoad) {
             this.store.toast("Waiting for everyone to arrive...", 3000);
         }
@@ -1203,6 +1359,24 @@ export class GameClient implements GameFrameHandler {
                     this.sounds.denied();
                 }
                 break;
+            // A banished reward greys out where it is
+            case "banish":
+                if (done) {
+                    this.sounds.reroll();
+                    this.store.set({ choices: getChoiceViews(sim) });
+                } else {
+                    this.sounds.denied();
+                }
+                break;
+            // A banished item is alched, which is the casket done
+            case "banishChest":
+                if (done) {
+                    this.handleEvents(sim, sim.takeEvents());
+                    this.syncOverlay();
+                } else {
+                    this.sounds.denied();
+                }
+                break;
             case "skip":
                 if (done) {
                     this.sounds.buy();
@@ -1241,6 +1415,10 @@ export class GameClient implements GameFrameHandler {
         if (!sim || !sim.isChoosing()) {
             return;
         }
+        if (sim.isBanishedChoice(index)) {
+            this.sounds.denied();
+            return;
+        }
         this.act({ kind: "choose", index });
     }
 
@@ -1257,6 +1435,12 @@ export class GameClient implements GameFrameHandler {
     chooseEvent(index: number): void {
         const sim = this.sim;
         if (!sim || sim.state !== "event") {
+            return;
+        }
+        // Checked here in co-op too, as with a reroll (see reroll): a key
+        // pressed for something sold would hold up leaving
+        if (this.coopRun && !sim.canChooseEventOption(index)) {
+            this.sounds.denied();
             return;
         }
         this.act({ kind: "event", index });
@@ -1302,6 +1486,22 @@ export class GameClient implements GameFrameHandler {
         }
     }
 
+    // Banishes a level up's reward (by its place), or with none the open
+    // casket's item, for one of the run's banishes. False when it can't be.
+    banish(index?: number): boolean {
+        const sim = this.sim;
+        if (!sim) {
+            return false;
+        }
+        const allowed = index === undefined ? sim.canBanishChest : sim.canBanishChoice(index);
+        // Checked here in co-op too, as with a reroll (see reroll)
+        if (this.coopRun && !allowed) {
+            this.sounds.denied();
+            return false;
+        }
+        return this.act(index === undefined ? { kind: "banishChest" } : { kind: "banish", index });
+    }
+
     // Takes none of the level up's rewards, for coins from the run. False when
     // it can't be skipped or there aren't the coins.
     skip(): boolean {
@@ -1335,6 +1535,31 @@ export class GameClient implements GameFrameHandler {
         if (this.sim && !this.sim.runOver) {
             this.paused = true;
             this.syncOverlay();
+        }
+    }
+
+    // The page lost its graphics (GameApp): a solo run stops where it stands, and
+    // nothing happens to it while its player can't see it. Says what was going on.
+    onGraphicsLost(): "none" | "solo" | "coop" {
+        if (!this.sim || this.sim.runOver) {
+            return "none";
+        }
+        if (this.coopRun) {
+            return "coop";
+        }
+        this.pause();
+        return "solo";
+    }
+
+    // Before the page reloads for its lost graphics: the run counts as the pause
+    // menu's quit does (its coins and quests are kept), with nothing more drawn
+    // or let go on the GPU
+    endRunForReload(): void {
+        if (this.sim) {
+            this.finishRun();
+        }
+        if (this.coopRun) {
+            this.coop.leave();
         }
     }
 
@@ -1376,15 +1601,15 @@ export class GameClient implements GameFrameHandler {
         this.renderer.setPlane(this.grid.plane);
         this.renderer.setSmoothTerrain(false);
         this.renderer.setBrightness(1);
+        this.shownBrightness = 1;
         this.view.reset();
         this.cameraRig.pitch = ATTRACT_PITCH;
         this.cameraRig.distance = ATTRACT_DISTANCE;
-        this.assets.setPlayerAppearance(
-            getCharacterAppearance(this.store.getSnapshot().characterId),
-        );
+        this.assets.setCharacterLook(this.store.getSnapshot().characterId);
         if (!show) {
             return;
         }
+        this.store.setNumbers(undefined);
         this.store.set({
             screen: wasCoop && this.coop.room ? "coop" : "title",
             overlay: "none",
@@ -1408,7 +1633,7 @@ export class GameClient implements GameFrameHandler {
         const result = sim.getResult();
         const locked = MAPS.filter((m) => !isMapUnlocked(this.save, m.id));
         const lockedCharacters = CHARACTERS.filter(
-            (c) => !this.save.unlockedCharacters.includes(c.id),
+            (c) => !c.only && !this.save.unlockedCharacters.includes(c.id),
         );
         const lockedItems = LOCKABLE_ITEMS.filter((i) => !this.save.unlockedItems.includes(i.id));
         const endlessRecord = result.endless && isEndlessRecord(this.save, result);
@@ -1557,23 +1782,20 @@ export class GameClient implements GameFrameHandler {
     // ---- Frame ----
 
     update(deltaTimeMs: number, camera: Camera): void {
+        this.renderer.fpsLimit = frameCap(
+            this.display.frameRate,
+            isCoarsePointer,
+            this.isStoppedBehindMenu(),
+        );
         this.fps = this.fps * 0.95 + (deltaTimeMs > 0 ? 1000 / deltaTimeMs : 0) * 0.05;
+        this.input.pollPads(performance.now(), this.isPlaying() ? "run" : "menu");
         const wheel = this.input.takeWheel();
         if (wheel !== 0 && this.sim) {
             this.cameraRig.zoom(wheel);
         }
         this.store.expireToasts();
 
-        // The world fades out past the edge of the map
-        const { baseX, baseY, sizeX, sizeY } = this.grid;
-        // The world fades out past the arena's edge. A ScapeRune map's world carries on: it
-        // has scenery there (scaperune/CLAUDE.md).
-        const open = this.sim?.map.scaperune === true ? OPEN_WORLD_MARGIN : 0;
-        const playArea = this.renderer.playArea;
-        playArea[0] = baseX - open;
-        playArea[1] = baseY - open;
-        playArea[2] = baseX + sizeX + open;
-        playArea[3] = baseY + sizeY + open;
+        setPlayArea(this.renderer, this.grid, this.sim?.map.scaperune === true);
 
         const sim = this.sim;
         if (!sim) {
@@ -1585,8 +1807,17 @@ export class GameClient implements GameFrameHandler {
             this.updateCoop(deltaTimeMs, sim, this.coopRun);
         } else if (!this.paused && (sim.state === "playing" || sim.runOver)) {
             const wasOver = sim.runOver;
-            this.accumulator += Math.min(deltaTimeMs, TICK_MS * MAX_TICKS_PER_FRAME);
-            while (this.accumulator >= TICK_MS && (sim.state === "playing" || sim.runOver)) {
+            this.accumulator = Math.min(
+                this.accumulator + deltaTimeMs,
+                TICK_MS * MAX_TICKS_PER_FRAME,
+            );
+            let steps = 0;
+            while (
+                this.accumulator >= TICK_MS &&
+                steps < SOLO_TICKS_PER_FRAME &&
+                (sim.state === "playing" || sim.runOver)
+            ) {
+                steps++;
                 this.accumulator -= TICK_MS;
                 const move = this.input.getMoveVector(this.move);
                 sim.step(move.x, move.y);
@@ -1602,9 +1833,20 @@ export class GameClient implements GameFrameHandler {
         }
 
         for (const hero of sim.heroes) {
-            if (hero.appearanceVersion !== this.appearanceVersions[hero.index]) {
+            // A level-up offering a weapon bakes its swing ahead of the pick
+            const choices = hero.choices.length > 0 ? hero.choices : undefined;
+            if (
+                hero.appearanceVersion !== this.appearanceVersions[hero.index] ||
+                choices !== this.lookChoices[hero.index]
+            ) {
                 this.appearanceVersions[hero.index] = hero.appearanceVersion;
-                this.assets.setPlayerAppearance(getRunAppearance(sim, hero.index), hero.index);
+                this.lookChoices[hero.index] = choices;
+                this.assets.setPlayerAppearance(
+                    getRunAppearance(sim, hero.index),
+                    hero.index,
+                    getRunAttackSeqs(sim, hero.index),
+                    getOfferedAttackSeqs(sim, hero.index),
+                );
             }
         }
 
@@ -1633,7 +1875,45 @@ export class GameClient implements GameFrameHandler {
             ground = last + (ground - last) * (1 - Math.exp(-deltaTimeMs / CAMERA_GROUND_EASE));
             this.cameraGround = ground;
         }
-        this.cameraRig.apply(camera, px, ground - 0.6, py);
+        const lean = this.getBossLean(sim, px, py);
+        const ease = 1 - Math.exp(-deltaTimeMs / BOSS_LEAN_EASE);
+        this.cameraLean.x += (lean.x - this.cameraLean.x) * ease;
+        this.cameraLean.y += (lean.y - this.cameraLean.y) * ease;
+        this.cameraRig.apply(camera, px + this.cameraLean.x, ground - 0.6, py + this.cameraLean.y);
+        // A raid hall can be drawn darker than the map (RaidRoomDef.hall)
+        const hallBrightness =
+            sim.map.raid && sim.raidStage === "waves"
+                ? sim.map.raid.rooms[sim.raidRoom].hall?.brightness
+                : undefined;
+        const brightness = hallBrightness ?? sim.map.brightness ?? 1;
+        if (brightness !== this.shownBrightness) {
+            this.shownBrightness = brightness;
+            this.renderer.setBrightness(brightness);
+        }
+    }
+
+    // Towards where a raid room's boss stands, while it's being fought
+    private getBossLean(sim: Sim, px: number, py: number): { x: number; y: number } {
+        const room = sim.map.raid?.rooms[sim.raidRoom];
+        if (!room || sim.raidStage !== "boss") {
+            return { x: 0, y: 0 };
+        }
+        const dx = (room.bossAt.x - px) * BOSS_LEAN;
+        const dy = (room.bossAt.y - py) * BOSS_LEAN;
+        const length = Math.hypot(dx, dy);
+        const scale = length > BOSS_LEAN_MAX ? BOSS_LEAN_MAX / length : 1;
+        return { x: dx * scale, y: dy * scale };
+    }
+
+    // Nothing but the scenery moves: the title screen, or a solo run that's stopped
+    // for a menu (a level up, a casket, the pause menu, the results). A co-op run
+    // carries on behind its menus.
+    private isStoppedBehindMenu(): boolean {
+        const sim = this.sim;
+        if (!sim) {
+            return true;
+        }
+        return !this.coopRun && (this.paused || sim.state !== "playing");
     }
 
     // A co-op run: frames step at the run's pace, the host's whenever it
@@ -1982,7 +2262,7 @@ export class GameClient implements GameFrameHandler {
         this.lastHudUpdate = performance.now();
         const thisLevel = sim.xpForThisLevel;
         const nextLevel = sim.xpForNextLevel;
-        let boss: HudView["boss"];
+        let boss: HudNumbers["boss"];
         const shownBoss = sim.shownBoss;
         if (shownBoss) {
             const phase = shownBoss.bossState?.phase;
@@ -1993,7 +2273,12 @@ export class GameClient implements GameFrameHandler {
                 enraged: !shownBoss.dead && (shownBoss.bossState?.enraged ?? false),
             };
             if (phase && !shownBoss.dead) {
-                boss.fraction = phase.shield / phase.shieldMax;
+                const finale = shownBoss.def.boss?.phases?.finale;
+                boss.fraction =
+                    phase.stage === "finale" && finale
+                        ? Math.max(0, (phase.finaleEnd ?? 0) - sim.tick) /
+                          (finale.seconds * TICKS_PER_SECOND)
+                        : phase.shield / phase.shieldMax;
                 boss.fight = {
                     phase: phase.index + 1,
                     phases: shownBoss.def.boss?.phases?.phases.length ?? 1,
@@ -2014,23 +2299,57 @@ export class GameClient implements GameFrameHandler {
         }
         this.damageMeter.sample(sim.tick, sim.damageBySource);
         const meter = this.damageMeter.read();
-        const hud: HudView = {
-            mapId: sim.map.id,
-            round: sim.endless ? sim.round : undefined,
-            bossIn: sim.timeLeftForBoss,
+        const weaponDamage: HudNumbers["weaponDamage"] = {};
+        for (const w of sim.weapons) {
+            weaponDamage[w.def.id] = {
+                dps: meter.perSecond[`weapon:${w.def.id}`] ?? 0,
+                damage: meter.totals[`weapon:${w.def.id}`] ?? 0,
+            };
+        }
+        const numbers: HudNumbers = {
+            // Whole seconds, as they're shown, so standing still changes nothing
+            bossIn: Math.ceil(sim.timeLeftForBoss),
+            raidRoom: sim.map.raid && {
+                wash:
+                    sim.raidStage === "waves"
+                        ? sim.map.raid.rooms[sim.raidRoom].hall?.wash
+                        : undefined,
+                number: sim.raidRoom + 1,
+                count: sim.map.raid.rooms.length,
+                name: sim.map.raid.rooms[sim.raidRoom].name,
+                points: sim.raidPoints,
+                waves: sim.raidStage === "waves",
+                portal: sim.raidTeleporter !== undefined && sim.raidTeleportsLeft > 0,
+                first: (this.save.mapVictories[sim.map.id] ?? 0) === 0,
+            },
             hp: Math.max(0, Math.round(sim.player.hp)),
             maxHp: sim.player.maxHp,
             poisoned: sim.player.poisonEnd !== -1,
-            level: sim.level,
             xpFraction: Math.min(
                 1,
                 Math.max(0, (sim.xp - thisLevel) / Math.max(1, nextLevel - thisLevel)),
             ),
-            seconds: sim.seconds,
+            seconds: Math.floor(sim.seconds),
             kills: sim.kills,
             coins: sim.coins,
             dps: this.shownDps,
+            weaponDamage,
             otherDps: meter.otherPerSecond,
+            buffs: getBuffViews(sim),
+            boss,
+            quests: getQuestTrackViews(this.save, sim),
+        };
+        // What hasn't changed stays the same object, so a part of the HUD that shows
+        // only that doesn't draw again
+        const shownNumbers = this.store.getNumbers();
+        const sharedNumbers = shareUnchanged(shownNumbers, numbers);
+        if (force || sharedNumbers !== shownNumbers) {
+            this.store.setNumbers(sharedNumbers);
+        }
+        const hud: HudView = {
+            mapId: sim.map.id,
+            round: sim.endless ? sim.round : undefined,
+            level: sim.level,
             maxWeapons: sim.maxWeapons,
             maxPassives: sim.maxPassives,
             weapons: sim.weapons.map((w) => {
@@ -2046,8 +2365,6 @@ export class GameClient implements GameFrameHandler {
                     stats: weaponStats(w.def, level).map(formatWeaponStat),
                     evolution: getEvolutionView(sim, w),
                     rarityColor: RARITIES[w.def.rarity].color,
-                    dps: meter.perSecond[`weapon:${w.def.id}`] ?? 0,
-                    damage: meter.totals[`weapon:${w.def.id}`] ?? 0,
                 };
             }),
             passives: sim.passives.map((p) => {
@@ -2066,17 +2383,16 @@ export class GameClient implements GameFrameHandler {
             stats: formatStats(sim.stats),
             gear: getGearViews(sim),
             inventory: getInventoryViews(sim),
-            buffs: getBuffViews(sim),
             rerolls: sim.rerollsLeft,
+            banishes: sim.banishesLeft,
             skip: sim.canSkip
                 ? { cost: sim.skipCost, affordable: sim.coins >= sim.skipCost }
                 : undefined,
-            boss,
-            quests: getQuestTrackViews(this.save, sim),
         };
         const previous = this.store.getSnapshot().hud;
-        if (force || !previous || JSON.stringify(previous) !== JSON.stringify(hud)) {
-            this.store.set({ hud });
+        const shared = shareUnchanged(previous, hud);
+        if (force || shared !== previous) {
+            this.store.set({ hud: shared });
         }
         if (sim.heroes.length > 1) {
             const party = sim.heroes

@@ -23,10 +23,11 @@ import { ENEMIES } from "../content/enemies";
 import { CASKETS, GEAR_SLOT_BY_ID, getItem } from "../content/items";
 import { getPassive } from "../content/passives";
 import { POWER_UPS, THRALLS, getPowerUp } from "../content/powerups";
+import { RAID_PORTAL_LOC } from "../content/raids";
 import { RANDOM_EVENTS, VISITOR_SPOTANIM } from "../content/randomEvents";
 import { PlayerStance, getPlayerStance } from "../content/stances";
-import { EnemyDef, EnemyOutfit, GearSlot } from "../content/types";
-import { WEAPONS } from "../content/weapons";
+import { EnemyDef, EnemyOutfit, GearSlot, WeaponDef } from "../content/types";
+import { WEAPONS, getWeapon } from "../content/weapons";
 import { BLOOD_FURY_SPOTANIM, FREEZE_SPOTANIM, NUKE_SPOTANIM, Sim } from "../core/Sim";
 import { Pickup } from "../core/entities";
 import { GameWebGLRenderer } from "../render/GameWebGLRenderer";
@@ -108,6 +109,9 @@ export const CANNON_MODEL_KEY = "loc:" + CANNON_LOC;
 // Hitsplat sprites (RuneLite's SpriteID): the red damage splat, the green
 // poison one and the blue one for a hit that was blocked (a shield's)
 export const HITSPLAT_SPRITES = { damage: 1359, poison: 1360, block: 1358 } as const;
+// The game's hint arrow (headicons_hint), the yellow one that bobs over what
+// you're pointed at
+export const HINT_ARROW_SPRITE = 441;
 
 // Every spot animation the content uses, plus the fixed ones (cannonball,
 // level up fireworks, a frozen player's ice, the bot nuke's explosions, the
@@ -181,11 +185,49 @@ function getThrownObjIds(): number[] {
     return [...ids];
 }
 
+// The animations the player does with these weapons
+function getWeaponSeqs(weapons: WeaponDef[]): number[] {
+    const seqs = weapons.flatMap((w) => [w.playerSeq, w.special?.playerSeq ?? -1]);
+    return [...new Set(seqs.filter((id) => id !== -1))];
+}
+
 // Every animation the player does with a weapon, and the emote a co-op
 // reviver performs
 export function getPlayerAttackSeqs(): number[] {
-    const seqs = WEAPONS.flatMap((w) => [w.playerSeq, w.special?.playerSeq ?? -1]);
-    return [...new Set([...seqs.filter((id) => id !== -1), REVIVE_SEQ])];
+    return [...new Set([...getWeaponSeqs(WEAPONS), REVIVE_SEQ])];
+}
+
+// The attack animations a hero's bake needs: their weapons', and in co-op the
+// reviver's emote. A new weapon changes the hero's appearanceVersion, which
+// re-bakes them with its swing.
+export function getRunAttackSeqs(sim: Sim, hero = sim.focus): number[] {
+    const seqs = getWeaponSeqs(sim.as(hero, () => sim.weapons.map((weapon) => weapon.def)));
+    return sim.heroes.length > 1 ? [...seqs, REVIVE_SEQ] : seqs;
+}
+
+// The swings of the weapons a hero's level-up choices offer that they don't
+// have yet (a new weapon, or what one evolves into), to bake ahead of the pick
+export function getOfferedAttackSeqs(sim: Sim, hero = sim.focus): number[] {
+    const choices = sim.heroes[hero].choices;
+    if (choices.length === 0) {
+        return [];
+    }
+    const offered = choices.flatMap((choice) => {
+        if (choice.kind === "newWeapon") {
+            return [getWeapon(choice.weaponId)];
+        }
+        if (choice.kind === "evolve" || choice.kind === "hilt") {
+            return [getWeapon(choice.into)];
+        }
+        return [];
+    });
+    const held = getRunAttackSeqs(sim, hero);
+    return getWeaponSeqs(offered).filter((seq) => !held.includes(seq));
+}
+
+// The swings of a character's starting weapon, what a solo run starts with
+export function getCharacterAttackSeqs(characterId: string): number[] {
+    return getWeaponSeqs([getWeapon(getCharacter(characterId).startingWeapon)]);
 }
 
 // The player's look in a run: the character's outfit, the held weapon tier,
@@ -274,6 +316,27 @@ export function getCharacterAppearance(characterId: string): PlayerAppearance {
     return appearance;
 }
 
+// Spot animations, items and scenery baked in one task: small, and there are
+// hundreds of them in the base bake
+const SMALL_BAKE_BATCH = 64;
+
+// Everything a request's bake depends on but its key and animations: requests
+// with the same body and first animation bake the same model
+function getRequestBody(request: BakeRequest): string {
+    switch (request.kind) {
+        case "npc":
+            return `npc:${request.npcId}:${request.seqIds[0]}`;
+        case "player":
+            return `player:${getAppearanceKey(request.appearance)}:${request.seqIds[0]}`;
+        case "spotanim":
+            return `spotanim:${request.spotAnimId}`;
+        case "obj":
+            return `obj:${request.objId}:${request.count}`;
+        case "loc":
+            return `loc:${request.locId}:${request.animated ? 1 : 0}`;
+    }
+}
+
 // A player's model, with the stance and power-up looks baked along with it
 type PlayerBake = {
     key?: string;
@@ -282,6 +345,27 @@ type PlayerBake = {
     looks: Map<string, ActorModel>;
     pendingKey?: string;
 };
+
+// A look's key: its appearance, and the swings it's baked with, in any order
+export function getLookKey(appearance: PlayerAppearance, attackSeqs: number[]): string {
+    return getAppearanceKey(appearance) + "|" + [...attackSeqs].sort((a, b) => a - b).join(",");
+}
+
+// Whether a look's key is this appearance with at least these swings
+export function lookHas(
+    key: string | undefined,
+    appearanceKey: string,
+    attackSeqs: number[],
+): boolean {
+    if (!key?.startsWith(appearanceKey + "|")) {
+        return false;
+    }
+    const baked = key
+        .slice(appearanceKey.length + 1)
+        .split(",")
+        .map(Number);
+    return attackSeqs.every((seq) => baked.includes(seq));
+}
 
 // All the models a run draws, baked up front, and the players' models (one
 // for each in co-op, by hero), re-baked whenever their gear changes.
@@ -300,6 +384,8 @@ export class GameAssets {
     // The current map's enemies
     private enemyPages: ActorPage[] = [];
     private readonly requestedEnemies = new Set<string>();
+    // Counts the times the enemies were dropped: a bake from before is stale
+    private enemyBakes = 0;
 
     constructor(
         readonly workerPool: RenderDataWorkerPool,
@@ -322,6 +408,8 @@ export class GameAssets {
             ...(enemy.boss?.attacks.map((a) => a.seq ?? -1) ?? []),
             enemy.boss?.intro?.seq ?? -1,
             enemy.boss?.surgeSeq ?? -1,
+            enemy.boss?.leash?.jump?.downSeq ?? -1,
+            enemy.boss?.leash?.jump?.upSeq ?? -1,
         ].filter((id, i, all) => id !== -1 && all.indexOf(id) === i);
         if (enemy.outfits) {
             return enemy.outfits.map(
@@ -334,7 +422,10 @@ export class GameAssets {
             );
         }
         const requests: BakeRequest[] = [
-            { kind: "npc", key: "npc:" + enemy.id, npcId: enemy.npcId, seqIds },
+            // An item's model stands still, under the same key the view asks for
+            enemy.objId !== undefined
+                ? { kind: "obj", key: "npc:" + enemy.id, objId: enemy.objId, count: 1 }
+                : { kind: "npc", key: "npc:" + enemy.id, npcId: enemy.npcId, seqIds },
         ];
         const shielded = enemy.shield?.look;
         if (shielded) {
@@ -359,6 +450,41 @@ export class GameAssets {
 
     static getEnemyRequests(enemies: EnemyDef[]): BakeRequest[] {
         return enemies.flatMap((enemy) => GameAssets.getEnemyBakes(enemy));
+    }
+
+    // Requests that would bake the same model, as one: several enemies can be
+    // one NPC (Nex's four phases), the same outfit, or grow the same scenery.
+    // The merged request has all of their animations, under the first one's
+    // key, and the others' keys point to it. Only requests whose first
+    // animation is the same merge, since that's where a model's height is from.
+    static mergeRequests(requests: BakeRequest[]): {
+        requests: BakeRequest[];
+        aliases: Map<string, string>;
+    } {
+        const merged = new Map<string, BakeRequest>();
+        const aliases = new Map<string, string>();
+        for (const request of requests) {
+            const body = getRequestBody(request);
+            const into = merged.get(body);
+            if (!into) {
+                merged.set(
+                    body,
+                    "seqIds" in request ? { ...request, seqIds: request.seqIds.slice() } : request,
+                );
+                continue;
+            }
+            if ("seqIds" in into && "seqIds" in request) {
+                for (const seqId of request.seqIds) {
+                    if (!into.seqIds.includes(seqId)) {
+                        into.seqIds.push(seqId);
+                    }
+                }
+            }
+            if (request.key !== into.key) {
+                aliases.set(request.key, into.key);
+            }
+        }
+        return { requests: [...merged.values()], aliases };
     }
 
     // What every run needs. Enemies are baked for the map (loadEnemies): they
@@ -432,6 +558,13 @@ export class GameAssets {
         for (const locId of locIds) {
             requests.push({ kind: "loc", key: "loc:" + locId, locId });
         }
+        // A raid hall's teleporter, swirling
+        requests.push({
+            kind: "loc",
+            key: "loc:" + RAID_PORTAL_LOC,
+            locId: RAID_PORTAL_LOC,
+            animated: true,
+        });
         // Fire flickers, so it's baked on its own animation
         for (const { burns } of WEAPONS) {
             if (burns) {
@@ -463,8 +596,7 @@ export class GameAssets {
     }
 
     async loadBase(onProgress?: (done: number, total: number) => void): Promise<void> {
-        const requests = GameAssets.getBaseRequests();
-        await this.bakeOverWorkers(requests, onProgress);
+        await this.bakeInTasks(GameAssets.getBaseRequests(), this.loadBake, onProgress);
     }
 
     hasEnemies(enemies: EnemyDef[]): boolean {
@@ -482,8 +614,8 @@ export class GameAssets {
         }
         const requests = GameAssets.getEnemyRequests(enemies);
         // Freed first, so the two lots aren't in memory together
-        this.dropEnemyPages();
-        this.enemyPages = await this.bakeOverWorkers(requests, onProgress);
+        this.dropEnemies();
+        await this.bakeEnemies(requests, onProgress);
     }
 
     // A model that isn't baked is baked now, for a run with an enemy the map's
@@ -494,12 +626,12 @@ export class GameAssets {
         }
         this.requestedEnemies.add(enemy.id);
         console.warn(`${enemy.id} isn't baked for this map`);
-        this.bakeOverWorkers(GameAssets.getEnemyRequests([enemy]))
-            .then((pages) => this.enemyPages.push(...pages))
-            .catch(console.error);
+        this.bakeEnemies(GameAssets.getEnemyRequests([enemy])).catch(console.error);
     }
 
-    private dropEnemyPages(): void {
+    // Frees the enemies' models (on a phone, at the title screen)
+    dropEnemies(): void {
+        this.enemyBakes++;
         for (const page of this.enemyPages) {
             this.actors.removePage(page);
         }
@@ -512,43 +644,84 @@ export class GameAssets {
         this.requestedEnemies.clear();
     }
 
-    // Splits a bake over the workers, one page each
-    private async bakeOverWorkers(
+    // What lands after the enemies are dropped is a dropped map's, and isn't kept
+    private async bakeEnemies(
         requests: BakeRequest[],
         onProgress?: (done: number, total: number) => void,
-    ): Promise<ActorPage[]> {
-        const chunks: BakeRequest[][] = [];
-        const chunkCount = this.workerPool.size;
-        for (let i = 0; i < chunkCount; i++) {
-            chunks.push([]);
+    ): Promise<void> {
+        const { requests: merged, aliases } = GameAssets.mergeRequests(requests);
+        const bakes = this.enemyBakes;
+        const onBake = (bake: ActorBakeResult) => {
+            if (bakes === this.enemyBakes) {
+                const [model] = this.addBake(bake).values();
+                this.enemyPages.push(model.page);
+            }
+        };
+        await this.bakeInTasks(merged, onBake, onProgress);
+        if (bakes !== this.enemyBakes) {
+            return;
         }
-        requests.forEach((request, i) => chunks[i % chunkCount].push(request));
-        const filled = chunks.filter((chunk) => chunk.length > 0);
-        let done = 0;
-        const started = performance.now();
-        const bakes = await Promise.all(
-            filled.map(async (chunk) => {
-                const bake = await this.bake(chunk);
-                onProgress?.(++done, filled.length);
-                return bake;
-            }),
-        );
-        let bytes = 0;
-        const pages: ActorPage[] = [];
-        for (const bake of bakes) {
-            bytes += bake.vertices.byteLength + bake.indices.byteLength;
-            const models = this.addBake(bake);
-            for (const model of models.values()) {
-                if (!pages.includes(model.page)) {
-                    pages.push(model.page);
-                }
+        for (const [alias, key] of aliases) {
+            const model = this.models.get(key);
+            if (model) {
+                this.models.set(alias, model);
             }
         }
+    }
+
+    private loadBake = (bake: ActorBakeResult): void => {
+        this.addBake(bake);
+    };
+
+    // A bake in small tasks, each put on the GPU as it lands, so the main
+    // thread never holds more than a few of them: baked in one go, a big map's
+    // enemies were hundreds of MB at once
+    private async bakeInTasks(
+        requests: BakeRequest[],
+        onBake: (bake: ActorBakeResult) => void,
+        onProgress?: (done: number, total: number) => void,
+    ): Promise<void> {
+        const tasks = GameAssets.getBakeTasks(requests);
+        let done = 0;
+        let bytes = 0;
+        const started = performance.now();
+        await Promise.all(
+            tasks.map(async (task) => {
+                const bake = await this.bake(task);
+                bytes += bake.vertices.byteLength + bake.indices.byteLength;
+                onBake(bake);
+                onProgress?.(++done, tasks.length);
+            }),
+        );
         console.log(
             `baked ${requests.length} actor models in ${(performance.now() - started).toFixed(0)}ms, ` +
                 `${(bytes / 1024 / 1024).toFixed(1)}MB`,
         );
-        return pages;
+    }
+
+    // An NPC or player model to a task, the small ones (spot animations, items,
+    // scenery) a batch at a time. The ones with the most animations (the
+    // bosses) go first, so the workers don't end on one big model each.
+    static getBakeTasks(requests: BakeRequest[]): BakeRequest[][] {
+        const tasks: BakeRequest[][] = [];
+        let small: BakeRequest[] = [];
+        for (const request of requests) {
+            if (request.kind === "npc" || request.kind === "player") {
+                tasks.push([request]);
+            } else {
+                small.push(request);
+                if (small.length === SMALL_BAKE_BATCH) {
+                    tasks.push(small);
+                    small = [];
+                }
+            }
+        }
+        if (small.length > 0) {
+            tasks.push(small);
+        }
+        const animations = (task: BakeRequest[]) =>
+            task.length === 1 && "seqIds" in task[0] ? task[0].seqIds.length : 0;
+        return tasks.sort((a, b) => animations(b) - animations(a));
     }
 
     async loadSprites(spriteIds: number[]): Promise<void> {
@@ -607,19 +780,44 @@ export class GameAssets {
         }
     }
 
-    // Bakes a player model for this look unless it's already the current one.
-    // The old model keeps drawing until the new one is ready.
-    async setPlayerAppearance(appearance: PlayerAppearance, slot = 0): Promise<void> {
+    // The character's look on the menus, with their starting weapon's swing:
+    // the look a run starts with, so it needn't bake again then
+    setCharacterLook(characterId: string): Promise<void> {
+        return this.setPlayerAppearance(
+            getCharacterAppearance(characterId),
+            0,
+            getCharacterAttackSeqs(characterId),
+        );
+    }
+
+    // Bakes a player model for this look unless the current one (or the one
+    // on its way) already has it. The old model keeps drawing until the new
+    // one is ready. attackSeqs: the swings it needs (getRunAttackSeqs), none on
+    // the title screen. offeredSeqs: the swings of weapons a choice offers
+    // (getOfferedAttackSeqs), baked ahead so a weapon picked swings at once;
+    // the ones not picked go at the next re-bake.
+    async setPlayerAppearance(
+        appearance: PlayerAppearance,
+        slot = 0,
+        attackSeqs: number[] = [],
+        offeredSeqs: number[] = [],
+    ): Promise<void> {
         const player = this.getPlayerBake(slot);
-        const key = getAppearanceKey(appearance);
-        if (key === player.key || key === player.pendingKey) {
+        const appearanceKey = getAppearanceKey(appearance);
+        const wanted = [...attackSeqs, ...offeredSeqs];
+        if (
+            lookHas(player.key, appearanceKey, wanted) ||
+            lookHas(player.pendingKey, appearanceKey, wanted)
+        ) {
             return;
         }
+        const seqs = wanted.filter((seq, i) => wanted.indexOf(seq) === i);
+        const key = getLookKey(appearance, seqs);
         player.pendingKey = key;
         const same = this.players.find((other) => other?.key === key && other.model);
         const look = same
             ? { models: same.looks, stance: same.stance }
-            : await this.bakeLook(key, appearance);
+            : await this.bakeLook(key, appearance, seqs);
         if (player.pendingKey !== key || this.players[slot] !== player) {
             // A newer look was asked for while this one baked, or the player's
             // gone (and it's no use unless another player's waiting on it)
@@ -641,6 +839,7 @@ export class GameAssets {
     private bakeLook(
         key: string,
         appearance: PlayerAppearance,
+        attackSeqs: number[],
     ): Promise<{ models: Map<string, ActorModel>; stance: PlayerStance }> {
         let baking = this.bakingLooks.get(key);
         if (!baking) {
@@ -655,8 +854,8 @@ export class GameAssets {
                     stance.idle,
                     stance.run,
                     PLAYER_SEQS.death,
-                    ...getPlayerAttackSeqs(),
-                ];
+                    ...attackSeqs,
+                ].filter((id, i, all) => all.indexOf(id) === i);
                 const bake = await this.bake([
                     { kind: "player", key: "player", appearance, seqIds },
                     ...getPowerUpLookRequests(appearance),

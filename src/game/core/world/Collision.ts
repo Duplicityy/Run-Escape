@@ -101,14 +101,20 @@ function testTile(grid: BlockGrid, pos: Vec2, radius: number, tileX: number, til
     }
 }
 
+// Rounding room for the tiles a circle can touch: one whose edge is a hair
+// from the circle's, as far as floating point can tell, is still looked at.
+const TILE_EPSILON = 1e-7;
+
 // Moves a circle out of everything it overlaps.
 export function resolveCircle(grid: BlockGrid, pos: Vec2, radius: number): void {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
         contact.depth = 0;
-        const minX = Math.floor(pos.x - radius) - 1;
-        const maxX = Math.floor(pos.x + radius) + 1;
-        const minY = Math.floor(pos.y - radius) - 1;
-        const maxY = Math.floor(pos.y + radius) + 1;
+        // Only the tiles under the circle: everything on a tile (its box,
+        // walls and posts) stays inside it, so nothing further can touch
+        const minX = Math.floor(pos.x - radius - TILE_EPSILON);
+        const maxX = Math.floor(pos.x + radius + TILE_EPSILON);
+        const minY = Math.floor(pos.y - radius - TILE_EPSILON);
+        const maxY = Math.floor(pos.y + radius + TILE_EPSILON);
         for (let tileY = minY; tileY <= maxY; tileY++) {
             for (let tileX = minX; tileX <= maxX; tileX++) {
                 testTile(grid, pos, radius, tileX, tileY);

@@ -12,6 +12,9 @@ export type CoopAction =
     | { kind: "choose"; index: number }
     | { kind: "reroll" }
     | { kind: "skip" }
+    // Banishing a level up's reward (by its place), or the open casket's item
+    | { kind: "banish"; index: number }
+    | { kind: "banishChest" }
     | { kind: "chest"; action: ChestAction }
     | { kind: "item"; index: number }
     // A random event's offer: take one of its options, or walk away
@@ -29,6 +32,9 @@ export type FrameEvent = {
     // Echoed for the sender's visual prediction. Never used by the sim.
     moveSeq?: number;
     action?: CoopAction;
+    // A guest's numbering of its actions, echoed so it knows which arrived
+    // (see CoopRun). Never used by the sim.
+    actionSeq?: number;
     auto?: true;
     leave?: true;
 };
@@ -49,9 +55,11 @@ export function cleanAction(value: unknown): CoopAction | undefined {
         case "choose":
         case "item":
         case "event":
+        case "banish":
             return isIndex && index < MAX_INDEX ? { kind, index } : undefined;
         case "reroll":
         case "skip":
+        case "banishChest":
         case "leaveEvent":
             return { kind };
         case "chest":
@@ -81,7 +89,10 @@ export function cleanFrameEvent(value: unknown, heroCount: number): FrameEvent |
     if (!value || typeof value !== "object") {
         return undefined;
     }
-    const { frame, hero, move, moveSeq, action, auto, leave } = value as Record<string, unknown>;
+    const { frame, hero, move, moveSeq, action, actionSeq, auto, leave } = value as Record<
+        string,
+        unknown
+    >;
     if (
         !Number.isSafeInteger(frame) ||
         !Number.isInteger(hero) ||
@@ -101,6 +112,8 @@ export function cleanFrameEvent(value: unknown, heroCount: number): FrameEvent |
         ...(cleanedMove && { move: cleanedMove }),
         ...(cleanedMove && cleanMoveSeq(moveSeq) !== undefined && { moveSeq: moveSeq as number }),
         ...(cleanedAction && { action: cleanedAction }),
+        ...(cleanedAction &&
+            cleanMoveSeq(actionSeq) !== undefined && { actionSeq: actionSeq as number }),
         ...(auto === true && { auto }),
         ...(leave === true && { leave }),
     };
@@ -148,7 +161,11 @@ export function applyFrameEvent(sim: Sim, event: FrameEvent): void {
 export function applyAction(sim: Sim, action: CoopAction): boolean {
     switch (action.kind) {
         case "choose":
-            if (!sim.isChoosing() || !sim.choices[action.index]) {
+            if (
+                !sim.isChoosing() ||
+                !sim.choices[action.index] ||
+                sim.isBanishedChoice(action.index)
+            ) {
                 return false;
             }
             sim.choose(action.index);
@@ -157,6 +174,10 @@ export function applyAction(sim: Sim, action: CoopAction): boolean {
             return sim.reroll();
         case "skip":
             return sim.skip();
+        case "banish":
+            return sim.banishChoice(action.index);
+        case "banishChest":
+            return sim.banishChest();
         case "chest":
             if (sim.state !== "chest" || !sim.chest) {
                 return false;

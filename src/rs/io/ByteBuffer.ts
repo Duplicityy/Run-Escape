@@ -178,7 +178,12 @@ export class ByteBuffer {
     }
 
     readUnsignedBytes(amount: number): Uint8Array {
-        const bytes = new Uint8Array(this._data.buffer).subarray(this.offset, this.offset + amount);
+        const data = this._data;
+        // The data can be part of a larger buffer (a file in an archive)
+        const bytes = new Uint8Array(data.buffer, data.byteOffset, data.length).subarray(
+            this.offset,
+            this.offset + amount,
+        );
         this.offset += amount;
         return bytes;
     }

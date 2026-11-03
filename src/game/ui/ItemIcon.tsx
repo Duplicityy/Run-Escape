@@ -20,16 +20,21 @@ import { pixelRatio } from "../../util/DeviceUtil";
 const ICON_RETRIES = 3;
 const ICON_RETRY_MS = 1000;
 
+// An interface sprite to draw: padded out to an item icon (no frame), or one
+// frame of it at its own size (a flag)
+type SpriteRequest = { id: number; frame?: number };
+
 // Item icons are drawn in a worker from the item's model and kept as data
 // URLs. Requests made in the same frame go to the worker together. Some icons
 // are interface sprites instead (Piety's prayer icon), padded out to an item
-// icon's size so they line up with the rest.
+// icon's size so they line up with the rest. A frame of a sprite (a flag) is
+// kept at its own size.
 export class IconCache {
     private workerPool?: RenderDataWorkerPool;
     private readonly urls = new Map<string, string>();
     private readonly waiting = new Map<string, ((url: string) => void)[]>();
     private queued: { objId: number; count: number }[] = [];
-    private queuedSprites: number[] = [];
+    private queuedSprites: SpriteRequest[] = [];
     private flushScheduled = false;
     // Batches that failed in a row, for how long to wait before trying again
     private failures = 0;
@@ -48,12 +53,25 @@ export class IconCache {
         return `sprite:${spriteId}`;
     }
 
+    static frameKey(spriteId: number, frame: number): string {
+        return `frame:${spriteId}:${frame}`;
+    }
+
+    private static requestKey({ id, frame }: SpriteRequest): string {
+        return frame === undefined ? IconCache.spriteKey(id) : IconCache.frameKey(id, frame);
+    }
+
     get(objId: number, count: number): string | undefined {
         return this.urls.get(IconCache.key(objId, count));
     }
 
     getSprite(spriteId: number): string | undefined {
         return this.urls.get(IconCache.spriteKey(spriteId));
+    }
+
+    // "" for a frame the cache hasn't got
+    getFrame(spriteId: number, frame: number): string | undefined {
+        return this.urls.get(IconCache.frameKey(spriteId, frame));
     }
 
     request(objId: number, count: number, callback: (url: string) => void): void {
@@ -64,8 +82,16 @@ export class IconCache {
     }
 
     requestSprite(spriteId: number, callback: (url: string) => void): void {
-        if (this.wait(IconCache.spriteKey(spriteId), callback)) {
-            this.queuedSprites.push(spriteId);
+        this.queueSprite({ id: spriteId }, callback);
+    }
+
+    requestFrame(spriteId: number, frame: number, callback: (url: string) => void): void {
+        this.queueSprite({ id: spriteId, frame }, callback);
+    }
+
+    private queueSprite(request: SpriteRequest, callback: (url: string) => void): void {
+        if (this.wait(IconCache.requestKey(request), callback)) {
+            this.queuedSprites.push(request);
             this.scheduleFlush();
         }
     }
@@ -115,7 +141,7 @@ export class IconCache {
         }
         const requests = this.queued;
         this.queued = [];
-        const spriteIds = this.queuedSprites;
+        const spriteRequests = this.queuedSprites;
         this.queuedSprites = [];
         let icons: ItemIconData[];
         let sprites: SpriteImage[];
@@ -127,10 +153,13 @@ export class IconCache {
                           { requests },
                       )
                     : [],
-                spriteIds.length > 0
+                spriteRequests.length > 0
                     ? workerPool.queueLoad<SpriteDataInput, SpriteImage[], SpriteDataLoader>(
                           new SpriteDataLoader(),
-                          { spriteIds },
+                          {
+                              spriteIds: spriteRequests.map((request) => request.id),
+                              frames: spriteRequests.map((request) => request.frame ?? 0),
+                          },
                       )
                     : [],
             ]);
@@ -147,11 +176,11 @@ export class IconCache {
                 this.waiting.delete(key);
                 again.push(() => callbacks.forEach((cb) => this.request(objId, count, cb)));
             }
-            for (const id of spriteIds) {
-                const key = IconCache.spriteKey(id);
+            for (const request of spriteRequests) {
+                const key = IconCache.requestKey(request);
                 const callbacks = this.waiting.get(key) ?? [];
                 this.waiting.delete(key);
-                again.push(() => callbacks.forEach((cb) => this.requestSprite(id, cb)));
+                again.push(() => callbacks.forEach((cb) => this.queueSprite(request, cb)));
             }
             if (this.failures < ICON_RETRIES) {
                 this.failures++;
@@ -163,18 +192,23 @@ export class IconCache {
         for (const icon of icons) {
             this.resolve(IconCache.key(icon.objId, icon.count), toDataUrl(icon.pixels));
         }
-        for (const sprite of sprites) {
-            this.resolve(IconCache.spriteKey(sprite.id), spriteToDataUrl(sprite));
-        }
+        // The worker answers in the order it was asked
+        sprites.forEach((sprite, i) => {
+            const request = spriteRequests[i];
+            this.resolve(
+                IconCache.requestKey(request),
+                request.frame === undefined ? spriteToDataUrl(sprite) : frameToDataUrl(sprite),
+            );
+        });
     }
 }
 
-function toDataUrl(argb: Int32Array): string {
+function toDataUrl(argb: Int32Array, width = ICON_WIDTH, height = ICON_HEIGHT): string {
     const canvas = document.createElement("canvas");
-    canvas.width = ICON_WIDTH;
-    canvas.height = ICON_HEIGHT;
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext("2d")!;
-    const image = ctx.createImageData(ICON_WIDTH, ICON_HEIGHT);
+    const image = ctx.createImageData(width, height);
     for (let i = 0; i < argb.length; i++) {
         const pixel = argb[i];
         image.data[i * 4] = (pixel >> 16) & 0xff;
@@ -202,6 +236,13 @@ function spriteToDataUrl(sprite: SpriteImage): string {
         }
     }
     return toDataUrl(argb);
+}
+
+// A sprite's frame as it is, or "" for one the cache hasn't got
+function frameToDataUrl(sprite: SpriteImage): string {
+    return sprite.width > 0 && sprite.height > 0
+        ? toDataUrl(sprite.pixels, sprite.width, sprite.height)
+        : "";
 }
 
 export const iconCache = new IconCache();
@@ -235,7 +276,9 @@ export function ItemIcon({ objId, spriteId, size = 32, count = 1 }: Props): JSX.
     const [loaded, setLoaded] = useState(() => ({ key, url: cached() }));
     // When the item changes (a reroll), never the last item's icon while the
     // new one is drawn
-    const url = loaded.key === key ? loaded.url : cached();
+    const previousCoin =
+        key.startsWith("995:") && loaded.key.startsWith("995:") ? loaded.url : undefined;
+    const url = loaded.key === key ? loaded.url : (cached() ?? previousCoin);
     useEffect(() => {
         let cancelled = false;
         const callback = (url: string) => {

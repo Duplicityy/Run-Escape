@@ -1,9 +1,13 @@
 import { SCAPERUNE_DEV_MAPS } from "../scaperune/maps/devMaps";
 import { HALLOWED_BOSS_ARENA, HALLOWED_NIGHT } from "../scaperune/maps/hallowedNight";
+import { SANCTUARY_BOSS_ARENA, SISTERHOOD_SANCTUARY } from "../scaperune/maps/sisterhoodSanctuary";
 import { MapRecipe, getRecipeArena, getRecipeWorldTile } from "../scaperune/recipe";
-import { getEnemy } from "./enemies";
+import { ENEMY_BY_ID, getEnemy } from "./enemies";
 import { FUN_MAPS } from "./fun/maps";
-import { MapDef } from "./types";
+import { PHOSANI_START_DISTANCE } from "./phosani";
+import { RAID_MAPS } from "./raids";
+import { RANDOM_EVENTS } from "./randomEvents";
+import { EnemyDef, MapDef } from "./types";
 import {
     BARROWS_EVENTS,
     BARROWS_WAVES,
@@ -325,17 +329,59 @@ export const MAPS: MapDef[] = [
         seasonal: true,
         brightness: 0.8,
     },
+    {
+        id: "phosani",
+        name: "Phosani's Nightmare",
+        description:
+            "The Nightmare's hard mode, on its own: her dream, walled round in the stone of the " +
+            "Sisterhood Sanctuary beneath Slepe. No waves, no picks and no items: " +
+            "the Armadyl crossbow, and her. She rises as you arrive, quicker than before and " +
+            "with more at once, and every hit of hers is shown before it lands. Her totems' " +
+            "blasts are the only rest, and each heals you.",
+        // The Inquisitor's great helm
+        iconObjId: 24419,
+        arena: getRecipeArena(SISTERHOOD_SANCTUARY),
+        // South of the arena's middle, where her entrance stands the player
+        // anyway: she rises at the middle itself
+        spawn: {
+            x: SANCTUARY_BOSS_ARENA.baseX + SANCTUARY_BOSS_ARENA.size / 2,
+            y: SANCTUARY_BOSS_ARENA.baseY + SANCTUARY_BOSS_ARENA.size / 2 - PHOSANI_START_DISTANCE,
+        },
+        // Her hitpoints come from the event: a run here has the Inquisitor's
+        // crossbow and nothing more, not fifteen minutes of levels. Her hits are
+        // tuned to the Inquisitor's hitpoints too: a big one takes about half,
+        // as hers do on Hallowed Night with a whole run's behind you
+        difficulty: { hp: 1, damage: 1 },
+        hard: { hp: 1.3, damage: 1.3 },
+        waves: [],
+        events: [{ at: 0, kind: "finalBoss", enemyId: "phosanis_nightmare", hp: 6000 }],
+        finalBossWarning: "",
+        victoryText: "Phosani's Nightmare is laid to rest!",
+        bossArena: SANCTUARY_BOSS_ARENA,
+        scaperune: true,
+        fight: { requires: "halloween", character: "inquisitor", weaponLevel: 3 },
+        brightness: 0.75,
+        // Her own track; the recording goes in src/media/music (see GameClient)
+        music: "The Bane of Ashihama",
+    },
 ];
 
 // The maps that open one after another
-export const CAMPAIGN_MAPS: MapDef[] = MAPS.filter((map) => !map.seasonal);
+export const CAMPAIGN_MAPS: MapDef[] = MAPS.filter((map) => !map.seasonal && !map.fight);
 
 // Open from the start, between the campaign and the fun maps
 export const SEASONAL_MAPS: MapDef[] = MAPS.filter((map) => map.seasonal);
 
+// Boss fights on their own, each open once its map has been beaten
+export const FIGHT_MAPS: MapDef[] = MAPS.filter((map) => map.fight);
+
 // The fun maps (fun/maps.ts): open from the start and endless, outside the
 // campaign's chain
 export { FUN_MAPS };
+
+// Raids (raids.ts): rooms one after another, each with its boss. Open from the start, outside the
+// campaign's chain.
+export { RAID_MAPS };
 
 // Dev server only (or DEV_MAPS=1 in a script): ScapeRune's maps, ground of our
 // own rather than a slice of the real world (scaperune/CLAUDE.md)
@@ -373,8 +419,8 @@ function createDevMap(recipe: MapRecipe): MapDef {
 
 export const DEV_MAPS: MapDef[] = showDevMaps ? SCAPERUNE_DEV_MAPS.map(createDevMap) : [];
 
-// Every map, the campaign's and the fun ones
-export const ALL_MAPS: MapDef[] = [...MAPS, ...FUN_MAPS, ...DEV_MAPS];
+// Every map, the campaign's, the raids and the fun ones
+export const ALL_MAPS: MapDef[] = [...MAPS, ...RAID_MAPS, ...FUN_MAPS, ...DEV_MAPS];
 
 export const MAP_BY_ID: Map<string, MapDef> = new Map(ALL_MAPS.map((m) => [m.id, m]));
 
@@ -392,8 +438,22 @@ export function isFunMap(mapId: string): boolean {
     return MAP_BY_ID.get(mapId)?.fun !== undefined;
 }
 
+export function isRaidMap(mapId: string): boolean {
+    return MAP_BY_ID.get(mapId)?.raid !== undefined;
+}
+
 export function isSeasonalMap(mapId: string): boolean {
     return MAP_BY_ID.get(mapId)?.seasonal === true;
+}
+
+export function isFightMap(mapId: string): boolean {
+    return MAP_BY_ID.get(mapId)?.fight !== undefined;
+}
+
+// The adventurer everyone plays on a map, if it has one (Durial321 in
+// Falador, the Inquisitor against Phosani's Nightmare)
+export function getMapCharacter(map: MapDef): string | undefined {
+    return map.fun?.character ?? map.fight?.character;
 }
 
 export function getMap(id: string): MapDef {
@@ -429,4 +489,36 @@ export function hasPoison(map: MapDef): boolean {
             effect?.kind === "debuff" ? effect.stacks !== undefined : effect?.kind === "poison",
         ),
     );
+}
+
+// Whether anything that flies can turn up on the map. It goes by every enemy
+// id anywhere in the map's data and the random events', and in theirs in turn
+// (summons, splits, risen forms), so it doesn't need to know where ids are kept.
+// Sim builds the flight grid with the map when this says so, rather than on
+// the tick the first flier turns up.
+export function hasFliers(map: MapDef): boolean {
+    const seen = new Set<object>();
+    const enemies: EnemyDef[] = [];
+    const visit = (value: unknown): void => {
+        if (typeof value === "string") {
+            const enemy = ENEMY_BY_ID.get(value);
+            if (enemy && !seen.has(enemy)) {
+                enemies.push(enemy);
+                visit(enemy);
+            }
+        } else if (
+            typeof value === "object" &&
+            value !== null &&
+            !ArrayBuffer.isView(value) &&
+            !seen.has(value)
+        ) {
+            seen.add(value);
+            for (const item of Object.values(value)) {
+                visit(item);
+            }
+        }
+    };
+    visit(map);
+    visit(RANDOM_EVENTS);
+    return enemies.some((enemy) => enemy.flies);
 }

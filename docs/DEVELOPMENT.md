@@ -131,6 +131,11 @@ in the code to go out of date. Until the first fetch comes back (or if it fails,
 then tries again a minute later), players look like Cloudflare to the limits; a failed refresh
 keeps the last list. `CLOUDFLARE_IPS` gives the list instead, and then nothing's fetched.
 
+Players' flags (see Co-op below) come from Cloudflare too: with `cloudflare`, the relay takes its
+`CF-IPCountry` header, from Cloudflare's addresses only, as with `CF-Connecting-IP`. Cloudflare
+adds it while IP Geolocation is on (Network, in the dashboard). Behind anything else the relay
+can't tell where anyone is, and nobody gets a flag.
+
 Its limits, at the top of `server/coop-relay.mjs`:
 
 | What                          | Limit                                                                                                 |
@@ -172,6 +177,12 @@ mostly Node writing to sockets.
 Or build with `VITE_COOP_URL=wss://relay.example.com/coop npm run build` to point it anywhere
 else. `npm start` and `npm run preview` run a relay of their own at `/coop`
 (`npm run start:singleplayer`, or `MULTIPLAYER=off`, without).
+
+**On Cloudflare instead.** [server/cloudflare/](../server/cloudflare/README.md) is the same relay
+as a Cloudflare Worker with Durable Objects: a lobby for the rooms list and names, and each room its
+own object, started near its host, so a run's traffic doesn't cross the world to one server. There's
+no server to run, and it's at a `workers.dev` address with no domain needed. Its README has the
+setup, from `wrangler login` to the build, and what it costs. The game works with either relay.
 
 #### Optional multiplayer metrics
 
@@ -385,7 +396,8 @@ src/game/
             of gear upgrades into), power-ups and thralls, random events, characters, shop, maps
             (arena, spawn, difficulty) and their waves: plain data with cache ids; unlocks
             (what each map's tasks bring in); quests (what each asks for and pays); hard (hard
-            mode's numbers)
+            mode's numbers); raids (a raid's rooms, points, supply chest, teleporters) and theatre
+            (the Theatre of Blood's bosses)
     fun/    the fun maps (endless, random bosses) and their players: outfits, chat, shots
   core/     the game in plain TypeScript (no DOM), tested with vitest
     Sim.ts            fixed 20ms tick: movement, enemies, spawning, weapons, pickups, power-ups,
@@ -394,7 +406,13 @@ src/game/
     world/            ArenaGrid (collision + heights), Collision (circle vs tiles and walls),
                       FlowField (Dijkstra from the player, how hundreds of enemies find a way),
                       FlightGrid (the terrain walls that stop what flies: blocked floor that
-                      isn't liquid, and solid clumps too big to be a tree)
+                      isn't liquid, and solid clumps too big to be a tree). A grid works out
+                      once, as it's made, which steps out of each tile are allowed (`Steps`,
+                      for flow fields and straight walks). Sim makes the FlightGrid with the
+                      map when anything on it flies (`hasFliers` in content/maps.ts), since
+                      making it takes a while
+    SpatialHash.ts    enemies (and piles of bones) by cell, for what's near: flat arrays over
+                      the arena, kept from tick to tick
     lockstep.ts       co-op's frame events, applying them, and the check that copies agree
     fmath.ts          trigonometry that every browser works out the same, for co-op
     Upgrades.ts       level up choices
@@ -408,19 +426,23 @@ src/game/
             button on the dev server's title screen. Its CLAUDE.md is the guide to making one
   client/   GameClient (run flow, camera, input), GameView (3D actors + 2D overlay),
             BossFightView (a phased boss's ground marks, bullets and entrance),
-            GameAssets (what gets baked), GameStore (state for the React UI), SaveLock (one
-            tab saves at a time), DamageMeter (each weapon's damage a second for the HUD's
-            damage panel)
+            GameAssets (what gets baked), GameStore (state for the React UI, and the HUD's
+            numbers apart from it), SaveLock (one tab saves at a time), DamageMeter (each
+            weapon's damage a second for the HUD's damage panel), Minimap
     coop/     CoopLobby (the relay connection and the room), CoopRun (a run's lockstep, host or
               guest), protocol (the messages)
   render/   GameWebGLRenderer (the map viewer's renderer with the game's passes), CameraRig
   ui/       React screens and HUD, ChestModal (the casket opening), EventModal (a random event's
-            offer), ItemIcon, CoopScreen (the rooms, the lobby, the party in a run),
+            offer), ItemIcon, CountryFlag (a co-op player's flag), CoopScreen (the rooms, the
+            lobby, the party in a run),
             formatCompact (short numbers like 9.5K and 1.2B, for the damage panel)
   client/GameTouch.ts, ui/TouchControls.tsx, ui/Mobile.css   touch screens (see Touch screens)
+  client/GamePad.ts, ui/PadHint.tsx                          controllers (see Controllers)
 server/     coop-relay.mjs: co-op's rooms, and passes each run's frames between its players
+  cloudflare/  the same relay on Cloudflare Durable Objects, each room near its host (README.md)
 src/mapviewer/webgl/actor/   actor renderer: baked animation frames drawn anywhere in the world,
-                             any number of them, one multi-draw per pass
+                             any number of them, one multi-draw per segment and pass (without
+                             multi draw, one instanced draw per frame of an animation)
 src/mapviewer/worker/        RegionDataLoader (collision and heights for the whole arena in one
                              scene build), ItemIconLoader (inventory icons drawn like the client)
                              SoundLoader (sound effects synthesized off the main thread),
@@ -436,27 +458,149 @@ gives a ScapeRune map a loc a different model or size, and two bugs were fixed (
 map square, and a resize during loading leaving the 3D view in a corner). `?viewer=1` still loads
 map squares its own way (see below).
 
+The main thread and every worker decode the cache's tables for themselves, so they're kept small:
+an index's reference table is decoded the first time something reads the index, into flat arrays
+(`ReferenceTable`); a group's files stay in one array (`Archive`), so a file's data can be part of
+a bigger buffer (mind its `byteOffset`); and `MapViewer`'s loaders are made the first time they're
+used. The game's main thread only needs the textures, the seqs of animated scenery and the map
+index, plus the locs when a ScapeRune recipe runs.
+
 ### Boss fights as data
 
 A boss's fight is in its `BossDef` and `BossAttackDef`, with no boss named in `Sim.ts`. The Nightmare
 (`content/nightmare.ts`) is built from these, and any boss can use them:
 
 - `BossDef.intro`: the player's safe, the screen goes dark, what's left runs for the map's edge and
-  is gone, and the boss rises. `alone` stops the waves until it's dead.
+  is gone, and the boss rises. `alone` stops the waves until it's dead. `atMiddle` rises it at the
+  middle of the map's `bossArena` with the players stood `distance` south of it (Phosani's), and
+  `holds` roots them until it's over: `Sim.introHolds`, which the movement rules and co-op's
+  prediction take like a hold. A boss's cooldown doesn't run while it rises, so the grace after an
+  entrance is set as it rises: a second, or none after `holds`.
 - `BossDef.phases`: a shield, then totems in the corners, then a blast for a share of its hitpoints.
   Only the shield takes hits, in `damageEnemy`. Totems are enemies that can't die: their hitpoints
   are the charge they still need, and `shieldEnd` is `Infinity` while they can't be hit, which keeps
-  weapons off them.
-- Attack kinds `pattern` (rings, spirals, aimed spreads), `ground` (marks that land, or stay armed),
-  `quarters`, `surge` and `mark`, and `phases` on an attack for when it's used.
+  weapons off them. With the shield down the boss is off them the same way, and a projectile flies
+  on through it with no blocked splat (`stepProjectiles`), so nothing of the player's registers
+  on it until the totems have blasted.
+- Attack kinds `pattern` (rings, spirals, aimed spreads), `ground` (marks that land, or stay armed;
+  a `ring` of marks is round the boss unless `around: "player"`, as Phosani's claw on the player
+  has), `quarters`, `surge` and `mark`, and `phases` on an attack for when it's used.
+- The bullet hell's own tools (Phosani's Nightmare): `chain` uses an attack again straight after,
+  with its own windup, a lane or spots picked afresh each time; `toMiddle` leaps the boss to the
+  arena's middle as it begins (a `quarters` attack's lines cross there, placed where it will
+  stand), with its `leash.jump` if it has one, the windup then running from when it's up
+  (`leapToMiddle` returns the spot and the jump's ticks, and `stepLeap` goes on to the windup's
+  animation), and the view flashes the quarters that will hurt red for a second as the flowers
+  first appear (`flashQuarters`, a colour overlay); `QuartersDef.during` has
+  it stand among its flowers using only those attacks at its own interval; a `pattern`'s `gap`
+  leaves a way through a ring that turns with it, and `track` re-aims a spread's every volley.
+- More of them, from the bullet hells she's modelled on: `gapAt` puts a ring's gap on the player or
+  away from them (Hush's ring with the gap at Isaac); `mirror` fires each volley again mirrored
+  about the aim, so the two turn opposite ways (a sweep's arms open like scissors, a spiral winds
+  against itself, as Doremy's do); `speedUp` quickens each volley so rings catch each other up
+  (Sparen's stacks); `around` fires a ring in from a circle round the player (Doremy's Ochre
+  Confusion); and `follow` on an attack names the one that comes delay seconds after it's fired,
+  through whatever's in the air (Rumia's slow rings and then an aimed volley). `summon.distance`
+  puts summons in a ring that far out, and with `summon.thrown` they fly out of the boss to spots
+  that far off in random directions (`Enemy.flung`, drawn in an arc by the view), shielded until
+  they land. An enemy with `hatches` is gone after its seconds with its `into` out where it stood
+  unless it's killed first (counted from landing, when thrown), `objId` draws it as an item's
+  model with nothing to animate (Phosani's eggs are the Parasitic egg, baked as an `obj` under the
+  enemy's key), `healthBar` keeps its bar over it from the start, and `solid` has the player give
+  way instead of pushing it (as what can't move already did). A boss faces down its lane from the
+  moment a `surge` is picked until the charge is done, and totems face the arena's middle plus
+  `totems.yawOffset`, since The Nightmare's totem model has its scroll three-quarters of the way
+  round from its yaw (the crowd code leaves their yaw alone). A ground attack's `grab` plays its
+  `middleSpotAnim` out in full where each mark lands (an `Effect` with `fitRadius`, which the view
+  scales to), instead of the faint warning just vanishing: the warning is a frame of the hands up
+  (`GRAB_WARNING_TICK`) held still at `GRAB_WARNING_ALPHA`, as wide as the mark (`fit` 1), kept
+  until the real hands have risen into sight (`grab.up.from`), and the mark only hurts from then
+  until they sink (`up.to`), so what's drawn is what's hit; Phosani's marks are 0.75 tiles, near the
+  real fight's one-tile hands, with more to a ring. The mark stays up for the grab's seconds (`GroundHazard.grabEnd`)
+  and hurts each hero once who steps in meanwhile (`hit`), and the boss's `channelEnd` runs to
+  the end of the animation, so a chain's next round waits for the hands. `leash.jump` has a leashing boss play a down
+  animation where it is and an up one where it lands (`BossState.leap`), doing nothing else
+  meanwhile, and never between a `chain`'s links or before a `follow` (a charge ends at the far
+  edge and its next lane is picked from there; a leash then had her sink, come up by the player
+  and snap back to the lane). A bullet is drawn no smaller than its hit radius, whatever its
+  `scale`, so a miss that looks like one is one. The view shows a surge's lane for its first second only, and a grab mark is its hands
+  alone (no outer model), faint until it lands. The Nightmare's NPC ids are
+  several models on two skeletons: her real absorb (8604) and pit rising (8610) are on the other
+  one (npc 9431's) and tear her usual model apart, so `nightmare.ts` uses her summon for the
+  absorb and 8594 for a charge's wind-up, with 8607 and 8609 (npc 9432's) as her sink and rise.
+  `scripts/cache/find-npc-seqs.ts` lists what each id's skeleton can play. `hintArrow` on an enemy has `BossFightView` draw the cache's
+  hint arrow sprite (`HINT_ARROW_SPRITE`, `headicons_hint`) bobbing over it, or an arrow at the
+  screen's edge when it's off the screen, as the totems get.
 - `Sim.bossArena` is the square all this goes by: `MapDef.bossArena`, or the whole map. Nothing's
   sized by hand, so she fights on any square.
+- A map's `music` names an OSRS track, and its recording (from the OSRS Wiki) goes in
+  `src/media/music` as the name in lower case with underscores: `the_bane_of_ashihama.ogg` for
+  Phosani's Nightmare. `GameClient` finds the files with a glob, so a track can be named before
+  its recording is in: the map is silent until it is, and nothing breaks.
+- `MapDef.fight` makes a map one fight (Phosani's Nightmare, `content/phosani.ts`): no waves, its
+  final boss event at 0, and the adventurer's starting weapon at `weaponLevel` from the first tick,
+  with nothing in the fight dropping anything (`dropLoot` keeps only the collection log's
+  trophies there). Phosani's is built from her data alone: her sweep
+  is a one-bullet `spread` that `turn`s each volley, and her husks are a `scatter` summon of
+  enemies with `holds`, which pin the player once they arrive (`holdPlayer`).
+- What makes a bullet hell hard, all defaulting to how The Nightmare plays: `BossDef.bulletGrace`
+  is the seconds after one of its bullets hits before another can (`stepBullets`; a second unless
+  set, Phosani's 0.3). A pattern's `channel` is how long the boss stands still for it instead of
+  until its last volley, so the next attack comes through it (`startPattern` keeps the later
+  `channelEnd`; Phosani's rings and spirals get 0.5 from the loop at the end of `phosani.ts`, her
+  aimed spreads none). A pattern's `burst` fires `count` volleys and then pauses `pause` seconds
+  (`stepEmitters`), so a fast sweep's arm is short solid pieces with holes between them that a
+  player can run through; `patternSeconds` counts the pauses in how long the boss stands for it. `BossPhasesDef.phases[i].ambient` names a pattern attack of its (weight 0,
+  `phases: []`, like an opener) begun again every `interval` seconds on the phase's own timer
+  (`BossPhase.ambientNext`) in `stepPhase`, under whatever else it does, through holds and
+  cooldowns, with no channel, and not while it's under the ground (`leap`) or its sleepwalkers
+  walk (`BossState.walkers`, outside a finale: the ambient's emitters are dropped and it begins
+  again the moment they're done, so a player up by it shooting them has nothing to step
+  through). `BossDef.fallSeconds` on a final boss keeps the run going that long after it falls
+  (`Sim.victoryAt`), with nothing landing on the players, so its death animation plays before
+  the victory screen, all of it (the view cuts other deaths at `MAX_DEATH_ANIM_TICKS`, and
+  `corpseTicks` keeps the body that long); the run's time is to the fall (`endRun`'s `at`).
+  Phosani's is her death's 5.4 seconds. `tempo` multiplies
+  the boss's interval and its pattern attacks' windups (only those: the big hits keep their
+  warnings) in `startBossAttack`, and `speed` its walk, applied as each phase begins. `finale`
+  keeps the boss up for `seconds` after the last blast as a stage of its own (`stage: "finale"`,
+  untouchable like the totems stage, the HUD's bar the time left): it opens with `opener`, keeps
+  to `attacks` at `interval` like the flowers' `during` (`keepsTo`), doesn't wait for its
+  sleepwalkers (`stepWalkers` doesn't stop it), runs the finale's own `ambient`, and
+  `stepPhase` kills it when the time's up. `Hero.damageByAttack` is what each boss attack did to
+  that player, by name: `sim.damageByAttack` in the console, and the balance bot's `boss attacks
+that hit` line, for tuning a fight.
+- The Theatre of Blood's bosses (`content/theatre.ts`) add: patterns `wall` (a row with a gap
+  somewhere new each volley) and `closing` (a ring round the player, coming in), ground marks that
+  `lingers` and hurt while you stand in them, and `safe` marks a projectile spares you in;
+  `EnemyDef.protects` (a share of ranged or magic weapons' damage); `BossDef.naps` (the Bloat: up
+  and guarded, then down and open, then a stomp); and for a raid's expert mode `EnemyDef.onlyStyle`,
+  `BossDef.colours`, `BossDef.stare`, `EnemyDef.expertAs` and `BossAttackDef.expert`.
 
 The curse is applied to the input in `stepPlayer`, so keys and the touch stick go the same way.
 
 Her animations are picked by eye, as `classify-npc-seqs.ts` can't tell them apart: she floats in all
 of them, so none ends lying down. `find-npc-seqs.ts` scans every sequence and now runs out of the
 2.4 GB a heavy job gets; `classify-npc-seqs.ts` with a band of ids is what got them.
+
+### Raids
+
+`MapDef.raid` makes a map a raid: rooms in `content/raids.ts`, each with its waves, its boss and
+where things are. `Sim.stepRaid` runs them: a room's waves until its boss is due (`RaidRoomDef.at`,
+a run second, as a campaign boss's), then the party's moved into its boss room (`startRaidBoss`,
+`moveParty`), and once the boss is down the room's scored (`scoreRaidRoom`), each player gets the
+supply chest (`openNextRaidShop`, an event offer paid in raid points) and the next room starts.
+The last room's boss is the final boss, and its chest (`openRaidChest`) goes on the result.
+Raid wins are kept by the save like a campaign map's; hard opens after one, endless never does, and
+expert mode (`SimOptions.expert`, solo only for now) after a hard one. A hall's teleporter
+(`stepTeleporter`) asks before skipping to its boss, `SimOptions.raidTeleports` times a raid, in
+the halls `SimOptions.raidPortals` says (`getRaidPortals`: rooms whose boss the save has a kill of,
+in any form). The game draws the portal (`raidTeleporter`), as it isn't in the map. Raid bosses'
+rings, spreads and walls start `MELEE_POCKET` tiles out (`BulletPatternDef.from`), and their
+hits are lightened to match a faster `attackInterval` (`oftener` in `theatre.ts`).
+
+`?raidtest` (dev server only) puts a raid's rooms two minutes apart and every level up's pick at
+its max; `?raidtest=short` does only the first.
 
 ### What gets drawn
 
@@ -473,29 +617,121 @@ doesn't. The boxes follow what `main.vert.glsl` does to a vertex (`CullGrid.addI
 to where the shader puts things needs one there too. `render-stats.ts --cull=8` checks it.
 
 Actors are culled as spheres in `ActorRenderer.draw`, by `ActorModel.reach`: the furthest any vertex
-gets from the model's origin in any frame of any animation, so bosses' big swings count.
+gets from the model's origin in any frame of any animation, so bosses' big swings count. Without
+`WEBGL_multi_draw` (Safari, Firefox) every draw is a real draw call, so `InstanceList.sortByFrame`
+puts the actors on the same frame of the same animation together and each run of them is one
+instanced draw: a crowd of one enemy is a few draws, not hundreds. The shader finds an actor's data
+by `DRAW_ID + gl_InstanceID`.
 
-The game has no hover menus, so its frames have no interact buffer, and with no multisampling
-they're drawn straight into the texture the screen quad reads.
+Map squares keep only the world that can be seen. Past the play area the world fades into the sky
+over 6 tiles (`PLAY_AREA_FADE` in `fog.glsl`), and a ray from the camera only gets further from the
+play area once it's left it, so what's past the fade and further out than the camera can get is
+never in front of anything but the sky. `GameWebGLRenderer.setPlayArea` works that keep area out
+from `CAMERA_REACH` in `GameClient` (a run's camera can be 15 tiles south of the player, zoomed all
+the way out; the title screen's circles closer in). The worker leaves out terrain, scenery and
+animated scenery wholly outside it (`SdMapLoaderInput.keepArea`), and `MapManager` doesn't load a
+square that's all outside. Collision doesn't come from these squares (it's `RegionDataLoader`'s),
+so it isn't touched. If the camera's
+pitch or zoom changes, `CAMERA_REACH` has to follow it, or the hole where something was left out
+can show.
+
+The game has no hover menus, multisampling or FXAA, so its frames are drawn straight to the canvas
+(`drawsToCanvas`), with no framebuffer of their own and no screen quad to copy them across. The
+canvas has `alpha: false`: the page behind it is black, so there's nothing to blend it with. The
+map viewer keeps its framebuffer, for its hover menus. A script that reads a frame back reads the
+canvas, in the same task as the frame (there's no `preserveDrawingBuffer`).
 
 Enemies are baked when a run starts, for that map (`getMapEnemies`, `GameAssets.loadEnemies`), in
 place of the last map's: they're most of the actors' memory, and a map uses few of them. It goes by
 the enemy ids it finds in the map's waves, events and bosses, and in those enemies, so a new way for
 an enemy to bring on another needs nothing added. An enemy that isn't baked anyway (the console's
-`spawnBoss`) gets baked when it's first drawn, and shows up a moment later.
+`spawnBoss`) gets baked when it's first drawn, and shows up a moment later. The last map's enemies
+stay on the menus, so playing it again starts at once; a run on another map drops them before
+its own bake starts, so the two lots are never in memory together.
+
+Enemies that would bake the same model are baked once (`GameAssets.mergeRequests`): the same NPC
+with the same first animation (Nex's four phases), the same outfit, the same scenery. The merged
+model has all of their animations, and the other enemies' keys point to it. A request's body is
+everything its bake reads (`getRequestBody`), so a new field on a bake request goes in there too.
+
+A bake is cut into small tasks (`getBakeTasks`: an NPC or player model each, the spot animations,
+items and scenery a batch at a time), and each goes on the GPU as it lands, as a page of its own.
+Baking a map's worth in one go per worker held all of it in the main thread at once, a spike of
+hundreds of MB at the start of a run on the big maps, the likeliest moment for a phone to lose the
+tab. The worker sends buffers cut to their length, not the doubled ones it grew.
+
+A player is baked with the swings of the weapons they hold (`getRunAttackSeqs`) rather than every
+weapon's, so a new weapon re-bakes them (it changes their `appearanceVersion`). Until it lands
+the old model draws, and a swing it hasn't got shows the stance's animation instead. So that a
+weapon picked swings at once, a level-up that offers a weapon re-bakes the look with its swings
+as soon as it's offered (`getOfferedAttackSeqs`), and a look that has the swings asked for and
+more isn't baked again: the ones not picked go at the next re-bake. The menus' look has the
+starting weapon's swings (`setCharacterLook`), so a solo run starts with it baked.
+`getPlayerAttackSeqs` is every weapon's, for the slim cache.
 
 A baked animation is a posed copy of the model per frame, so what an enemy costs is its triangles
 times its frames. A skeletal animation (the Colosseum's bosses, the gryphon, the naguas) has a pose
 for every client tick, and baking each one made Varlamore's enemies several times any other map's,
 too much for a phone. `ActorBakeLoader` samples those every `SKELETAL_TICK_STEP` ticks instead.
+
+Indices are 16-bit, which halves the index buffer, about a quarter of a bake. WebGL2 has no base
+vertex for a draw, so `ActorBakeSegments` cuts a bake's vertices into segments of up to 65,536,
+never splits a frame between two (and an animation only if it doesn't fit in one), and counts each
+frame's indices from its segment's first vertex. Each segment is drawn with a vertex array that
+starts there (`ActorSegment`), so a page is a draw per segment that has something on screen. A
+model with more vertices in one frame than that has its whole bake fall back to 32-bit.
 `render-stats.ts --bake` shows each map's total and the heaviest actors, so a new boss can be
 checked against the other maps before a phone finds it.
+
+The overlay draws each hitsplat (its kind, number and size) once and copies it after, and the
+projectile glows likewise: text and gradients are the slowest things on a 2D canvas, and a big
+fight has a hundred splats. The effects it prunes each frame are pruned in place, and the enemies
+reuse one options object, to keep a phone's garbage collector quiet.
 
 `window.frameProbe` (dev only) counts what a frame sends to the GPU, at the GL calls:
 `await frameProbe.sample(60)` gives triangles, draws and CPU time, split into world and actors.
 
 Combat sounds are picked by the server, not the cache, so the ids in `content/` come from the OSRS
 Wiki's [list of in-game sound IDs](https://oldschool.runescape.wiki/w/List_of_in-game_sound_IDs).
+A sound's samples are let go once it's first played and its `AudioBuffer` holds them
+(`GameAudio.getBuffer`), so each sound is only in memory once.
+
+### Keeping it light on a phone
+
+- **Frame cap**: `GameClient.update` sets `Renderer.fpsLimit` every frame from the Frame rate
+  setting (`DisplaySettings.frameRate`, in Settings and the pause menu), through `frameCap`. Auto,
+  the default and what older saved settings get, is 60 on a touch screen (90 and 120 Hz phones
+  would draw twice as often for a sim that ticks 50 times a second) and no cap on a desktop; 30,
+  60 and Unlimited are what they say. On the title screen and behind a solo run's menus (level up,
+  casket, random event, pause, results), where only the scenery moves, it's 30 at most whatever
+  the setting. Co-op isn't capped behind its menus, as its run goes on. The limiter keeps to a
+  schedule rather than a gap since the last frame, so a 90 Hz screen capped at 60 draws two frames
+  in three (`Renderer.test.ts`).
+- **Lost graphics**: a phone can take the WebGL context away (short of memory, or the game in the
+  background). `GameApp` calls `preventDefault`, pauses a solo run (`GameClient.onGraphicsLost`),
+  stops drawing (`GameWebGLRenderer.contextLost`; a co-op run still steps for the others) and
+  shows a Reload button, which ends the run as the pause menu's quit does, so its coins and quests
+  are kept. There's no restore: everything on the GPU (programs, the texture array, map squares,
+  the actor bakes, which aren't kept in JS) would have to be made again on the new context, which
+  means `WebGLMapViewerRenderer.init` again, `clearMaps`, and baking every actor again. To try it,
+  `game.renderer.app.gl.getExtension("WEBGL_lose_context").loseContext()`.
+- **The HUD** is updated 10 times a second, in two parts. `UiSnapshot.hud` (`HudView`) is what the
+  hero has (slots, gear, inventory), which changes with a level up or a casket. `HudNumbers` is
+  what changes as the run's played (hitpoints, xp, the clock, damage, buffs, the boss bar, quest
+  progress), in a store of its own (`GameStore.subscribeNumbers`): the UI's root doesn't see it,
+  and each part reads only its own number with `useHudNumber`. `shareUnchanged` keeps whatever
+  hasn't changed the same object, so the `memo`'d parts skip drawing, and nothing is told at all
+  when nothing's changed. Something new that changes often goes in `HudNumbers`, and its numbers
+  are rounded as they're shown (whole seconds), so they don't change when nothing on screen does.
+  The bars fill with `transform: scaleX`, not `width`, which would lay the page out again.
+- **The minimap** redraws 30 times a second at most, leaves out enemies off it, and draws its
+  dots a colour at a time.
+- **The casket's rays** have their fade drawn into them (an SVG gradient), not a `mask-image`, which
+  makes the browser draw the turning rays again offscreen every frame. They slow to a stop, and the
+  glow, float and shimmer stop after a few goes. A phone gets one set of rays and no shimmer.
+- **The bundle**: `WebGLMapViewerRenderer` is the game's renderer's base class, so anything it
+  imports is in the game's bundle. leva comes in only through the viewer's controls
+  (`getControls(folder)`), and the render worker loads jszip only for the viewer's exports.
 
 ### Scripts
 
@@ -535,7 +771,10 @@ scripts/game/simulate-run.ts [character] [seeds]        a bot plays full runs, f
                                                         map, FRESH=1 straight at it, SAFE_WAVES=1
                                                         with what a run earned, FLAT=1 with no
                                                         walls, DODGE=1 keeping off its marks,
-                                                        PARTY=4 a co-op party of that adventurer)
+                                                        PARTY=4 a co-op party of that adventurer;
+                                                        GOD=1 untouchable and FUNNEL=1 all into
+                                                        its best weapon, with ENDLESS=1, to see
+                                                        how damage keeps up with the rounds)
 scripts/dev/icon-test.ts 1321            draw an item icon as ASCII
 scripts/dev/render-stats.ts lumbridge    what a map costs to draw, without a browser: triangles,
                                          draw ranges, bytes (--cull=8 checks the culling boxes and
@@ -547,7 +786,7 @@ request (without the game's cache, so `generator.test.ts` skips its long map che
 
 URL flags: `?room=ABCDE` joins a co-op room (the invite link), `?autostart=wizard` starts a run right away, `?stress=300` adds 300 goblins, `?viewer=1`
 opens the original map viewer (loaded only then), `?bgtick` (dev only) keeps the game running in a
-browser tab that isn't being painted, `?notice` shows the notice even after it's been closed. F3
+browser tab that isn't being painted, `?notice` shows the notice even after it's been closed, `?raidtest` (dev only) speeds up a raid (see Raids). F3
 shows collision and stats.
 
 ### Co-op
@@ -564,13 +803,19 @@ send anything (a downed player can't choose, reroll or skip, as `isChoosing` say
 waits on a slow guest; they see the run a little behind, and catch up at 8 ms a frame at most.
 A decision (a level up, a casket, a random event) is answered once: `CoopRun.act` drops a second
 answer to the same one until the host's frame moves it on, or 10 seconds pass, so a double click
-can't land on the next decision unseen. An action the host turns away counts as an answer too, so
-the client checks what the sim would refuse before sending it (a reroll with none left, or
-during a hilt choice), or a refused action would hold up the real one.
+can't land on the next decision unseen. Some stay open once answered (a banished reward, a rerolled
+casket item, something bought with the rest still for sale), so `CoopRun.decision` gives each a
+step that changes with those, and the next answer goes out. Anything else that changes a menu
+without closing it needs a step too, or its buttons do nothing for those 10 seconds. An action the
+host turns away counts as an answer too, so the client checks what the sim would refuse before
+sending it (a reroll with none left, during a hilt choice, or an event's option that's sold or too
+dear), or a refused action would hold up the real one.
 
-Guests can predict their own **displayed** movement in `client/coop/MovementPrediction.ts`. It's
-a trial for now: the `movePrediction` display setting (Settings and the pause menu) is off by
-default, and `CoopRun.setPrediction` applies it, mid-run too. Off, a guest has no prediction,
+Guests predict their own **displayed** movement in `client/coop/MovementPrediction.ts`. The
+`movePrediction` display setting (Settings and the pause menu) is on by default, and
+`CoopRun.setPrediction` applies it, mid-run too. Settings saved while it was a trial all say off,
+the default then, so an off only counts from a save marked `movePredictionDefaultOn` (every save
+since). Off, a guest has no prediction,
 sends no `moveSeq` and shows only what the host confirms; turned back on, it starts afresh. A local
 input sequence (`moveSeq`) rides on movement messages and is echoed in the host's frame event,
 including when queued moves are coalesced. The guest acknowledges it only after stepping that
@@ -582,10 +827,24 @@ Prediction covers the character's position, facing and movement animation, camer
 health bar, attached text, slashes and auras. `PlayerPose` is presentation state: never write it
 into `Sim`. Combat, pickups, world-space attack effects and all hashes still use confirmed
 positions. `core/PlayerMovement.ts` shares terrain collision, speed, sleds, curses, facing and
-boss arena limits with `Sim.stepPlayer`. Small errors ease toward the confirmed path; a wall
-blocking correction snaps the picture to its valid target instead of trapping it. Large
-confirmed displacements reset prediction. Death, known freezes, decisions and stale connections
-ease back to confirmed presentation, including the camera.
+boss arena limits with `Sim.stepPlayer`. Errors ease toward the confirmed path over about 80 ms
+(glides up to `GLIDE_DISTANCE`, a jump past it); a wall blocking correction snaps the picture to
+its valid target instead of trapping it. Confirmed jumps of over `SNAP_DISTANCE` in one frame
+(teleports) reset prediction. Death, known freezes and decisions ease back to confirmed
+presentation, including the camera.
+
+The camera follows the predicted pose, so the picture is kept steady:
+
+- The host echoes a held move every `MOVE_REFRESH_MS`, a tick early or late with jitter. An echo
+  of the move already applied only re-times the prediction's clock past `DRIFT_MS`; otherwise
+  every refresh nudged the camera by a tick. Only a pending _change_ of move holds the clock back.
+- Standing still, an error under `DEAD_ZONE` (a stop that reached the host a tick late) is left
+  alone; walking takes it out. While the host's frames haven't got the stop yet, there's no
+  correction at all: with a lead past the budget, the target falls short of where the stop lands.
+- When frames stop coming (`QUIET_MS`) with the lead at its budget, the picture holds where it
+  is, and from `STALE_MS` it stands still with no walk animation. Easing back to the last
+  confirmed spot would walk the hero backwards, then rush forward when a reconnect's resend
+  arrives; instead it glides to the resent position.
 
 `PREDICTION_MS` and `MAX_INPUT_HISTORY` bound replay work for one player. When the lead exceeds
 that window, replay uses the newest inputs so a stop or turn still takes effect. Long render
@@ -641,6 +900,18 @@ When adding to the sim:
 - A new event that's about one player goes in `PERSONAL_EVENTS`, so it's tagged with who.
 - Trigonometry goes through `fm`. `core/fmath.test.ts` fails on `Math.sin` and the like in
   `core/`.
+- `core/runHash.test.ts` pins three seeded runs (solo, hard mode, a party of four) to a hash of
+  everything in them, tick by tick. A change that's meant to leave play alone, like a speed-up,
+  has to leave them as they are; one meant to change play changes them, so check it's only the
+  runs it should, then update the numbers.
+- `sim.enemies`, `projectiles`, `enemyProjectiles`, `effects` and `pickups` are the same arrays
+  from tick to tick, tidied in place, so don't keep one and expect it to stay as it was. Enemies
+  and pickups stay in uid order, which finding one by uid relies on: add them only through
+  `spawnEnemy` and `dropPickup`, at the end.
+
+Weapon damage tuning lives in `content/balance.ts`; see [Weapon damage tuning](BALANCE.md) for
+class, evolution and normal/hard mode examples. Weapon damage rules use the starting party size
+throughout the run.
 
 How much bigger the crowd gets for each player is in `content/coop.ts`, worked out again whenever
 one goes down, is revived or leaves, with each of those down or gone still counting as half a
@@ -657,8 +928,8 @@ carries it as an `EventOption` of kind `revive`. Each adds to `Hero.extraRevives
 `player.invulnerable` every tick, the way the sled does, and `nearestHero` and `useSpawnHero`
 skip an immune hero while anyone else is up (pickups go by `nearestUpHero`, which doesn't: a
 revived player can still eat). The reviver's emote (`REVIVE_SEQ`) is baked with
-every player look through `getPlayerAttackSeqs`, and its graphic (`REVIVE_SPOTANIM`) with the
-base bake.
+every player look in co-op through `getRunAttackSeqs`, and its graphic (`REVIVE_SPOTANIM`) with
+the base bake.
 Bosses come as copies (`bossCopies` there), spawned together by `Sim.spawnBosses`: each by a
 different player, clear of the others, sharing one boss's hitpoints, experience and loot through
 their `Encounter`, so the first says so and the last to fall drops the loot. A boss with its own
@@ -700,9 +971,44 @@ from the host to everyone else. The host leaving a run ends it for everyone; in 
 room goes to the next player. The balance bot plays a party with `PARTY=4`, each player on their
 own, so it can't show teamwork.
 
+The Cloudflare relay (`server/cloudflare/`) speaks the same protocol, with one more message: it
+answers `create` and `join` with a `goto` (a room code and a one-time ticket), and `CoopLobby`
+then makes or joins the room on that room's own connection, at `coop/room/<code>`. What's said in
+a room goes over that connection (`ROOM_MESSAGES` in `CoopLobby.ts`); pings, the list and
+making or joining go to the lobby's. The Node relay never sends `goto`, so with it there's only
+the one connection. Change the protocol in both relays.
+
+Cloudflare restarts its objects now and then, dropping their connections, so the Cloudflare relay's
+`room` message carries a `token`. `CoopLobby` reconnects to `coop/room/<code>?resume=<token>` for
+`RESUME_WINDOW_MS` when the room's connection drops, holding what's said meanwhile, and the room
+(kept in storage) holds the player's place a little longer. A guest that misses some of the host's
+frames sees it from `from` on the next `down` and asks for them with a `resend` up message; the
+host keeps 20 seconds of what it's sent (longer than the room holds a dropped player) and answers
+once a second at most, from the earliest frame asked for, to every guest; each takes only frames
+after the ones it has, in messages of `RESEND_EVENTS` at most. That part works on either relay.
+A guest numbers its actions that aren't decisions (`actionSeq`, so using an item), and the host's
+frames echo the number; after reconnecting it sends again those not echoed yet, and the host takes
+each number once. Decisions have their own resend (`DECISION_RESEND_MS`). The room saves someone
+joining or leaving, and the run starting or ending, at once and before telling anyone; other
+changes at most once a second. The Node relay sends no token, so with it a dropped connection
+still ends a guest's run.
+
 The open rooms list comes a page at a time (8 rooms, the fullest first, then the ones waiting
 longest), worked out once after each change rather than for every request; the menu asks for its
 page every 5 seconds, and again when joining fails (a room that filled up or started meanwhile).
+
+**Flags.** A relay that knows where a player is sends it as `country` (ISO 3166's two letters): in
+`welcome` for their own, on each room member, and on a room in the list for its host. The Cloudflare
+relay's Worker gets it from `request.cf.country` and hands it on as `x-country`, replacing whatever
+a player sent; the Node relay gets it only behind Cloudflare (`PROXY`, above). A player who turns
+off **Co-op flag** in Settings sends `hideCountry` with what they say about themselves, and the
+relay leaves their country out, except while they host an open room: then it shows in the room and
+the list anyway (`shownCountry` in each relay), and the game says so on Open to all. The game draws
+a flag with `CountryFlag` (`ui/CountryFlag.tsx`): the login screen's world list flags (sprite 815, a
+frame for each country it has, in `content/flags.ts`), or the country's letters where there's no
+flag, with its name from `Intl.DisplayNames` as the tooltip. Emoji flags won't do: Windows has none,
+so they show as two letters there anyway. A room's flag is its host's, which on the Cloudflare relay
+is roughly where the room runs too.
 
 To try it locally, `npm start` and open the game in two windows (one private, for a
 save of its own), make a room in one and join it from the other. A second ordinary window says the
@@ -721,8 +1027,10 @@ Everything touch only hangs off `pointer: coarse`, so a mouse and keyboard never
 - `ui/Mobile.css` lays the screens out again for a phone held sideways (`max-height: 520px`). The
   UI's zoom never goes below 1, as the pixel fonts don't survive it, so a new screen needs rules
   there too. Check it at 844x390 and 667x375. It's imported last, so it wins over the other CSS.
-- A touch screen also gets a pixel ratio capped at 1.5, 2 workers instead of 4, and a closer camera
-  on a phone.
+- A touch screen also gets a pixel ratio capped at 1.5 (2 elsewhere, `DeviceUtil.pixelRatio`), 2
+  workers instead of 4, textures at half size (64 a side, a quarter of the memory), 60 frames a
+  second at most unless the Frame rate setting says otherwise (see Keeping it light on a phone),
+  and a closer camera on a phone.
 - `public/manifest.webmanifest` lets a browser install the game to the home screen (HTTPS only,
   apart from localhost), opening full screen and sideways. `enterFullscreen` leaves an installed
   game alone. iOS ignores `orientation`, so an iPhone still gets the rotate notice, and it can give
@@ -734,6 +1042,40 @@ Everything touch only hangs off `pointer: coarse`, so a mouse and keyboard never
 
 To test it, Playwright's `isMobile` and `hasTouch` turn on `pointer: coarse`, and CDP's
 `Input.dispatchTouchEvent` sends real multi-touch. Mouse clicks don't test any of this.
+
+### Controllers
+
+`client/GamePad.ts` reads the browser's Gamepad API once a frame (`GameInput.pollPads`, from
+`GameClient.update`). It's a web standard, so the desktop app (Electron) gets it too, with nothing
+of its own.
+
+- **Which pad.** One at a time: whichever was pressed last. A pad's only noticed once something on it
+  is pressed (browsers hide pads until then), so "connected" shows on the first press.
+- **Its buttons** are only trusted when the browser reports `mapping: "standard"`, where button 0 is
+  the bottom face button whoever made it. Any other pad gets the left stick and nothing else, rather
+  than buttons that might be anything. `identifyPad` reads the maker from the id (Chrome's
+  `Vendor: 054c`, Firefox's `054c-0ce6-` prefix, or a name like `Xbox`) for the labels only: Xbox,
+  PlayStation, Switch, and Xbox's for anything else. A Switch pad confirms with the button in A's
+  place on an Xbox pad, which it calls B.
+- **Buttons are keys.** Each is sent to the window as the `KeyboardEvent` the game already answers
+  (`RUN_KEYS` during play, `MENU_KEYS` otherwise), so every screen's own keys work with no changes and
+  a pad can't do anything the keyboard can't. Synthetic events have `isTrusted` false, which is how a
+  real key or click tells it the player's off the pad.
+- **Menus** use the focus: the d-pad or stick moves it to the nearest button that way in the top
+  `.ui-modal` (or the screen), and the bottom button clicks it. With nothing focused it sends Enter
+  and focuses the `.ui-button-go` or first button, so a press as a level up appears can't pick one. Start
+  clicks the `.ui-button-go` (Enter the map, Resume, a casket's best choice) wherever the focus is,
+  so starting a run doesn't mean walking the highlight across the screen.
+- **Hints.** `ui/PadHint.tsx`'s `KeyHint` shows a key, or the pad's button while one's in use. The
+  numbered choices have none (the d-pad picks them). `:root[data-input="pad"]` shows the highlight.
+  The icons are Kenney's [Input Prompts](https://kenney.nl/assets/input-prompts) (CC0, its licence
+  alongside), in `public/input-prompts/<make>/<button>.svg`, named by `PadButton`. Only the buttons
+  for the three makes are copied in, not the whole pack.
+- **What each button does** is listed by `PadControls` (`ui/PadHint.tsx`) in the pause menu and
+  Settings while a pad's in use, and the title's hint shows its buttons. Change it with `RUN_KEYS`
+  or `MENU_KEYS`.
+
+The tests fake `navigator.getGamepads`. In a browser, an init script that replaces it does the same.
 
 ### Saves
 
@@ -770,6 +1112,29 @@ the lock goes mid-run, a solo run pauses under the panel (co-op's goes on for th
 
 The desktop app has one window and plays the newest game it has, so neither tabs nor an older
 game come up there; an export from a newer version is turned away on import, as anywhere.
+
+`SaveData.skillPages` holds independent `melee`, `ranged` and `magic` allocations, each with
+`upgrades`, `upgradesSpent` and optional `upgradeRefunds` lists of paid rank prices. Each page can
+allocate the full budget: `coins + max(upgradesSpent)`. `coins` is the unreserved bank available
+outside Skills, while `getSkillCoins(save, style)` subtracts that page's spending from the budget.
+Purchases and refunds adjust the bank only by the change in the largest page's spending; they never
+change another class's ranks or remaining budget. Armoury purchases still spend unreserved coins.
+Save format 11 converts the former sum of page investments into a maximum reservation, restoring
+the difference to `coins` once. Export/import retains this budget and every page's paid rank prices.
+Save format 10 moves the old shared allocation and its investment into Melee without duplicating either;
+Ranged and Magic start empty. Export and import preserve all three pages and their refund records.
+Solo and co-op loadouts use the actual adventurer's style, including maps with a forced adventurer;
+changing a co-op adventurer or room map refreshes the transmitted loadout.
+The arrow button on bought cards (the client's back-arrow sprite,
+`REFUND_SPRITE`) refunds the last price in that page's skill list, through
+`GameClient.persist()`. It is separate from the purchase button and has a larger hit area on coarse
+pointers. Desktop right-clicking does the same; coarse-pointer context menus never refund.
+Unavailable purchases use `aria-disabled` and keep their disabled appearance on hover, without
+blocking the desktop right-click shortcut or the refund button.
+Older allocations have only `upgradesSpent`: their first purchase or partial refund allocates that
+balance across the existing ranks in proportion to base prices, preserving the total exactly.
+Migration checks the lists against the ranks and total spent; invalid lists use the same fallback.
+Refund all clears only the selected class's ranks and price records.
 
 ### Notice
 

@@ -12,12 +12,38 @@ export type DisplaySettings = {
     damagePanel: boolean;
     // Caskets are high alched as they're opened, with no casket screen
     autoAlch: boolean;
-    // Joining a co-op game, your own movement shows before the host confirms
-    // it. A trial for now, so it's off until a player turns it on.
+    // Joining a co-op game, your own movement shows before the host confirms it
     movePrediction: boolean;
+    // Other co-op players see your country's flag, where the relay knows it
+    coopFlag: boolean;
+    // Frames a second at most (frameCap)
+    frameRate: FrameRate;
 };
 
+// auto: 60 on a touch screen, every frame the screen shows otherwise
+export const FRAME_RATES = ["auto", "30", "60", "unlimited"] as const;
+export type FrameRate = (typeof FRAME_RATES)[number];
+
+// The title screen and a solo run stopped for a menu: only the scenery moves
+export const MENU_FPS = 30;
+
+// Frames a second at most for the renderer (Renderer.fpsLimit), 0 for every frame
+// the browser offers. A phone's screen can refresh at 90 or 120 Hz, which is twice
+// the drawing for a run that ticks 50 times a second, and heat, hence auto's 60.
+// stopped: behind a solo run's menus or on the title screen (never co-op's,
+// whose run goes on), where it's 30 at most.
+export function frameCap(rate: FrameRate, touch: boolean, stopped: boolean): number {
+    const cap = rate === "auto" ? (touch ? 60 : 0) : rate === "unlimited" ? 0 : parseInt(rate, 10);
+    if (!stopped) {
+        return cap;
+    }
+    return cap === 0 ? MENU_FPS : Math.min(cap, MENU_FPS);
+}
+
 const SETTINGS_KEY = "rune-survivors-display";
+// Marks settings saved since movement prediction came on by default. Every save
+// before then has it off, as its default, whether or not the player chose that.
+const PREDICTION_ON_BY_DEFAULT = "movePredictionDefaultOn";
 
 // The menu camera stands still for anyone who's asked for less motion
 function getDefaults(): DisplaySettings {
@@ -31,7 +57,9 @@ function getDefaults(): DisplaySettings {
         questTracker: true,
         damagePanel: false,
         autoAlch: false,
-        movePrediction: false,
+        movePrediction: true,
+        coopFlag: true,
+        frameRate: "auto",
     };
 }
 
@@ -56,8 +84,18 @@ export function loadDisplaySettings(): DisplaySettings {
             if (typeof data.autoAlch === "boolean") {
                 settings.autoAlch = data.autoAlch;
             }
-            if (typeof data.movePrediction === "boolean") {
+            if (
+                typeof data.movePrediction === "boolean" &&
+                (data.movePrediction || data[PREDICTION_ON_BY_DEFAULT] === true)
+            ) {
                 settings.movePrediction = data.movePrediction;
+            }
+            if (typeof data.coopFlag === "boolean") {
+                settings.coopFlag = data.coopFlag;
+            }
+            // Saved before there was a choice: auto
+            if (FRAME_RATES.includes(data.frameRate)) {
+                settings.frameRate = data.frameRate;
             }
         }
     } catch (e) {}
@@ -66,6 +104,9 @@ export function loadDisplaySettings(): DisplaySettings {
 
 export function saveDisplaySettings(settings: DisplaySettings): void {
     try {
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+        window.localStorage.setItem(
+            SETTINGS_KEY,
+            JSON.stringify({ ...settings, [PREDICTION_ON_BY_DEFAULT]: true }),
+        );
     } catch (e) {}
 }

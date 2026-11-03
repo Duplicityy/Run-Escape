@@ -236,6 +236,16 @@
     color: var(--ui-text);
 }
 
+/* A map's description keeps its line breaks, for its paragraphs */
+.ui-card-description {
+    white-space: pre-line;
+}
+
+.ui-card-description strong {
+    color: var(--ui-yellow);
+    font-weight: normal;
+}
+
 .ui-card-cost {
     color: var(--ui-yellow);
 }
@@ -411,6 +421,17 @@
     color: var(--ui-green);
 }
 
+/* The frame rate's choices: the one picked lit up */
+.ui-setting-control .ui-frame-rate {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.ui-frame-rate-on {
+    color: var(--ui-yellow);
+    background: var(--ui-card-hover);
+}
+
 .ui-volume {
     width: 140px;
     accent-color: var(--ui-orange);
@@ -581,6 +602,23 @@
 
 .ui-select-panel > .ui-select-details {
     flex-shrink: 0;
+}
+
+/* The map's own adventurer: the choice is there to see, blurred, and can't be clicked */
+.ui-select-fixed .ui-select-scroll {
+    filter: blur(3px);
+    opacity: 0.55;
+    pointer-events: none;
+    user-select: none;
+}
+
+.ui-select-fixed-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    color: #ffb83f;
+    font-weight: bold;
 }
 
 .ui-select-maps {
@@ -836,19 +874,104 @@
     overflow-y: auto;
 }
 
+.ui-shop-tabs {
+    justify-content: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.ui-shop-tabs .ui-button {
+    box-shadow:
+        inset 1px 1px 0 var(--ui-edge-light),
+        inset -1px -1px 0 rgba(0, 0, 0, 0.55);
+}
+
+.ui-shop-tabs .ui-button[aria-selected="true"] {
+    color: var(--ui-green);
+    box-shadow:
+        inset 2px 2px 0 rgba(0, 0, 0, 0.75),
+        inset -1px -1px 0 var(--ui-edge-light);
+    transform: translateY(1px);
+}
+
 .ui-shop-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
     gap: 8px;
 }
 
+.ui-shop-entry {
+    position: relative;
+    display: grid;
+    min-width: 0;
+}
+
 .ui-shop-card {
     flex-direction: column;
     align-items: flex-start;
+    width: 100%;
+    min-width: 0;
 }
 
-.ui-shop-card:disabled {
+.ui-shop-card[aria-disabled="true"],
+.ui-shop-card[aria-disabled="true"]:hover {
     cursor: default;
+    background: var(--ui-card);
+}
+
+.ui-shop-card .ui-card-cost {
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+    padding-right: 36px;
+    margin-top: auto;
+}
+
+.ui-shop-refund {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+}
+
+/* The sprite is the client's own framed button, so it fills the whole hit area */
+.ui-shop-refund-icon,
+.ui-shop-refund-icon .ui-icon {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.ui-shop-refund:hover .ui-shop-refund-icon {
+    filter: brightness(1.2);
+}
+
+.ui-shop-refund:focus-visible {
+    outline: 2px solid var(--ui-yellow);
+    outline-offset: 2px;
+}
+
+.ui-shop-refund:active {
+    transform: scale(0.96);
+}
+
+@media (pointer: coarse) {
+    .ui-shop-card .ui-card-cost {
+        min-height: 44px;
+        padding-right: 52px;
+    }
+
+    .ui-shop-refund {
+        width: 44px;
+        height: 44px;
+    }
 }
 
 .ui-pips {
@@ -883,10 +1006,12 @@
     border-bottom: 1px solid #000;
 }
 
+/* The bars fill by scaling (GameUi's Hud), which doesn't lay the page out again */
 .ui-xp-fill {
     height: 100%;
     background: linear-gradient(#3fa7ff, #1550c0);
-    transition: width 0.1s linear;
+    transform-origin: left;
+    transition: transform 0.1s linear;
 }
 
 .ui-xp-level {
@@ -895,6 +1020,14 @@
     top: 0;
     line-height: 18px;
     color: var(--ui-white);
+}
+
+/* A raid hall's colour over the world (RaidRoomDef.hall), under the HUD */
+.ui-hall-wash {
+    position: fixed;
+    inset: 0;
+    mix-blend-mode: multiply;
+    pointer-events: none;
 }
 
 .ui-hud-top {
@@ -1140,6 +1273,50 @@
     text-shadow: 1px 1px 0 #000;
 }
 
+/* The chest at the end of a raid, on the result screen: purple, as the real one is */
+.ui-raid-chest {
+    margin: 6px auto 10px;
+    padding: 8px 14px;
+    max-width: 520px;
+    border: 1px solid #8a3fbf;
+    background: rgba(60, 20, 80, 0.45);
+    text-align: center;
+}
+
+.ui-raid-chest-title {
+    font-family: "OSRS Bold", sans-serif;
+    font-size: 20px;
+    color: #c77dff;
+    text-shadow: 1px 1px 0 #000;
+}
+
+.ui-raid-chest-items {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 6px;
+}
+
+.ui-raid-chest-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #e0b0ff;
+}
+
+/* A raid's points, under its room, and what the supply chest charges */
+.ui-raid-points,
+.ui-raid-price {
+    font-family: "OSRS Small", sans-serif;
+    color: var(--ui-yellow);
+    text-shadow: 1px 1px 0 #000;
+}
+
+.ui-raid-points {
+    font-size: 16px;
+}
+
 .ui-slots {
     display: flex;
     gap: 2px;
@@ -1158,25 +1335,28 @@
     box-shadow: inset 0 0 0 1px rgba(107, 94, 74, 0.6);
 }
 
-/* A weapon ready to evolve, on the next level up */
+/* A weapon ready to evolve, on the next level up. The glow pulses by its
+   opacity, which doesn't paint the slot again every frame as a changing shadow
+   would (it can be minutes until the next level up). */
 .ui-slot-evolve {
     border-color: #ffd700 !important;
-    box-shadow:
-        inset 0 0 0 1px rgba(107, 94, 74, 0.6),
-        0 0 8px 2px rgba(255, 215, 0, 0.8);
+}
+
+.ui-slot-evolve::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    pointer-events: none;
+    box-shadow: 0 0 10px 3px rgba(255, 215, 0, 0.9);
     animation: ui-slot-evolve 1.2s ease-in-out infinite alternate;
 }
 
 @keyframes ui-slot-evolve {
     from {
-        box-shadow:
-            inset 0 0 0 1px rgba(107, 94, 74, 0.6),
-            0 0 4px 1px rgba(255, 215, 0, 0.5);
+        opacity: 0.45;
     }
     to {
-        box-shadow:
-            inset 0 0 0 1px rgba(107, 94, 74, 0.6),
-            0 0 10px 3px rgba(255, 215, 0, 0.9);
+        opacity: 1;
     }
 }
 
@@ -1265,9 +1445,11 @@
 .ui-buff-bar {
     position: absolute;
     left: 0;
+    right: 0;
     bottom: 0;
     height: 3px;
     background: var(--ui-cyan);
+    transform-origin: left;
 }
 
 /* Drained by a boss */
@@ -1338,6 +1520,7 @@
 .ui-hp-fill {
     height: 100%;
     background: #00c800;
+    transform-origin: left;
 }
 
 /* Poisoned: a sicker green, like the client's hitpoints orb */
@@ -1385,6 +1568,7 @@
 .ui-boss-fill {
     height: 100%;
     background: linear-gradient(#e01010, #800000);
+    transform-origin: left;
 }
 
 /* A fight in phases: its shield, then its totems filling up */
@@ -1419,6 +1603,31 @@
 
 .ui-boss-curse {
     color: #ff9ae6;
+}
+
+/* A raid hall's objective, where a campaign map's boss warning goes, red in its last minute */
+.ui-raid-objective {
+    position: absolute;
+    top: 70px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-family: "OSRS Bold", sans-serif;
+    font-size: 20px;
+    color: var(--ui-yellow);
+    text-shadow: 2px 2px 0 #000;
+    pointer-events: none;
+}
+
+.ui-raid-objective-soon {
+    color: var(--ui-red);
+}
+
+.ui-raid-objective-hint {
+    font-family: "OSRS Small", sans-serif;
+    font-size: 16px;
+    color: var(--ui-white);
+    text-shadow: 1px 1px 0 #000;
 }
 
 .ui-boss-warning {
@@ -1478,6 +1687,61 @@
 
 .ui-choice .ui-card-body {
     flex: 1;
+}
+
+/* A reward, with its Banish button over the card's bottom right corner,
+   under the rarity (Firemaking) */
+.ui-choice-row {
+    position: relative;
+    display: flex;
+}
+
+.ui-choice-row > .ui-choice {
+    flex: 1;
+    min-width: 0;
+}
+
+.ui-choice-row .ui-banish {
+    position: absolute;
+    right: 10px;
+    bottom: 8px;
+}
+
+/* The rarity's column wide enough for the button under it */
+.ui-has-banish .ui-rarity {
+    min-width: 76px;
+    text-align: right;
+}
+
+.ui-choice-banished {
+    filter: grayscale(1);
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.ui-tag-banished {
+    color: #b8aa8a;
+}
+
+.ui-banishes {
+    text-align: center;
+    margin-top: 8px;
+}
+
+/* A casket's Reroll and Banish side by side */
+.ui-chest-rolls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.ui-chest-rolls .ui-reroll {
+    margin-top: 0;
+}
+
+.ui-chest-rolls .ui-banish {
+    width: auto;
 }
 
 /* Sold, or more than the coins carried */
@@ -1831,4 +2095,65 @@
 
 .ui-result .ui-row {
     justify-content: center;
+}
+
+/* A controller's highlight: GamePad.ts moves the focus with the d-pad. White,
+   as yellow and green are rarities' borders */
+:root[data-input="pad"] :focus {
+    outline: 3px solid #fff;
+    outline-offset: 3px;
+}
+
+/* A controller button's icon in place of a key: wider than a digit */
+.ui-choice-key.ui-pad-key,
+.ui-inv-key.ui-pad-key {
+    width: auto;
+    min-width: 14px;
+    line-height: 0;
+}
+
+.ui-pad-key img {
+    width: 22px;
+    height: 22px;
+    vertical-align: middle;
+}
+
+.ui-inv-key.ui-pad-key img {
+    width: 16px;
+    height: 16px;
+}
+
+/* The title's how-to-play line, with a controller's icons */
+.ui-hint-pad .ui-pad-icon {
+    width: 18px;
+    height: 18px;
+    vertical-align: middle;
+}
+
+/* What a controller's buttons do: in the pause menu and settings */
+.ui-pad-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ui-pad-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ui-pad-control-icons {
+    display: flex;
+    gap: 2px;
+    min-width: 92px;
+}
+
+.ui-pad-control-icons .ui-pad-icon {
+    width: 22px;
+    height: 22px;
+}
+
+.ui-pad-control-text {
+    color: var(--ui-white);
 }

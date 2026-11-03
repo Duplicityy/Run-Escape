@@ -173,10 +173,51 @@ export function clientAddress(
     proxies = PROXIES,
     cloudflare = cloudflareList,
 ) {
-    let address = plainAddress(socket?.remoteAddress) ?? "unknown";
     if (mode === "none") {
-        return address;
+        return plainAddress(socket?.remoteAddress) ?? "unknown";
     }
+    const address = pastOurProxies(req, socket, proxies);
+    const connecting = plainAddress(req.headers?.["cf-connecting-ip"]);
+    if (mode === "cloudflare" && connecting && fromCloudflare(address, cloudflare)) {
+        return connecting;
+    }
+    return address;
+}
+
+// The country a request came from, as Cloudflare says (CF-IPCountry, which
+// its IP Geolocation setting adds), for the flag other co-op players see.
+// Believed only from Cloudflare, like its address; undefined without it.
+export function clientCountry(
+    req,
+    socket,
+    mode = "none",
+    proxies = PROXIES,
+    cloudflare = cloudflareList,
+) {
+    if (
+        mode !== "cloudflare" ||
+        !fromCloudflare(pastOurProxies(req, socket, proxies), cloudflare)
+    ) {
+        return undefined;
+    }
+    return countryCode(req.headers?.["cf-ipcountry"]);
+}
+
+// A country as ISO 3166's two letters ("FI"), or undefined. Cloudflare says
+// XX for one it doesn't know and T1 for Tor.
+export function countryCode(text) {
+    const code = typeof text === "string" ? text.trim().toUpperCase() : "";
+    return /^[A-Z]{2}$/.test(code) && code !== "XX" ? code : undefined;
+}
+
+function fromCloudflare(address, cloudflare) {
+    return address !== "unknown" && inList(cloudflare, address);
+}
+
+// Who connected to the first proxy that isn't ours (or to the server, with
+// none in front)
+function pastOurProxies(req, socket, proxies) {
+    let address = plainAddress(socket?.remoteAddress) ?? "unknown";
     const header = req.headers?.["x-forwarded-for"];
     const forwarded = (Array.isArray(header) ? header.join(",") : (header ?? ""))
         .split(",")
@@ -189,15 +230,6 @@ export function clientAddress(
             break;
         }
         address = previous;
-    }
-    const connecting = plainAddress(req.headers?.["cf-connecting-ip"]);
-    if (
-        mode === "cloudflare" &&
-        connecting &&
-        address !== "unknown" &&
-        inList(cloudflare, address)
-    ) {
-        address = connecting;
     }
     return address;
 }

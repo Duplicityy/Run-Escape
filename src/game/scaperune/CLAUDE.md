@@ -1387,6 +1387,7 @@ Measured in Node on this VM, on a forest-bound meadow with default settings othe
   `2` with features at least a dozen tiles across, and `smoothField` it. Bumps under about 3 tiles can't draw.
 - **Squares must be free.** Nothing in the cache uses x 70-99, y 66-199, and the map manager stops at x 100,
   y 200. Each recipe needs its own, and nothing checks that: see `devMaps.ts` and each map's `mapX`, `mapY`. The
+  shipped maps have Hallowed Night at x 72-76, y 72-76 and the Sisterhood Sanctuary at x 78-80, y 72-74. The
   map generator's screen, and scripts given settings, have x 70-99 from y 134 on.
 - **A loc on a scene's outermost tile is skipped.** It doesn't matter inside a grid, but don't stand
   anything on the outer edge of one.
@@ -1402,16 +1403,31 @@ Measured in Node on this VM, on a forest-bound meadow with default settings othe
 
 ### Shipping a map
 
-Hallowed Night (`maps/hallowedNight.ts`) is the worked example.
+Hallowed Night (`maps/hallowedNight.ts`) is the worked example, and the Sisterhood Sanctuary
+(`maps/sisterhoodSanctuary.ts`, Phosani's Nightmare's one square of dream floor in the Sanctuary's chamber)
+the small one: it builds without the cache, as its test shows, since it stamps no prefabs and says which
+of its locs block. It's also the one map built from a real place's own squares: `scripts/cache/dump-square.ts`
+lists what a map square is made of, level by level (the Sanctuary's floor is on level 1 of 59,152; her dream's
+arena is square 60,155), and `loc-sheet.ts` and `model-bounds.ts` then say what each loc is. It's a boss
+room on purpose, against the rule above, because the ask was the real arena. Its chamber is scenery
+only, every tile of it blocked, since enemies turn up anywhere walkable within 24 tiles of the player
+and a ring of scenery would strand them outside: a sealed arena needs nothing walkable past its edge. The Theatre of Blood
+(`maps/theatreOfBlood.ts`) is a raid's: halls cut from real places (doors off, and in a town the one-tile props that
+block, which split its streets into pieces too small for waves), and real boss rooms cut from the
+cache onto pads beside them, sealed by what can be walked to from where the party's brought in.
+A raid on purpose uses raid locs, which the catalogue keeps off dev maps, so it's a shipped map.
+Its `bringDown` brings an upstairs room (Xarpus's, on plane 1) down to the ground floor, as only one
+plane is drawn.
 
 - List the recipe in `maps/shippedMaps.ts`. `getRecipe` and `check-maps` read that list. `check-maps` only picks
   up ids in it or starting `scaperune_` (but not the palette, prefabs and cliffs sheets).
 - Add a real entry to `MAPS` with `scaperune: true`. That flag gives it what `dev` gives a dev map: smooth ground,
   the open world, the camera ease and collision rebuilt each time.
-- `seasonal: true` keeps it out of the campaign chain and opens it from the start. Without that, adding to `MAPS`
-  trips the unlock chain, difficulty order and unique enemies tests.
-- A recipe only writes a loc's id, type and rotation. To scale a model, give a loc nothing else uses a new model
-  and size in `src/rs/config/loctype/LocOverrides.ts`. Check the world index first.
+- `seasonal: true` keeps it out of the campaign chain and opens it from the start, and `fight` (one boss fight,
+  open once another map's beaten) does the same. Without one of them, adding to `MAPS` trips the unlock chain,
+  difficulty order and unique enemies tests.
+- A recipe only writes a loc's id, type and rotation. To scale a model, or lift one off the ground so it floats, give a loc nothing else uses a new model
+  and size, or a `height`, in `src/rs/config/loctype/LocOverrides.ts`. Check the world index first.
 - `bossArena` on the `MapDef` gives a phased boss a square of its own. The player's brought to its middle and
   can't leave while the boss is up. Without it, her totems are in the corners of the whole map.
 - Blending brown soil into blue ground goes through green, so give a soil underlay low saturation. Thin overlay

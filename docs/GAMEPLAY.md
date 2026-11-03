@@ -12,7 +12,8 @@ version and how to run it.
 - Enemies drop **bones**; walk near them to collect their experience. Bones lying close together
   gather into one pile worth all of their experience, and it looks the part as it grows: Big
   bones, Dragon bones, Wyvern bones, Lava dragon bones, then Superior dragon bones. Coins gather
-  into bigger stacks the same way. Levels follow the OSRS experience table (stretched for the
+  into bigger stacks the same way. With too many piles of either lying around, the one furthest
+  away comes to the newest drop, so nothing left far behind is lost. Levels follow the OSRS experience table (stretched for the
   later levels), and each one offers a choice of three: a new weapon, a weapon upgrade or a
   passive. **1-4** pick with the keyboard. **R** rerolls the offer (one reroll a run, more from
   the Pirate and the shop), and **X** skips it for coins from the run: 25 the first time, then
@@ -73,41 +74,42 @@ version and how to run it.
   the adventurer screen says what each one wants, and a task done mid-run rings the town
   crier's bell.
 
-    | Adventurer          | Fights with | Starts with            | Bonus                               | Joins for                                       |
-    | ------------------- | ----------- | ---------------------- | ----------------------------------- | ----------------------------------------------- |
-    | Warrior             | Melee       | Bronze scimitar        | 1 less damage taken                 |                                                 |
-    | Wizard              | Magic       | Fire Strike            | Weapons 5% faster                   |                                                 |
-    | Ranger              | Ranged      | Bronze throwing knives | Moves 10% faster                    |                                                 |
-    | Monk                | Magic       | Saradomin Strike       | Weapons 15% faster                  | Killing Count Draynor in Lumbridge              |
-    | Barbarian           | Melee       | Bronze 2h sword        | 20% more hitpoints                  | Beating Lumbridge                               |
-    | Ancient mage        | Magic       | Ice Burst              | Weapons cover 15% more area         | Killing Ahrim in Barrows                        |
-    | Hunter              | Ranged      | Shortbow               | 50% more pickup range               | Beating Barrows                                 |
-    | Rogue               | Ranged      | Bronze throwing knives | 25% more coins, luckier             | Surviving 10 minutes in the Wilderness          |
-    | Dragon slayer       | Melee       | Bronze scimitar        | Hits 15% harder                     | Beating the Wilderness                          |
-    | Nomad               | Ranged      | Bronze thrownaxes      | Moves 5% faster, hits 10% harder    | Beating the Desert                              |
-    | Menaphite           | Magic       | Smoke Burst            | 15% more experience                 | Killing Damis in the Desert                     |
-    | Seer                | Magic       | Elemental runes        | Effects last 25% longer             | Beating the Fremennik Province                  |
-    | Berserker           | Melee       | Bronze 2h sword        | Armour, and hurts what hits it      | Killing Dagannoth Rex in the Fremennik Province |
-    | Obby mauler         | Melee       | Tzhaar-ket-om          | Hits 10% harder, 10% more hitpoints | Beating Karamja                                 |
-    | Pirate              | Ranged      | Bronze throwing knives | A reroll, luckier                   | Surviving 13 minutes on Karamja                 |
-    | Pyromancer          | Magic       | Fire Strike            | Gets back up once                   | Beating Kourend                                 |
-    | Shayzien soldier    | Melee       | Bronze scimitar        | Armour, and heals over time         | Killing Sarachnis in Kourend                    |
-    | Gladiator           | Melee       | Dual macuahuitl        | Weapons 10% faster, 5% harder       | Beating Varlamore                               |
-    | Javelineer          | Ranged      | Eclipse atlatl         | Faster projectiles, 10% more area   | Killing the Javelin Colossus in Varlamore       |
-    | Vampyre hunter      | Melee       | Ivandis flail          | Hits bosses 25% harder              | Beating Morytania                               |
-    | Werewolf            | Melee       | Dragon claws           | Heals off its hits, moves 5% faster | Killing the Pestilent Bloat in Morytania        |
-    | Godsword knight     | Melee       | Godsword               | 1 less damage taken, 5% slower      | Beating the God Wars Dungeon                    |
-    | Armadyl ranger      | Ranged      | Armadyl crossbow       | Ranged 10% harder, faster shots     | Killing Kree'arra in the God Wars Dungeon       |
-    | Elf archer          | Ranged      | Crystal bow            | Moves 10% faster, ranged 5% harder  | Beating Prifddinas                              |
-    | Gauntlet runner     | Magic       | Crystal staff          | 30% weaker, +2% damage a level      | Surviving 10 minutes in Prifddinas              |
-    | Infernal champion   | Ranged      | Toxic blowpipe         | 20% more hitpoints                  | Beating the Inferno                             |
-    | TzHaar-Hur          | Magic       | Toktz-mej-tal          | Weapons cover 15% more area         | Killing JalTok-Jad in the Inferno               |
-    | Scammer             | Ranged      | Bronze throwing knives | 50% more coins, luckier             | Surviving 10 minutes on the Grand Exchange      |
-    | F2P pker            | Melee       | Bronze 2h sword        | Hits 10% harder, moves 5% faster    | Killing the Clan leader in East Varrock         |
-    | Durial321           | Melee       | Abyssal whip           | 30% less hitpoints                  | Surviving 6:06 in Falador                       |
-    | LMS sweat           | Magic       | Ice Burst              | Weapons 10% faster, 10% more area   | Killing the AGS specer in Last Man Standing     |
-    | Castle Wars veteran | Melee       | Bronze 2h sword        | Bandages heal, 10% more hitpoints   | Killing the Flag carrier in Castle Wars         |
-    | Void knight         | Melee       | Bronze scimitar        | Hits 10% harder                     | Destroying the purple portal in Pest Control    |
+    | Adventurer          | Fights with | Starts with            | Bonus                               | Joins for                                            |
+    | ------------------- | ----------- | ---------------------- | ----------------------------------- | ---------------------------------------------------- |
+    | Warrior             | Melee       | Bronze scimitar        | 1 less damage taken                 |                                                      |
+    | Wizard              | Magic       | Fire Strike            | Weapons 5% faster                   |                                                      |
+    | Ranger              | Ranged      | Bronze throwing knives | Moves 10% faster                    |                                                      |
+    | Monk                | Magic       | Saradomin Strike       | Weapons 15% faster                  | Killing Count Draynor in Lumbridge                   |
+    | Barbarian           | Melee       | Bronze 2h sword        | 20% more hitpoints                  | Beating Lumbridge                                    |
+    | Ancient mage        | Magic       | Ice Burst              | Weapons cover 15% more area         | Killing Ahrim in Barrows                             |
+    | Hunter              | Ranged      | Shortbow               | 50% more pickup range               | Beating Barrows                                      |
+    | Rogue               | Ranged      | Bronze throwing knives | 25% more coins, luckier             | Surviving 10 minutes in the Wilderness               |
+    | Dragon slayer       | Melee       | Bronze scimitar        | Hits 15% harder                     | Beating the Wilderness                               |
+    | Nomad               | Ranged      | Bronze thrownaxes      | Moves 5% faster, hits 10% harder    | Beating the Desert                                   |
+    | Menaphite           | Magic       | Smoke Burst            | 15% more experience                 | Killing Damis in the Desert                          |
+    | Seer                | Magic       | Elemental runes        | Effects last 25% longer             | Beating the Fremennik Province                       |
+    | Berserker           | Melee       | Bronze 2h sword        | Armour, and hurts what hits it      | Killing Dagannoth Rex in the Fremennik Province      |
+    | Obby mauler         | Melee       | Tzhaar-ket-om          | Hits 10% harder, 10% more hitpoints | Beating Karamja                                      |
+    | Pirate              | Ranged      | Bronze throwing knives | A reroll, luckier                   | Surviving 13 minutes on Karamja                      |
+    | Pyromancer          | Magic       | Fire Strike            | Gets back up once                   | Beating Kourend                                      |
+    | Shayzien soldier    | Melee       | Bronze scimitar        | Armour, and heals over time         | Killing Sarachnis in Kourend                         |
+    | Gladiator           | Melee       | Dual macuahuitl        | Weapons 10% faster, 5% harder       | Beating Varlamore                                    |
+    | Javelineer          | Ranged      | Eclipse atlatl         | Faster projectiles, 10% more area   | Killing the Javelin Colossus in Varlamore            |
+    | Vampyre hunter      | Melee       | Ivandis flail          | Hits bosses 25% harder              | Beating Morytania                                    |
+    | Werewolf            | Melee       | Dragon claws           | Heals off its hits, moves 5% faster | Killing the Pestilent Bloat in Morytania             |
+    | Godsword knight     | Melee       | Godsword               | 1 less damage taken, 5% slower      | Beating the God Wars Dungeon                         |
+    | Armadyl ranger      | Ranged      | Armadyl crossbow       | Ranged 10% harder, faster shots     | Killing Kree'arra in the God Wars Dungeon            |
+    | Elf archer          | Ranged      | Crystal bow            | Moves 10% faster, ranged 5% harder  | Beating Prifddinas                                   |
+    | Gauntlet runner     | Magic       | Crystal staff          | 30% weaker, +2% damage a level      | Surviving 10 minutes in Prifddinas                   |
+    | Infernal champion   | Ranged      | Toxic blowpipe         | 20% more hitpoints                  | Beating the Inferno                                  |
+    | TzHaar-Hur          | Magic       | Toktz-mej-tal          | Weapons cover 15% more area         | Killing JalTok-Jad in the Inferno                    |
+    | Scammer             | Ranged      | Bronze throwing knives | 50% more coins, luckier             | Surviving 10 minutes on the Grand Exchange           |
+    | F2P pker            | Melee       | Bronze 2h sword        | Hits 10% harder, moves 5% faster    | Killing the Clan leader in East Varrock              |
+    | Durial321           | Melee       | Abyssal whip           | 30% less hitpoints                  | Surviving 6:06 in Falador                            |
+    | LMS sweat           | Magic       | Ice Burst              | Weapons 10% faster, 10% more area   | Killing the AGS specer in Last Man Standing          |
+    | Castle Wars veteran | Melee       | Bronze 2h sword        | Bandages heal, 10% more hitpoints   | Killing the Flag carrier in Castle Wars              |
+    | Void knight         | Melee       | Bronze scimitar        | Hits 10% harder                     | Destroying the purple portal in Pest Control         |
+    | Inquisitor          | Ranged      | Armadyl crossbow       | 20% faster, 20% more hitpoints      | Phosani's Nightmare only (everyone plays them there) |
 
 - **Class weapons**: every adventurer fights with Melee, Ranged or Magic, and only they can be
   offered their class's weapons. Each class has
@@ -151,7 +153,9 @@ version and how to run it.
       **Crystal staff** grows from basic to attuned (level 4) and perfected (level 7), and
       **Toktz-mej-tal** pulses obsidian heat around you that leaves the ground burning. The
       **Volatile Nightmare staff** casts Immolate at the toughest enemy in range, slow and heavier
-      the bigger the target.
+      the bigger the target. The **Nightmare staff**, Phosani's own, has her grasping claws come
+      up out of the ground under enemies around you every few seconds, hands and all, with bosses
+      and elites grabbed twice more.
 - **Unlocks**: from the Desert on, every map holds new things to find. Beating it, or killing
   one of its mid-run bosses, brings a weapon, a passive or a piece of gear into the game for
   every run after (a toast and the results screen say so). Until then it's never offered or
@@ -171,6 +175,8 @@ version and how to run it.
     | Prifddinas     | Crystal bow, Crystal armour                      | Crystal staff (surviving 10 minutes)                                                                 |
     | Inferno        |                                                  | Toktz-mej-tal (JalTok-Jad)                                                                           |
     | Hallowed Night |                                                  | Inquisitor's mace and Volatile Nightmare staff (The Nightmare)                                       |
+    | Phosani's      |                                                  | The Nightmare staff (Phosani's Nightmare)                                                            |
+    | ToB (raid)     | Ghrazi rapier; on hard, Holy Scythe of Vitur     |                                                                                                      |
 
 - **Fun maps**: the Grand Exchange, East Varrock, Falador, Last Man Standing, Castle Wars and Pest
   Control are open from the start and always endless. They have no final boss: a new round starts
@@ -181,6 +187,11 @@ version and how to run it.
   teams, who fight each other too, and a Flag carrier who runs from you; Pest Control is the Void
   Knight's island and its pests, and its bosses are the four portals, which open together behind
   shields that drop one by one.
+- **Boss fights**: a map that's one fight (Phosani's Nightmare), listed under the campaign, open
+  once the map it's the hard mode of has been beaten. Its boss rises as the run begins, there are
+  no picks and no items (its adventurer's kit is the whole run), and killing it wins the run as any
+  final boss does: it counts as a win on the map, with its quest and its hard mode. It's never
+  endless.
 - **Hard mode**: the switch beside Endless, open once you've beaten the map (from the start on fun
   maps). Enemies have more hitpoints and hit harder, more of them come at once, every elite is two,
   and bosses enrage at 65% of their hitpoints and attack 15% faster. How much tougher depends on the map: the early ones gain the most, as a player who's
@@ -295,6 +306,37 @@ version and how to run it.
     - **Hallowed Night** (seasonal, open from the start): crypt rats and ghasts, revenants, the
       afflicted, zombies, skeletons and ghouls, shades and ghosts, the Ankou, mummies and feral
       vampyres.
+    - **Phosani's Nightmare** (a boss fight, open once Hallowed Night's beaten): nothing but her.
+      The run's one fight in her dream, as the real one is: a square of her dark floor walled round
+      in the Sanctuary's stone, a gate north and south closed by its barrier, inside the Sisterhood Sanctuary's
+      chamber under Slepe, with the Pool of Nightmares and Phosani's coffin beyond the north gate.
+      There are no waves, no picks and no items: you play the Inquisitor with the
+      Armadyl crossbow at its third level and nothing more. She rises at the middle of the arena
+      with you stood south of her, rooted until she's up, to The Bane of Ashihama, and comes at
+      you the moment you're let go. Each of her totems' blasts heals you. It can't be endless; it has a hard mode
+      once it's beaten.
+- **Raids**: the Theatre of Blood, open from the start. Six rooms one after another: each has five
+  waves in a hall on the way through Morytania (the woods outside Canifis, Burgh de Rott,
+  Meiyerditch, Darkmeyer, Slepe and Vampyrium, the vampyres' own), and at the next five minute
+  mark of the run (Verzik at thirty) the party's taken into the boss's real room from OSRS, cut out
+  of the cache. Killing it gives raid points (for clearing it, killing the boss fast and taking
+  little damage), coins for them, and a supply chest between rooms that sells food and potions
+  for points. The last boss's chest rolls for a purple,
+  more likely the more points you earned: the Theatre's uniques for the Collection log, and Lil'
+  Zik now and then. The bosses pray against missiles and magic, so melee hits hardest, and what
+  they fire from themselves starts a couple of tiles out, so there's a pocket up close that only
+  melee gets to stand in. A line at the top of the screen says what the hall wants of you, and
+  whatever bones and coins are still on its floor when the boss comes go with you.
+    - **Teleporters**: once you've killed a room's boss, in any run, its hall has a portal that
+      skips straight to it. Three a raid, solo only for now, so a run gets you back to the boss you
+      died to quicker.
+    - **Beaten once**: the Ghrazi rapier and hard mode.
+    - **Beaten on hard**: the Holy Scythe of Vitur, and **expert mode**: hard mode with more of the
+      real raid. The Nylocas only take their own style (grey melee, green ranged, blue magic),
+      Nylocas Vasilias changes colour, the Maiden's Matomenos crawl to her and heal her, Xarpus
+      stares one way and hurts whoever hits him from in front, and Verzik's spider throws a ball
+      that kills anyone outside its glowing circle. Twice the coins, and one of Lil' Zik's looks
+      each clear.
 - **Bosses** turn up during a run, each fighting the way it does in OSRS, and always drop an
   elite casket (now and then a master one). Big hits are wound up first, with a red circle
   showing where they'll land, and projectiles fly where you stood, so keep moving.
@@ -359,6 +401,81 @@ version and how to run it.
       onto it or 25 seconds pass, then bites, flings candy that brings its Third Age minions, and
       stomps, hurting more the longer you stay under it. It drops a real master casket.
       At 15:00, **The Nightmare**.
+    - **Phosani's Nightmare**: The Nightmare's hard mode, from the start. Everything of hers, quicker
+      and with more of it at once: her charge from the first phase, a wider fan of shots, a six-armed
+      spiral, farther-reaching Grasping Claws, still hands on the ground that come up in full as
+      they land (about a tile and a half across, and that's exactly what they hit) and hurt anyone
+      who steps into them while they're up, with the next round waiting for them to go down,
+      husks that run for you as quick as you are from wherever they turn up and hold you where
+      you stand until they're dead (shoot them down on the way), parasites a dozen bolts each,
+      with bars over them and the husks both, more sleepwalkers, and
+      her charge three times over, each lane picked afresh from where you are and shown for a
+      second, then gone. Her claws are her punctuation, not the fight, a little more often than
+      any one pattern and a while between: they come at random round you, two rounds with barely
+      a second each, two dozen at a time and never on one another, with ground between them that's
+      never the same ground. For her Corpse Flowers she sinks into the ground and comes up at
+      the middle of the arena, the lines cross there and the flowers grow all the while she's
+      under, so there's her jump and their growth both to get to the right quarter in; as they
+      appear, the three quarters that will hurt flash red for a second. While her sleepwalkers
+      walk in she fires nothing, not even the dream, since you're up by her shooting them down
+      where a ring can't be stepped through. When she falls her death plays out before the
+      screen says so. While the flowers stand she
+      rains petals and claws; they're a minute apart, so it isn't a run to the right quarter
+      every other attack. Her curse lasts three of her attacks. Then her own: a
+      **Sweep**, one arm of white needles aimed at you and then swept round widdershins, fired in
+      bursts so the arm has holes along it to run through as they come (or step against the
+      turn); a **Closing ring** with one way through, on your side, that turns on
+      with each volley;
+      **Weaving petals**, rings half a step apart to thread; a **Barrage**, a stream of shots that
+      follows you (keep stepping across it); **Hunting orbs** that turn after you in her last
+      phase; and a claw on the tile you stand on, ringed by eight more, with barely a second to
+      slip out between them (her hardest claw, so her rarest). Then the
+      bullet hells': a **Turning wall**, a slow dense spiral with one doorway, opening on your side
+      and walking round her (walk with it); **Pinwheels**, rings whose petals bend as they fly; a **Double sweep**, her
+      sweep with two arms; a **Counter-spiral** wound against its mirror image; a **Sealing ring**
+      whose one gap is on you, and the next ring's further round; **Closing petals**, rings that
+      each fly quicker than the last and pile up about nine tiles out (stay in close, or get well
+      clear); **Rings, then shots**, slow rings and then her barrage through them; in her last
+      phase **Scissors**, two arms that open from where you stand and sweep opposite ways (stay
+      ahead of one, or get in close); **Parted petals**, an even fan you're safest standing still
+      in, and then her claw on your tile; and **The dream closes in**, a ring round you that flies
+      inwards with its way out towards her. She flings **eggs** out of herself across the square,
+      the Parasitic egg, each its own way, with a bar over each and the game's hint arrow bobbing
+      over it (or pointing the way from the screen's edge): chase them down and break them within
+      fifteen seconds of landing (a few bolts each), or a parasite hatches. Her parasites run
+      for her, or for a totem you're working on, and each heal is a good part of her shield
+      back, or of the totem's charge undone, every couple of seconds: shoot them down on the
+      way. Nothing in the fight drops anything, not bones, caskets, coins, food or power-ups,
+      from her or hers. Her curse's pink pulses quicker on its last attack and flashes as it
+      lifts, so you know your feet are your own again. Her totems stand tall
+      enough to be seen across her square, each with its scroll turned to its middle, and she faces down her lane
+      as she charges. Neither she nor anything of hers can be pushed: walk into them and it's you
+      that gives. Her warnings
+      on the ground are drawn faint, at a tenth, so they're read rather than stared at. Every hit is shown before it lands, and nothing heals
+      but her totems, and those only a little: a blast is a breath, not a bar. A big hit takes
+      about half of the Inquisitor's hitpoints and a petal takes four, seven of them to die, with
+      barely a third of a second between one landing and the next being able to, so standing in a
+      pattern is what kills. **The dream** itself is under everything she does, a pattern each
+      phase that she keeps up on its own, through her holds and her rests, slow and sparse enough
+      to be walked through with care and seeded afresh every half minute: five arms turning in the
+      first phase, a slow ring every couple of seconds in the second, each a half-step round from
+      the last, and in the third two arms wound against their mirror image. Her rings and spirals
+      hold her for half a second only, so the next thing she does comes through them. Each phase
+      is a gear up: quicker between attacks and on her petals' windups (her big hits keep their
+      warnings), and quicker on her feet: she runs after you at most of your pace, and only sinks
+      and comes up by you once you've got well away. Her petals, shots and claws reach about as
+      far as they fly, eighteen tiles: further off than that she doesn't stand firing at nothing,
+      she comes after you, or charges, which she does as readily as she claws. Her red shots are
+      streaks, and hit no wider than they're drawn, and her barrage flies at under twice your
+      pace with a step's worth of time between shots, so it can be stepped across. And the last
+      blast doesn't end it: she stands twelve
+      seconds more, untouchable, with her sleepwalkers walking in, her claws on your tile and the
+      lattice doubled under them, and falls when it's up. Everyone plays the **Inquisitor** there,
+      made for the fight and played nowhere else; beating her brings the Nightmare staff.
+    - **The Theatre of Blood**: the **Maiden of Sugadinti**, the **Pestilent Bloat** (who only
+      really takes damage while he's down), **Nylocas Vasilias**, **Sotetseg** and his maze,
+      **Xarpus** and his acid, and **Verzik Vitur** in her three forms, each a bullet hell in its
+      own room.
 - **Gear** goes in the OSRS equipment slots (head, cape, neck, body, shield, legs, hands, feet,
   ring) and shows on your character: about ten pieces a slot, from Rune and Mystic to the
   Barrows brothers' armour, Armadyl, Ancestral, the Infernal cape, Pegasian boots and an Avernic
@@ -387,7 +504,22 @@ version and how to run it.
   power-ups in their colours. Bosses, caskets and power-ups out of range sit on the rim.
 - **Hitsplats** are the client's own sprites: red for damage (on you too), green for poison.
 - **Coins** are banked when a run ends. Spend them on **Skills** (permanent bonuses, refundable).
+  Melee, Ranged and Magic each have their own skill page, ranks and prices. Each can allocate the
+  full gold budget: 10,000 coins can fund 10,000 in skills on every class, not 10,000 split between them.
+  Only the largest page's investment is reserved from the coin bank; the Skills balance shows what
+  the selected class can still spend. Refunding one page never creates extra gold or changes the others.
+  A run uses its adventurer's class page, including in co-op. Existing shared skills move to Melee;
+  the other pages start empty. All three pages are kept when exporting and importing a save.
+  Click or tap a bought skill's arrow button to refund one rank, even when maxed, for its purchase
+  price. On desktop, right-clicking its card does the same; touch long presses do not refund.
+  Older saves without purchase prices split their tracked spending across ranks by base price.
+  **Refund all** returns the selected page's remaining investment and resets only that class's skills.
   **Woodcutting** adds melee knockback, and every other level of a melee weapon raises it too.
+  **Firemaking** gives up to 3 banishes a run. Banish a new weapon or passive on a level up and
+  its card greys out (pick another; the last one left can't be banished), and it's never offered
+  again that run. Banish a casket's item and it's alched, and never comes again (a set's piece
+  banishes the whole set). Nothing you have can be banished: not what you're levelling, carrying
+  or wearing, nor a piece of a set you're wearing.
   **Smithing** and **Crafting** are the dear ones: up to 2 more weapon slots and 2 more passive
   slots.
   (The Dwarf engineer is out of the game for now; its cannon is a power-up. Saves keep it
@@ -411,7 +543,9 @@ version and how to run it.
   everyone (the host too) is ready, which can be a party of one. The host can open or close the room, kick a
   player and disband it. A pasted invite link in the code box leaves just its code. Everyone
   gets a readable name to play under, like "Plucky Chinchompa", and rooms get one too, like "Moonlit
-  Crossing". **New name** picks another, any time but during a run.
+  Crossing". **New name** picks another, any time but during a run. Where the server knows it,
+  each player has their country's flag (and each open room its host's); **Co-op flag** in Settings
+  hides yours, except while you host an open room.
     - You can only join a room on a map you've unlocked yourself (and its endless or hard mode, for
       a room on them), and the host can only pick what everyone in the room has, so nobody skips ahead. A
       server can let anyone in instead (`MULTIPLAYER_ANY_MAP`); then a win opens the map it was
@@ -465,7 +599,7 @@ version and how to run it.
       leaving ends it for everyone.
     - Teammates show with their names in green, an arrow at the edge of the screen when they're out
       of view, green dots on the minimap and their hitpoints down the left of the screen.
-    - **Movement prediction** (a trial, off by default, in Settings and the pause menu): a player who
+    - **Movement prediction** (on by default, in Settings and the pause menu): a player who
       joined a game sees their own character move as soon as they press, then correct to the host.
       It only changes what they see: hits and pickups still follow the host.
 - **Quests** (on the title screen) pay banked coins: each is named for an OSRS quest and asks

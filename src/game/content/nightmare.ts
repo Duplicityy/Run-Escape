@@ -10,29 +10,34 @@ import { BossAttackDef, EnemyDef } from "./types";
 
 // Her animations, picked by eye: the classify script can't tell them apart, as she
 // floats in all of them
-const IDLE_SEQ = 8593;
-const WALK_SEQ = 8592;
+export const IDLE_SEQ = 8593;
+export const WALK_SEQ = 8592;
 // Claws out and red, the length of her melee warning
-const MELEE_SEQ = 8597;
+export const MELEE_SEQ = 8597;
 // Her petals spin out
-const MAGIC_SEQ = 8595;
+export const MAGIC_SEQ = 8595;
 // Twisted about, as she contorts
-const RANGED_SEQ = 8596;
+export const RANGED_SEQ = 8596;
 // Reaching into the black portal that comes with it
-const CLAWS_SEQ = 8598;
+export const CLAWS_SEQ = 8598;
 // A ring of petals on the ground
-const CURSE_SEQ = 8599;
-const SUMMON_SEQ = 8600;
-const FLOWERS_SEQ = 8601;
-const SPORES_SEQ = 8605;
+export const CURSE_SEQ = 8599;
+export const SUMMON_SEQ = 8600;
+export const FLOWERS_SEQ = 8601;
+export const SPORES_SEQ = 8605;
 // Curled up, as she throws a parasite
-const PARASITE_SEQ = 8606;
-// Wings out in a burst, as she takes in her sleepwalkers
-const ABSORB_SEQ = 8604;
-// Coming up out of a pit, wings out
-const SURGE_SEQ = 8610;
-const SPAWN_SEQ = 8611;
-const DEATH_SEQ = 8612;
+export const PARASITE_SEQ = 8606;
+// The real absorb (8604, wings out in a burst) and pit rising (8610) are on
+// her other form's skeleton (npc 9431), and tear her model apart when played
+// on it: she summons as she takes in her sleepwalkers, and gathers herself
+// with her reach out before a charge (8594, 1.8s)
+export const ABSORB_SEQ = SUMMON_SEQ;
+export const SURGE_SEQ = 8594;
+// Down into the ground and up out of it, 1.2s each (npc 9432's)
+export const SINK_SEQ = 8607;
+export const RISE_SEQ = 8609;
+export const SPAWN_SEQ = 8611;
+export const DEATH_SEQ = 8612;
 
 const NIGHTMARE_HITPOINTS = 12000;
 
@@ -345,7 +350,11 @@ const PHASE_THREE_ATTACKS: BossAttackDef[] = [
     },
 ];
 
-const TOTEM = {
+// The totems' model has its scroll hanging three-quarters of the way round from
+// where its yaw points, so this is added to turn the scroll to the arena's middle
+export const TOTEM_SCROLL_YAW = 768;
+
+export const TOTEM = {
     idleSeq: NPC_IDLE_SEQ,
     walkSeq: -1,
     attackSeq: -1,
@@ -360,7 +369,7 @@ const TOTEM = {
     sounds: { attack: -1, hit: -1, death: -1 },
 };
 
-const HUSK = {
+export const HUSK = {
     idleSeq: 8562,
     walkSeq: 8563,
     attackSeq: 8564,
@@ -375,7 +384,7 @@ const HUSK = {
     sounds: { attack: -1, hit: 4278, death: 4252 },
 };
 
-const PARASITE = {
+export const PARASITE = {
     npcId: 9452,
     idleSeq: 8553,
     walkSeq: 8553,
@@ -445,6 +454,7 @@ export const NIGHTMARE_ENEMIES: EnemyDef[] = [
                     idleId: "nightmare_totem",
                     chargingId: "nightmare_totem_charging",
                     chargedId: "nightmare_totem_charged",
+                    yawOffset: TOTEM_SCROLL_YAW,
                     charge: 0.05,
                     margin: 6,
                     blastSpotAnim: 1782,

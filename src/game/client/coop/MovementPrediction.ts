@@ -12,16 +12,35 @@ export const MAX_INPUT_HISTORY = 128;
 // indefinitely in our local-to-confirmed timeline. Still uses the send throttle.
 export const MOVE_REFRESH_MS = 200;
 const STALE_MS = 500;
+// A frame's normally come by now; longer, and the host may have stalled
+const QUIET_MS = 100;
+// An echo of an unchanged move only re-times our clock when it's this far out:
+// latency jitter of a tick or so would otherwise nudge the camera every refresh.
+const DRIFT_MS = 2 * TICK_MS;
 const CORRECTION_MS = 80;
+// The confirmed player moving this far in one frame has been teleported
 const SNAP_DISTANCE = 1.5;
+// The picture glides back to an error up to this big, as a stall or a resend's
+// catch-up leaves, and jumps only past it
+const GLIDE_DISTANCE = 4;
+// Standing still, an error this small (a stop that reached the host a tick
+// late) stays, rather than the hero and camera creeping after the stop.
+// Walking again takes it out; a bigger one is taken out all the way.
+const DEAD_ZONE = 0.1;
 
 type Input = { seq: number; at: number; move: [number, number] };
+
+function sameMove(a: [number, number], b: [number, number]): boolean {
+    return a[0] === b[0] && a[1] === b[1];
+}
 
 // Replays only this player's movement on a separate position. No Sim.step,
 // random numbers, combat, timers or writes to the authoritative player.
 export class MovementPrediction {
     private sequence = 0;
     private acknowledged = 0;
+    // The move the host's frames are applying, as of the latest echo
+    private applied: [number, number] = [0, 0];
     private inputs: Input[];
     private confirmedAt: number;
     private receivedAt: number;
@@ -32,6 +51,8 @@ export class MovementPrediction {
     private lastY: number;
     private pose?: PlayerPose;
     private rules?: MovementRules;
+    // Standing still, and taking out an error that's passed DEAD_ZONE
+    private settling = false;
 
     constructor(
         private readonly sim: Sim,
@@ -78,14 +99,23 @@ export class MovementPrediction {
             }
             const input = this.inputs.find((entry) => entry.seq === event.moveSeq);
             if (input) {
-                this.acknowledged = input.seq;
                 // This confirmed step already moved once with that input.
-                this.confirmedAt = input.at + TICK_MS;
+                const at = input.at + TICK_MS;
+                if (
+                    !sameMove(input.move, this.applied) ||
+                    Math.abs(at - this.confirmedAt) > DRIFT_MS
+                ) {
+                    this.confirmedAt = at;
+                }
+                this.acknowledged = input.seq;
+                this.applied = input.move;
             }
         }
-        // Old host ticks mustn't consume input it hasn't applied yet. The
+        // Old host ticks mustn't consume a change it hasn't applied yet. The
         // host may coalesce several changes; its latest sequence retires all.
-        const pending = this.inputs.find((input) => input.seq > this.acknowledged);
+        const pending = this.inputs.find(
+            (input) => input.seq > this.acknowledged && !sameMove(input.move, this.applied),
+        );
         this.confirmedAt = Math.min(this.confirmedAt, pending?.at ?? time, time);
         while (
             this.inputs.length > 1 &&
@@ -113,6 +143,7 @@ export class MovementPrediction {
         const last = this.inputs[this.inputs.length - 1];
         this.inputs = [{ ...last, at: time }];
         this.acknowledged = last.seq;
+        this.applied = last.move;
         this.confirmedAt = time;
     }
 
@@ -155,22 +186,29 @@ export class MovementPrediction {
         const player = sim.player;
         const dt = Math.max(0, time - this.renderedAt);
         const blend = 1 - Math.exp(-dt / CORRECTION_MS);
-        if (
-            !this.confirmed ||
-            sim.state !== "playing" ||
-            sim.runOver ||
-            !sim.isUp(sim.heroes[sim.focus]) ||
-            player.frozen > 0 ||
-            time - this.receivedAt > STALE_MS ||
-            time < this.renderedAt
-        ) {
-            // Keep the picture while its lead decays. Dropping it immediately
-            // would jump both the body and camera back to the confirmed player.
+        const playing =
+            this.confirmed &&
+            sim.state === "playing" &&
+            !sim.runOver &&
+            sim.isUp(sim.heroes[sim.focus]) &&
+            player.frozen <= 0;
+        const stalled = time - this.receivedAt > STALE_MS;
+        if (!playing || stalled || time < this.renderedAt) {
             this.resetTimeline(time);
             this.renderedAt = time;
-            const target = getPlayerPose(sim, sim.focus, alpha);
             const pose = this.pose;
             if (!pose) return undefined;
+            if (playing && stalled) {
+                // Nothing's come from the host for a while: stand where we are.
+                // Easing back to the last confirmed spot would walk the hero
+                // backwards, only to rush forward when the frames come back.
+                pose.moving = false;
+                pose.moveTicks = 0;
+                return pose;
+            }
+            // Keep the picture while its lead decays. Dropping it immediately
+            // would jump both the body and camera back to the confirmed player.
+            const target = getPlayerPose(sim, sim.focus, alpha);
             pose.x += (target.x - pose.x) * blend;
             pose.y += (target.y - pose.y) * blend;
             pose.yaw = target.yaw;
@@ -200,24 +238,40 @@ export class MovementPrediction {
             tick: sim.tick,
             sledEndTick: hero.sledEndTick,
             sledSpeed: hero.sledSpeed,
-            frozen: player.frozen > 0,
-            held: !!hero.hold,
+            frozen: player.frozen > 0 || sim.introHolds,
+            held: !!hero.hold || sim.introHolds,
             curse: hero.curse,
             arena: sim.map.bossArena && sim.shownBoss?.def.boss?.phases ? sim.bossArena : undefined,
         };
         // Keep the newest input when a lead exceeds the replay budget: starts,
         // stops and turns mustn't get stranded beyond the end of an old window.
-        this.replay(target, Math.max(this.confirmedAt, time - PREDICTION_MS), time);
+        const capped = this.confirmedAt < time - PREDICTION_MS;
+        this.replay(target, capped ? time - PREDICTION_MS : this.confirmedAt, time);
+        // The host's gone quiet and the target's as far ahead as it may go: hold
+        // the picture. Walking on would run past the target, and correcting to
+        // it would pull the hero back as its window slides over a stop. A busy
+        // link's lead can pass the budget too, but the picture keeps walking then.
+        const halted = capped && time - this.receivedAt > QUIET_MS;
         const pose = this.pose ?? { ...target };
         const wasMoving = pose.moving;
-        if (this.pose) {
+        if (this.pose && !halted) {
             this.replay(pose, Math.max(this.renderedAt, time - PREDICTION_MS), time);
             const dx = target.x - pose.x;
             const dy = target.y - pose.y;
-            if (Math.hypot(dx, dy) > SNAP_DISTANCE) {
+            const error = Math.hypot(dx, dy);
+            const [moveX, moveY] = this.inputs[this.inputs.length - 1].move;
+            const still = moveX === 0 && moveY === 0;
+            // Stopped, but the host's frames don't have the stop yet. With a
+            // lead past the budget the target's window slides over the stop
+            // and falls short of where it'll leave us: pulling back to it would
+            // walk the hero backwards, then forwards again. Hold until it's in.
+            const stopping = still && !sameMove(this.applied, [0, 0]);
+            this.settling =
+                still && !stopping && (error >= DEAD_ZONE || (this.settling && error > 0.001));
+            if (error > GLIDE_DISTANCE) {
                 pose.x = target.x;
                 pose.y = target.y;
-            } else {
+            } else if (!still || this.settling) {
                 const beforeX = pose.x;
                 const beforeY = pose.y;
                 moveCircle(sim.grid, pose, dx * blend, dy * blend, player.radius);
@@ -233,6 +287,7 @@ export class MovementPrediction {
         }
         // Facing and animation react even before the next movement tick.
         this.move(pose, this.inputs[this.inputs.length - 1], 0);
+        pose.moving &&= !halted;
         pose.moveTicks = pose.moving === wasMoving ? pose.moveTicks + dt / TICK_MS : 0;
         this.renderedAt = time;
         this.pose = pose;

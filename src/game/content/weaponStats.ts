@@ -1,4 +1,6 @@
+import { WEAPON_DAMAGE_BALANCE, WeaponDamageProfile } from "./balance";
 import { WeaponDef, WeaponLevel } from "./types";
+import { weaponDamageProfileScale } from "./weaponBalance";
 
 // A weapon stat as the level up cards, the pause menu and the HUD's tooltips
 // show it: "Damage 13", or for a level up "Damage 10 → 13"
@@ -115,9 +117,12 @@ function spellDuration(def: WeaponDef): StatField[] {
 }
 
 // Venom's length, for what poisons
-function venomFields(): StatField[] {
+function venomFields(damageScale: number): StatField[] {
     return [
-        venom,
+        {
+            ...venom,
+            get: (level) => (level.venom === undefined ? undefined : level.venom * damageScale),
+        },
         {
             ...seconds("Venom lasts", positive),
             get: (level) => (level.venom ? level.duration : undefined),
@@ -129,12 +134,14 @@ function venomFields(): StatField[] {
 // methods): amount is a slash's sides but a missile's projectiles, area a
 // slash's reach but a missile's splash, and so on. Stats a kind ignores are
 // left out.
-function statFields(def: WeaponDef): StatField[] {
+function statFields(def: WeaponDef, profile: WeaponDamageProfile | undefined): StatField[] {
+    const scale = weaponDamageProfileScale(profile, def);
+    const tunedDamage = { ...damage, get: (level: WeaponLevel) => level.damage * scale };
     switch (def.kind) {
         case "slash":
         case "sweep":
             return [
-                damage,
+                tunedDamage,
                 rate,
                 // Front, and behind too at 2
                 {
@@ -160,7 +167,7 @@ function statFields(def: WeaponDef): StatField[] {
         case "knives":
         case "axes":
             return [
-                damage,
+                tunedDamage,
                 rate,
                 projectiles,
                 ...(def.kind === "axes"
@@ -175,32 +182,32 @@ function statFields(def: WeaponDef): StatField[] {
                     : []),
                 pierce,
                 tiles("Splash", positive),
-                ...venomFields(),
+                ...venomFields(scale),
                 { label: "Speed", get: (level) => level.speed, format: (value) => round(value) },
                 knockback,
             ];
         case "aura":
             return [
-                damage,
+                tunedDamage,
                 rate,
                 tiles("Radius", always),
                 ...spellDuration(def),
-                ...venomFields(),
+                ...venomFields(scale),
                 knockback,
             ];
         case "strike":
             return [
-                damage,
+                tunedDamage,
                 rate,
                 { ...projectiles, label: "Targets" },
                 tiles("Blast radius", always),
                 ...spellDuration(def),
-                ...venomFields(),
+                ...venomFields(scale),
                 knockback,
             ];
         case "orbit":
             return [
-                damage,
+                tunedDamage,
                 rate,
                 projectiles,
                 seconds("Lasts", always),
@@ -216,9 +223,13 @@ function statFields(def: WeaponDef): StatField[] {
 }
 
 // A weapon's stats at a level, the ones worth listing for its kind
-export function weaponStats(def: WeaponDef, level: WeaponLevel): WeaponStatLine[] {
+export function weaponStats(
+    def: WeaponDef,
+    level: WeaponLevel,
+    profile: WeaponDamageProfile | undefined = WEAPON_DAMAGE_BALANCE.global,
+): WeaponStatLine[] {
     const lines: WeaponStatLine[] = [];
-    for (const field of statFields(def)) {
+    for (const field of statFields(def, profile)) {
         const value = field.get(level);
         if (value !== undefined && field.listed?.(value)) {
             lines.push({ label: field.label, value: field.format(value) });
@@ -233,9 +244,10 @@ export function weaponStatChanges(
     def: WeaponDef,
     from: WeaponLevel,
     to: WeaponLevel,
+    profile: WeaponDamageProfile | undefined = WEAPON_DAMAGE_BALANCE.global,
 ): WeaponStatLine[] {
     const lines: WeaponStatLine[] = [];
-    for (const field of statFields(def)) {
+    for (const field of statFields(def, profile)) {
         // A stat that only means something at one of the levels (venom's
         // length once there's venom) counts as none at the other
         const before = field.get(from) ?? 0;

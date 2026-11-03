@@ -1,6 +1,7 @@
 import {
     CSSProperties,
     ReactNode,
+    memo,
     useCallback,
     useEffect,
     useRef,
@@ -13,11 +14,14 @@ import compass from "../../components/rs/minimap/compass.png";
 import minimapFrame from "../../components/rs/minimap/minimap-frame.png";
 import { EquipSlot } from "../../rs/model/player/PlayerModelLoader";
 import { isCoarsePointer } from "../../util/DeviceUtil";
+import { FRAME_RATES, FrameRate } from "../client/DisplaySettings";
 import { GameClient } from "../client/GameClient";
+import { padLabel } from "../client/GamePad";
 import {
     BuffView,
     GameStore,
     GearSlotView,
+    HudNumbers,
     HudView,
     InventorySlotView,
     QuestTrackView,
@@ -26,25 +30,40 @@ import {
 } from "../client/GameStore";
 import { formatTime } from "../client/GameView";
 import { CHARACTERS, getCharacter } from "../content/characters";
-import { CAMPAIGN_MAPS, DEV_MAPS, FUN_MAPS, MAPS, SEASONAL_MAPS, getMap } from "../content/maps";
+import {
+    CAMPAIGN_MAPS,
+    DEV_MAPS,
+    FIGHT_MAPS,
+    FUN_MAPS,
+    MAPS,
+    RAID_MAPS,
+    SEASONAL_MAPS,
+    getMap,
+    getMapCharacter,
+} from "../content/maps";
 import { RARITIES } from "../content/rarity";
 import { SHOP_UPGRADES } from "../content/shop";
-import { COLLECTION_LOG_OBJ, TITLE_TAB_SPRITES } from "../content/titleIcons";
+import { COLLECTION_LOG_OBJ, REFUND_SPRITE, TITLE_TAB_SPRITES } from "../content/titleIcons";
+import { TROPHY_BY_ID } from "../content/trophies";
 import { CharacterDef, CombatStyle, MapDef } from "../content/types";
 import { MapReward, describeUnlockTask, getMapRewards } from "../content/unlocks";
 import { WeaponStatLine } from "../content/weaponStats";
 import { WEAPONS, getWeapon } from "../content/weapons";
+import type { RaidChest } from "../core/Sim";
 import {
     NewerSaveError,
     SaveData,
     getNextUpgradeCost,
+    getSkillCoins,
     importSave,
     isEndlessUnlocked,
+    isExpertUnlocked,
     isHardUnlocked,
     isMapUnlocked,
 } from "../core/save";
 import { MapGeneratorButton } from "../scaperune/MapGeneratorScreen";
 import { ArmouryScreen } from "./ArmouryScreen";
+import { BanishButton } from "./BanishButton";
 import { ChangelogPanel } from "./ChangelogPanel";
 import { ChestModal } from "./ChestModal";
 import { Coins } from "./Coins";
@@ -54,6 +73,7 @@ import { EventModal } from "./EventModal";
 import "./GameUi.css";
 import { ItemIcon } from "./ItemIcon";
 import { NoticePanel } from "./NoticePanel";
+import { KeyHint, PadControls, PadIcon, usePadKind } from "./PadHint";
 import { QuestScreen } from "./QuestScreen";
 import { RerollButton } from "./RerollButton";
 import { SaveBlockPanel, UnreadableSavePanel } from "./SavePanels";
@@ -291,7 +311,7 @@ function AutoAlchSetting({ ui, client }: ScreenProps): JSX.Element {
 function MovePredictionSetting({ ui, client }: ScreenProps): JSX.Element {
     return (
         <Setting
-            name="Movement prediction (trial)"
+            name="Movement prediction"
             text="Joining a co-op game, you move as soon as you press, then correct to the host"
         >
             <Toggle
@@ -299,6 +319,55 @@ function MovePredictionSetting({ ui, client }: ScreenProps): JSX.Element {
                 label="Movement prediction"
                 onToggle={() => client.toggleMovePrediction()}
             />
+        </Setting>
+    );
+}
+
+function CoopFlagSetting({ ui, client }: ScreenProps): JSX.Element {
+    return (
+        <Setting
+            name="Co-op flag"
+            text="Other co-op players see your country's flag (an open room shows its host's either way)"
+        >
+            <Toggle
+                on={ui.display.coopFlag}
+                label="Co-op flag"
+                onToggle={() => client.toggleCoopFlag()}
+            />
+        </Setting>
+    );
+}
+
+const FRAME_RATE_NAMES: Record<FrameRate, string> = {
+    auto: "Auto",
+    "30": "30",
+    "60": "60",
+    unlimited: "Unlimited",
+};
+
+function FrameRateSetting({ ui, client }: ScreenProps): JSX.Element {
+    return (
+        <Setting
+            name="Frame rate"
+            text="Frames a second at most. Auto is 60 on a phone or tablet, as many as the screen shows otherwise"
+        >
+            {FRAME_RATES.map((rate) => (
+                <button
+                    key={rate}
+                    className={
+                        "ui-button ui-button-small ui-frame-rate" +
+                        (ui.display.frameRate === rate ? " ui-frame-rate-on" : "")
+                    }
+                    aria-pressed={ui.display.frameRate === rate}
+                    onClick={(e) => {
+                        client.setFrameRate(rate);
+                        // Give Enter and Space back to the screen
+                        e.currentTarget.blur();
+                    }}
+                >
+                    {FRAME_RATE_NAMES[rate]}
+                </button>
+            ))}
         </Setting>
     );
 }
@@ -462,6 +531,7 @@ function SettingsPanel({
     client,
     onClose,
 }: ScreenProps & { onClose: () => void }): JSX.Element {
+    const padKind = usePadKind();
     return (
         <div className="ui-panel rs-border rs-background ui-settings">
             <h2>Settings</h2>
@@ -485,7 +555,15 @@ function SettingsPanel({
                     <AutoPauseSetting ui={ui} client={client} />
                     <AutoAlchSetting ui={ui} client={client} />
                     <MovePredictionSetting ui={ui} client={client} />
+                    <CoopFlagSetting ui={ui} client={client} />
+                    <FrameRateSetting ui={ui} client={client} />
                 </section>
+                {padKind && (
+                    <section className="ui-settings-section">
+                        <h3>Controller</h3>
+                        <PadControls />
+                    </section>
+                )}
                 <section className="ui-settings-section">
                     <h3>Save</h3>
                     <SaveSetting ui={ui} client={client} />
@@ -657,11 +735,7 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
                         <TitleStat name="Best level" value={save.bestLevel} />
                     </div>
                 </div>
-                <div className="ui-hint">
-                    {isCoarsePointer
-                        ? "Drag anywhere to move · weapons fire on their own"
-                        : "WASD to move · weapons fire on their own · Esc to pause · M to mute"}
-                </div>
+                <TitleHint />
             </div>
             <div className="ui-title-utils">
                 {ui.saveBlock && ui.saveBlockClosed && (
@@ -714,25 +788,51 @@ export function getStartingWeaponIcon(character: CharacterDef): number {
     return weapon.levels[0].objId ?? weapon.iconObjId;
 }
 
+// How to play, under the title's buttons: the controller's buttons once one's
+// in use (a browser shows no pad until a button's pressed)
+function TitleHint(): JSX.Element {
+    const pad = usePadKind();
+    if (pad) {
+        return (
+            <div className="ui-hint ui-hint-pad">
+                <PadIcon kind={pad} icon="move" label="Left stick" /> to move · weapons fire on
+                their own · <PadIcon kind={pad} icon="start" label={padLabel(pad, "start")} /> to
+                pause · <PadIcon kind={pad} icon="south" label={padLabel(pad, "south")} /> to pick
+            </div>
+        );
+    }
+    return (
+        <div className="ui-hint">
+            {isCoarsePointer
+                ? "Drag anywhere to move · weapons fire on their own"
+                : "WASD to move · weapons fire on their own · Esc to pause · M to mute"}
+        </div>
+    );
+}
+
 // Adventurers on the left and maps on the right, so the adventurer picked
 // stands in view between them
 function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
     return (
         <div className="ui-fill ui-select">
-            <AdventurerPanel ui={ui} client={client} />
+            <AdventurerPanel ui={ui} client={client} fixed={getMapCharacter(getMap(ui.mapId))} />
             <MapPanel ui={ui} client={client} />
             <div className="ui-panel rs-border rs-background ui-select-bar">
                 <button className="ui-button" onClick={() => client.showScreen("title")}>
                     Back
                 </button>
                 <Coins amount={ui.save.coins} />
-                <EndlessSwitch ui={ui} client={client} />
+                {/* A raid ends with its last room: no endless */}
+                {!getMap(ui.mapId).raid && <EndlessSwitch ui={ui} client={client} />}
                 <HardSwitch ui={ui} client={client} />
+                {getMap(ui.mapId).raid && ui.coop.status === "offline" && (
+                    <ExpertSwitch ui={ui} client={client} />
+                )}
                 <button
                     className="ui-button ui-button-go ui-select-go"
                     onClick={() => client.startRun()}
                 >
-                    Enter {getMap(ui.mapId).name}
+                    <KeyHint pad="start" /> Enter {getMap(ui.mapId).name}
                     {ui.hard && " hard"}
                     {ui.endless && !getMap(ui.mapId).fun && " endless"}
                 </button>
@@ -742,8 +842,16 @@ function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
 }
 
 // Endless runs for the map picked, once it's been beaten (fun maps are
-// always endless)
+// always endless, and a boss fight never is)
 function EndlessSwitch({ ui, client }: ScreenProps): JSX.Element {
+    if (getMap(ui.mapId).fight) {
+        return (
+            <div className="ui-endless" title="A boss fight is over when she is.">
+                <span className="ui-endless-name">Endless</span>
+                <span className="ui-endless-hint">One fight</span>
+            </div>
+        );
+    }
     if (getMap(ui.mapId).fun) {
         return (
             <div
@@ -800,6 +908,93 @@ function HardSwitch({ ui, client }: ScreenProps): JSX.Element {
     );
 }
 
+// What a raid's hall wants of you: hold out until its boss comes (or take the portal). The first
+// time through, a line on how the raid goes, as it's not like a campaign map.
+function RaidObjective({
+    room,
+    bossIn,
+}: {
+    room: NonNullable<HudNumbers["raidRoom"]>;
+    bossIn: number;
+}): JSX.Element {
+    const boss = room.name.replace(/^The /, "the ");
+    return (
+        <div
+            className={
+                bossIn <= 60 ? "ui-raid-objective ui-raid-objective-soon" : "ui-raid-objective"
+            }
+        >
+            <div>
+                Survive the waves: {boss} in {formatTime(Math.ceil(bossIn))}
+            </div>
+            {room.portal && (
+                <div className="ui-raid-objective-hint">
+                    Or step into the portal to face {boss} now
+                </div>
+            )}
+            {room.first && room.number === 1 && (
+                <div className="ui-raid-objective-hint">
+                    {room.count} rooms, each with its waves and then its boss. Kill the boss to move
+                    on.
+                </div>
+            )}
+        </div>
+    );
+}
+
+// The chest at the end of a raid: what it was rolled with, and what came out
+function RaidChestView({ chest }: { chest: RaidChest }): JSX.Element {
+    const found = chest.found.map((id) => TROPHY_BY_ID.get(id)!).filter(Boolean);
+    return (
+        <div className="ui-raid-chest">
+            <div className="ui-raid-chest-title">
+                {found.length > 0 ? "A purple chest!" : "The raid's chest"}
+            </div>
+            <div className="ui-subtle">
+                {chest.points.toLocaleString("en-GB")} raid points: a{" "}
+                {Math.round(chest.chance * 100)}% chance of a unique
+            </div>
+            {found.length > 0 ? (
+                <div className="ui-raid-chest-items">
+                    {found.map((trophy) => (
+                        <span key={trophy.id} className="ui-raid-chest-item">
+                            <ItemIcon objId={trophy.objId} size={36} />
+                            {trophy.name}
+                        </span>
+                    ))}
+                </div>
+            ) : (
+                <div className="ui-subtle">No unique this time.</div>
+            )}
+        </div>
+    );
+}
+
+// A raid's expert mode, once it's been beaten on hard: hard mode, and the Nylocas only hurt by
+// their own style
+function ExpertSwitch({ ui, client }: ScreenProps): JSX.Element {
+    const open = isExpertUnlocked(ui.save, ui.mapId);
+    return (
+        <div
+            className={"ui-endless" + (open ? "" : " ui-endless-locked")}
+            title={
+                open
+                    ? "Hard mode, and the Nylocas only take damage from their own style: grey " +
+                      "melee, green ranged, blue magic. Nylocas Vasilias changes colour. Bring " +
+                      "all three. Twice the coins, and one of Lil' Zik's looks each clear."
+                    : `Beat ${getMap(ui.mapId).name} on hard to play it on expert`
+            }
+        >
+            <span className="ui-endless-name">Expert</span>
+            {open ? (
+                <Toggle on={ui.expert} label="Expert" onToggle={() => client.toggleExpert()} />
+            ) : (
+                <span className="ui-endless-hint">Beat it on hard</span>
+            )}
+        </div>
+    );
+}
+
 // A pointer leaving a panel goes back to what's picked. Not a finger: browsers
 // follow a tap with a mouse leaving, which would take away what was tapped.
 function stopPeeking(setPeek: (id: undefined) => void): (() => void) | undefined {
@@ -811,22 +1006,39 @@ function stopPeeking(setPeek: (id: undefined) => void): (() => void) | undefined
 // pointed at (or tapped, so a locked one can say what it takes) until the
 // pointer leaves the panel, then the one picked. Only moving the pointer
 // changes it: the list scrolling under a still pointer doesn't.
-export function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
+// fixed: the adventurer the map picked makes everyone play (Falador's Durial321,
+// Phosani's Inquisitor), with the choice blurred out under them
+export function AdventurerPanel({
+    ui,
+    client,
+    fixed,
+}: ScreenProps & { fixed?: string }): JSX.Element {
     const unlocked = ui.save.unlockedCharacters;
     const [peek, setPeek] = useState<string>();
-    const opened = CHARACTERS.filter((c) => unlocked.includes(c.id)).length;
+    // The roster: not an adventurer played on one map alone (CharacterDef.only)
+    const roster = CHARACTERS.filter((c) => !c.only);
+    const opened = roster.filter((c) => unlocked.includes(c.id)).length;
     return (
         <div
-            className="ui-panel rs-border rs-background ui-select-panel ui-select-adventurers"
+            className={
+                "ui-panel rs-border rs-background ui-select-panel ui-select-adventurers" +
+                (fixed ? " ui-select-fixed" : "")
+            }
             onMouseLeave={stopPeeking(setPeek)}
         >
             <h2 className="ui-select-heading">
                 Adventurer
                 <span className="ui-select-count">
-                    {opened} / {CHARACTERS.length}
+                    {opened} / {roster.length}
                 </span>
             </h2>
-            <div className="ui-select-scroll">
+            {fixed && (
+                <div className="ui-select-fixed-note">
+                    <ItemIcon objId={getStartingWeaponIcon(getCharacter(fixed))} size={28} />
+                    Everyone plays the {getCharacter(fixed).name} here.
+                </div>
+            )}
+            <div className="ui-select-scroll" aria-hidden={fixed !== undefined}>
                 {STYLES.map((style) => {
                     const treasure = getClassTreasure(style);
                     return (
@@ -843,50 +1055,55 @@ export function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
                                 )}
                             </div>
                             <div className="ui-tiles">
-                                {CHARACTERS.filter((c) => c.style === style).map((character) => {
-                                    const selected = character.id === ui.characterId;
-                                    return (
-                                        <button
-                                            key={character.id}
-                                            className={
-                                                "ui-card ui-tile" +
-                                                (selected ? " ui-card-selected" : "") +
-                                                (unlocked.includes(character.id)
-                                                    ? ""
-                                                    : " ui-card-locked")
-                                            }
-                                            aria-label={character.name}
-                                            aria-pressed={selected}
-                                            onMouseMove={() => setPeek(character.id)}
-                                            onFocus={() => setPeek(character.id)}
-                                            onBlur={() => setPeek(undefined)}
-                                            onClick={() => {
-                                                setPeek(character.id);
-                                                client.selectCharacter(character.id);
-                                            }}
-                                        >
-                                            <ItemIcon
-                                                objId={
-                                                    character.equipment[EquipSlot.TORSO] ??
-                                                    getStartingWeaponIcon(character)
+                                {roster
+                                    .filter((c) => c.style === style)
+                                    .map((character) => {
+                                        const selected = character.id === ui.characterId;
+                                        return (
+                                            <button
+                                                key={character.id}
+                                                className={
+                                                    "ui-card ui-tile" +
+                                                    (selected ? " ui-card-selected" : "") +
+                                                    (unlocked.includes(character.id)
+                                                        ? ""
+                                                        : " ui-card-locked")
                                                 }
-                                                size={34}
-                                            />
-                                            <span className="ui-tile-badge">
+                                                aria-label={character.name}
+                                                aria-pressed={selected}
+                                                onMouseMove={() => setPeek(character.id)}
+                                                onFocus={() => setPeek(character.id)}
+                                                onBlur={() => setPeek(undefined)}
+                                                onClick={() => {
+                                                    setPeek(character.id);
+                                                    client.selectCharacter(character.id);
+                                                }}
+                                            >
                                                 <ItemIcon
-                                                    objId={getStartingWeaponIcon(character)}
-                                                    size={18}
+                                                    objId={
+                                                        character.equipment[EquipSlot.TORSO] ??
+                                                        getStartingWeaponIcon(character)
+                                                    }
+                                                    size={34}
                                                 />
-                                            </span>
-                                        </button>
-                                    );
-                                })}
+                                                <span className="ui-tile-badge">
+                                                    <ItemIcon
+                                                        objId={getStartingWeaponIcon(character)}
+                                                        size={18}
+                                                    />
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
                             </div>
                         </div>
                     );
                 })}
             </div>
-            <AdventurerDetails save={ui.save} character={getCharacter(peek ?? ui.characterId)} />
+            <AdventurerDetails
+                save={ui.save}
+                character={getCharacter(fixed ?? peek ?? ui.characterId)}
+            />
         </div>
     );
 }
@@ -978,6 +1195,20 @@ function MapPanel({ ui, client }: ScreenProps): JSX.Element {
                 </div>
                 <div className="ui-style-group">
                     <div className="ui-style-name">
+                        Boss fights
+                        <span className="ui-style-treasure">once their map's beaten</span>
+                    </div>
+                    <div className="ui-map-list">{FIGHT_MAPS.map(tile)}</div>
+                </div>
+                <div className="ui-style-group">
+                    <div className="ui-style-name">
+                        Raids
+                        <span className="ui-style-treasure">room by room, open from the start</span>
+                    </div>
+                    <div className="ui-map-list">{RAID_MAPS.map(tile)}</div>
+                </div>
+                <div className="ui-style-group">
+                    <div className="ui-style-name">
                         Fun maps
                         <span className="ui-style-treasure">endless, open from the start</span>
                     </div>
@@ -1016,10 +1247,15 @@ function MapDetails({ save, map }: { save: SaveData; map: MapDef }): JSX.Element
                                 ? `Fun map, endless. You play as ${getCharacter(map.fun.character).name}.`
                                 : "Fun map, endless"
                             : !unlocked
-                              ? `Beat ${MAPS[MAPS.indexOf(map) - 1].name} to unlock`
-                              : wins > 0
-                                ? `Beaten ${wins === 1 ? "once" : `${wins} times`}`
-                                : "Not beaten yet"}
+                              ? `Beat ${getMap(map.fight?.requires ?? MAPS[MAPS.indexOf(map) - 1].id).name} to unlock`
+                              : map.fight
+                                ? `Boss fight. You play as the ${getCharacter(map.fight.character).name}` +
+                                  (wins > 0
+                                      ? `, beaten ${wins === 1 ? "once" : `${wins} times`}.`
+                                      : ".")
+                                : wins > 0
+                                  ? `Beaten ${wins === 1 ? "once" : `${wins} times`}`
+                                  : "Not beaten yet"}
                     </div>
                     {endless && (
                         <div className="ui-card-style">
@@ -1039,9 +1275,23 @@ function MapDetails({ save, map }: { save: SaveData; map: MapDef }): JSX.Element
                     )}
                 </div>
             </div>
-            <div className="ui-card-text">{map.description}</div>
+            <div className="ui-card-text ui-card-description">
+                <RichText text={map.description} />
+            </div>
             <MapTasks save={save} mapId={map.id} />
         </div>
+    );
+}
+
+// A description's own formatting: a blank line between paragraphs (the CSS keeps line breaks),
+// and **bold**
+function RichText({ text }: { text: string }): JSX.Element {
+    return (
+        <>
+            {text
+                .split(/\*\*(.+?)\*\*/g)
+                .map((part, i) => (i % 2 === 1 ? <strong key={i}>{part}</strong> : part))}
+        </>
     );
 }
 
@@ -1082,39 +1332,121 @@ function MapTasks({ save, mapId }: { save: SaveData; mapId: string }): JSX.Eleme
 
 function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
     const save = ui.save;
+    const [style, setStyle] = useState<CombatStyle>(() => getCharacter(ui.characterId).style);
+    const page = save.skillPages[style];
+    const coins = getSkillCoins(save, style);
     return (
         <div className="ui-fill ui-center">
             <div className="ui-panel rs-border rs-background ui-shop">
                 <h2>Skills</h2>
                 <p className="ui-subtle">Coins found in runs train your skills for good.</p>
-                <div className="ui-shop-grid">
+                <div
+                    className="ui-row ui-shop-tabs"
+                    role="tablist"
+                    aria-label="Class skills"
+                    onKeyDown={(event) => {
+                        const index = STYLES.indexOf(style);
+                        const next =
+                            event.key === "ArrowRight"
+                                ? STYLES[(index + 1) % STYLES.length]
+                                : event.key === "ArrowLeft"
+                                  ? STYLES[(index + STYLES.length - 1) % STYLES.length]
+                                  : event.key === "Home"
+                                    ? STYLES[0]
+                                    : event.key === "End"
+                                      ? STYLES[STYLES.length - 1]
+                                      : undefined;
+                        if (next) {
+                            event.preventDefault();
+                            setStyle(next);
+                            event.currentTarget
+                                .querySelector<HTMLButtonElement>(`#skills-tab-${next}`)
+                                ?.focus();
+                        }
+                    }}
+                >
+                    {STYLES.map((tab) => (
+                        <button
+                            key={tab}
+                            id={`skills-tab-${tab}`}
+                            className="ui-button"
+                            role="tab"
+                            tabIndex={style === tab ? 0 : -1}
+                            aria-selected={style === tab}
+                            aria-controls="skills-page"
+                            onClick={() => setStyle(tab)}
+                        >
+                            {STYLE_NAMES[tab]}
+                        </button>
+                    ))}
+                </div>
+                <div
+                    className="ui-shop-grid"
+                    id="skills-page"
+                    role="tabpanel"
+                    aria-labelledby={`skills-tab-${style}`}
+                >
                     {SHOP_UPGRADES.map((upgrade) => {
-                        const rank = save.upgrades[upgrade.id] ?? 0;
-                        const cost = getNextUpgradeCost(save, upgrade.id);
-                        const affordable = cost !== undefined && save.coins >= cost;
+                        const rank = page.upgrades[upgrade.id] ?? 0;
+                        const cost = getNextUpgradeCost(save, upgrade.id, style);
+                        const affordable = cost !== undefined && coins >= cost;
                         return (
-                            <button
-                                key={upgrade.id}
-                                className={
-                                    "ui-card ui-shop-card" + (affordable ? "" : " ui-card-dim")
-                                }
-                                disabled={cost === undefined}
-                                onClick={() => client.buyUpgrade(upgrade.id)}
-                            >
-                                <div className="ui-card-title">{upgrade.name}</div>
-                                <div className="ui-card-text">{upgrade.description}</div>
-                                <div className="ui-pips">
-                                    {Array.from({ length: upgrade.maxRank }, (_, i) => (
-                                        <span
-                                            key={i}
-                                            className={i < rank ? "ui-pip ui-pip-on" : "ui-pip"}
-                                        />
-                                    ))}
-                                </div>
-                                <div className="ui-card-cost">
-                                    {cost === undefined ? "Maxed" : <Coins amount={cost} />}
-                                </div>
-                            </button>
+                            <div key={upgrade.id} className="ui-shop-entry">
+                                <button
+                                    className={
+                                        "ui-card ui-shop-card" + (affordable ? "" : " ui-card-dim")
+                                    }
+                                    aria-disabled={!affordable}
+                                    title={
+                                        rank > 0 && !isCoarsePointer
+                                            ? "Right-click to refund one rank"
+                                            : undefined
+                                    }
+                                    onClick={() => {
+                                        if (affordable) {
+                                            client.buyUpgrade(upgrade.id, style);
+                                        }
+                                    }}
+                                    onContextMenu={(event) => {
+                                        if (rank > 0) {
+                                            event.preventDefault();
+                                            if (!isCoarsePointer) {
+                                                client.refundUpgrade(upgrade.id, style);
+                                            }
+                                        }
+                                    }}
+                                >
+                                    <div className="ui-card-title">{upgrade.name}</div>
+                                    <div className="ui-card-text">{upgrade.description}</div>
+                                    <div className="ui-pips">
+                                        {Array.from({ length: upgrade.maxRank }, (_, i) => (
+                                            <span
+                                                key={i}
+                                                className={i < rank ? "ui-pip ui-pip-on" : "ui-pip"}
+                                            />
+                                        ))}
+                                    </div>
+                                    <div className="ui-card-cost">
+                                        {cost === undefined ? "Maxed" : <Coins amount={cost} />}
+                                    </div>
+                                </button>
+                                {rank > 0 && (
+                                    <button
+                                        className="ui-shop-refund"
+                                        aria-label={`Refund one ${upgrade.name} rank`}
+                                        title={`Refund one ${upgrade.name} rank`}
+                                        onClick={() => client.refundUpgrade(upgrade.id, style)}
+                                    >
+                                        <span className="ui-shop-refund-icon" aria-hidden="true">
+                                            <ItemIcon
+                                                objId={-1}
+                                                spriteId={REFUND_SPRITE}
+                                                size={21}
+                                            />
+                                        </span>
+                                    </button>
+                                )}
+                            </div>
                         );
                     })}
                 </div>
@@ -1122,11 +1454,11 @@ function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
                     <button className="ui-button" onClick={() => client.showScreen("title")}>
                         Back
                     </button>
-                    <Coins amount={save.coins} />
+                    <Coins amount={coins} />
                     <button
                         className="ui-button"
-                        disabled={save.upgradesSpent === 0}
-                        onClick={() => client.refundUpgrades()}
+                        disabled={page.upgradesSpent === 0}
+                        onClick={() => client.refundUpgrades(style)}
                     >
                         Refund all
                     </button>
@@ -1156,7 +1488,7 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
                 <ReviveNote revive={ui.revive} />
             )}
             {isCoarsePointer && hud && (
-                <TouchControls hud={hud} overlay={ui.overlay} client={client} />
+                <TouchControls inventory={hud.inventory} overlay={ui.overlay} client={client} />
             )}
             <div className="ui-toasts">
                 {ui.toasts.map((toast) => (
@@ -1171,16 +1503,12 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
                     key={ui.chest.uid}
                     chest={ui.chest}
                     rerolls={hud?.rerolls ?? 0}
+                    banishes={hud?.banishes ?? 0}
                     client={client}
                 />
             )}
             {ui.overlay === "event" && ui.event && (
-                <EventModal
-                    key={ui.event.uid}
-                    event={ui.event}
-                    coins={hud?.coins ?? 0}
-                    client={client}
-                />
+                <RunEventModal key={ui.event.uid} event={ui.event} client={client} />
             )}
             {ui.overlay === "paused" && hud && <PauseModal ui={ui} hud={hud} client={client} />}
             {(ui.overlay === "dead" || ui.overlay === "victory") && (
@@ -1188,6 +1516,29 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
             )}
         </div>
     );
+}
+
+// One of the HUD's numbers (hitpoints, xp, the clock, damage), which change many
+// times a second. A part of the HUD draws again only when what it picks out does:
+// GameClient keeps what hasn't changed the same object.
+function useHudNumber<T>(client: GameClient, pick: (numbers: HudNumbers) => T): T | undefined {
+    const store = client.store;
+    return useSyncExternalStore(store.subscribeNumbers, () => {
+        const numbers = store.getNumbers();
+        return numbers && pick(numbers);
+    });
+}
+
+// A random event: what's for sale against the coins carried
+function RunEventModal({
+    event,
+    client,
+}: {
+    event: NonNullable<UiSnapshot["event"]>;
+    client: GameClient;
+}): JSX.Element {
+    const coins = useHudNumber(client, (n) => n.coins) ?? 0;
+    return <EventModal event={event} coins={coins} client={client} />;
 }
 
 // "3", "max", and past the last level (endless runs) "+2"
@@ -1200,7 +1551,7 @@ function formatSlotLevel(slot: SlotView): string {
 
 // A weapon or passive in the HUD, with what it does on a card shown while
 // it's pointed at
-function Slots({ slots, max }: { slots: SlotView[]; max: number }): JSX.Element {
+const Slots = memo(function Slots({ slots, max }: { slots: SlotView[]; max: number }): JSX.Element {
     return (
         <div className="ui-slots">
             {Array.from({ length: max }, (_, i) => {
@@ -1239,7 +1590,7 @@ function Slots({ slots, max }: { slots: SlotView[]; max: number }): JSX.Element 
             })}
         </div>
     );
-}
+});
 
 // How far a weapon has got towards its evolution, each half ticked off
 function EvolutionLine({
@@ -1265,7 +1616,7 @@ function EvolutionLine({
 }
 
 // Worn gear, small, under the weapons and passives
-function GearSlots({ gear }: { gear: GearSlotView[] }): JSX.Element {
+const GearSlots = memo(function GearSlots({ gear }: { gear: GearSlotView[] }): JSX.Element {
     return (
         <div className="ui-slots ui-gear-slots">
             {gear.map((slot) => (
@@ -1289,10 +1640,12 @@ function GearSlots({ gear }: { gear: GearSlotView[] }): JSX.Element {
             ))}
         </div>
     );
-}
+});
 
-// Utility items, used with 1-4 or a click
-function Inventory({
+// Utility items, used with 1-4 (a controller's shoulder buttons) or a click
+const ITEM_BUTTONS = ["leftBumper", "rightBumper", "leftTrigger", "rightTrigger"] as const;
+
+const Inventory = memo(function Inventory({
     inventory,
     client,
 }: {
@@ -1313,14 +1666,18 @@ function Inventory({
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => client.useItem(i)}
                 >
-                    <span className="ui-inv-key">{i + 1}</span>
+                    <KeyHint
+                        keyLabel={String(i + 1)}
+                        pad={ITEM_BUTTONS[i]}
+                        className="ui-inv-key"
+                    />
                     {slot && <ItemIcon objId={slot.item.objId} size={30} />}
                     {slot && slot.count > 1 && <span className="ui-inv-count">{slot.count}</span>}
                 </button>
             ))}
         </div>
     );
-}
+});
 
 function Buffs({ buffs }: { buffs: BuffView[] }): JSX.Element {
     return (
@@ -1333,14 +1690,19 @@ function Buffs({ buffs }: { buffs: BuffView[] }): JSX.Element {
                 >
                     <ItemIcon objId={buff.objId} size={24} />
                     <span>{buff.secondsLeft}s</span>
-                    <div className="ui-buff-bar" style={{ width: `${buff.fraction * 100}%` }} />
+                    <div
+                        className="ui-buff-bar"
+                        style={{ transform: `scaleX(${buff.fraction})` }}
+                    />
                 </div>
             ))}
         </div>
     );
 }
 
-function Hud({
+// The HUD's slower parts draw again only when what the hero has changes; the
+// numbers are their own components (useHudNumber)
+const Hud = memo(function Hud({
     hud,
     client,
     questTracker,
@@ -1351,115 +1713,192 @@ function Hud({
     questTracker: boolean;
     damagePanel: boolean;
 }): JSX.Element {
-    const bossIn = hud.bossIn;
     return (
         <>
-            <div className="ui-xp">
-                <div className="ui-xp-fill" style={{ width: `${hud.xpFraction * 100}%` }} />
-                <span className="ui-xp-level">Level {hud.level}</span>
-            </div>
+            <HallWash client={client} />
+            <XpBar level={hud.level} client={client} />
             <div className="ui-hud-top">
                 <div className="ui-hud-left">
                     <Slots slots={hud.weapons} max={hud.maxWeapons} />
                     <Slots slots={hud.passives} max={hud.maxPassives} />
                     <GearSlots gear={hud.gear} />
                 </div>
-                <div className="ui-timer">{formatTime(hud.seconds)}</div>
+                <RunTimer client={client} />
                 <div className="ui-hud-right">
                     <Minimap client={client} />
-                    <div>
-                        <span className="ui-skull">☠</span> {hud.kills.toLocaleString()}
-                    </div>
-                    <Coins amount={hud.coins} />
+                    <KillsAndCoins client={client} />
                     {hud.round !== undefined && <div className="ui-round">Round {hud.round}</div>}
-                    {hud.quests.length > 0 && (
-                        <QuestTracker quests={hud.quests} open={questTracker} client={client} />
-                    )}
-                    <DamagePanel hud={hud} open={damagePanel} client={client} />
+                    <RaidRoomInfo client={client} />
+                    <HudQuests open={questTracker} client={client} />
+                    <DamagePanel weapons={hud.weapons} open={damagePanel} client={client} />
                 </div>
             </div>
-            {hud.boss ? (
-                <div className="ui-boss">
-                    <div className="ui-boss-name">
-                        {hud.boss.name}
-                        {hud.boss.enraged && <span className="ui-boss-enraged"> (enraged)</span>}
-                        {hud.boss.fight && (
-                            <span className="ui-boss-phase">
-                                {" "}
-                                Phase {hud.boss.fight.phase}/{hud.boss.fight.phases}
-                            </span>
-                        )}
-                    </div>
-                    {hud.boss.fight?.stage === "totems" ? (
-                        <div className="ui-boss-totems">
-                            {hud.boss.fight.totems.map((charge, i) => (
-                                <div key={i} className="ui-boss-bar ui-boss-totem">
-                                    <div
-                                        className="ui-boss-fill ui-boss-fill-totem"
-                                        style={{ width: `${charge * 100}%` }}
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="ui-boss-bar">
-                            <div
-                                className={
-                                    hud.boss.fight
-                                        ? "ui-boss-fill ui-boss-fill-shield"
-                                        : "ui-boss-fill"
-                                }
-                                style={{ width: `${hud.boss.fraction * 100}%` }}
-                            />
-                        </div>
-                    )}
-                    {hud.boss.fight && (
-                        <div className="ui-boss-status">
-                            {hud.boss.fight.stage === "totems"
-                                ? "Charge the totems!"
-                                : "Break her shield!"}
-                            {hud.boss.fight.curseAttacks !== undefined && (
-                                <span className="ui-boss-curse">
-                                    {" "}
-                                    Cursed: {hud.boss.fight.curseAttacks}
-                                </span>
-                            )}
-                            {hud.boss.fight.parasiteSeconds !== undefined && (
-                                <span className="ui-boss-curse">
-                                    {" "}
-                                    Parasite: {Math.ceil(hud.boss.fight.parasiteSeconds)}s
-                                </span>
-                            )}
-                        </div>
-                    )}
-                </div>
-            ) : (
-                bossIn <= 60 && (
-                    <div className="ui-boss-warning">
-                        {getMap(hud.mapId).finalBossWarning} {Math.ceil(bossIn)}s
-                    </div>
-                )
-            )}
+            <BossBar mapId={hud.mapId} client={client} />
             <div className="ui-hud-bottom">
-                {hud.buffs.length > 0 && <Buffs buffs={hud.buffs} />}
+                <HudBuffs client={client} />
                 <Inventory inventory={hud.inventory} client={client} />
-                <div className={hud.poisoned ? "ui-hp ui-hp-poisoned" : "ui-hp"}>
-                    <div
-                        className="ui-hp-fill"
-                        style={{ width: `${(hud.hp / hud.maxHp) * 100}%` }}
-                    />
-                    <span>
-                        {hud.hp} / {hud.maxHp}
-                    </span>
-                </div>
+                <HpBar client={client} />
+            </div>
+        </>
+    );
+});
+
+// Scaled rather than resized, so it doesn't lay the page out again as it fills
+function XpBar({ level, client }: { level: number; client: GameClient }): JSX.Element {
+    const xpFraction = useHudNumber(client, (n) => n.xpFraction) ?? 0;
+    return (
+        <div className="ui-xp">
+            <div className="ui-xp-fill" style={{ transform: `scaleX(${xpFraction})` }} />
+            <span className="ui-xp-level">Level {level}</span>
+        </div>
+    );
+}
+
+function RunTimer({ client }: { client: GameClient }): JSX.Element {
+    const seconds = useHudNumber(client, (n) => n.seconds) ?? 0;
+    return <div className="ui-timer">{formatTime(seconds)}</div>;
+}
+
+function KillsAndCoins({ client }: { client: GameClient }): JSX.Element {
+    const kills = useHudNumber(client, (n) => n.kills) ?? 0;
+    const coins = useHudNumber(client, (n) => n.coins) ?? 0;
+    return (
+        <>
+            <div>
+                <span className="ui-skull">☠</span> {kills.toLocaleString()}
+            </div>
+            <Coins amount={coins} />
+        </>
+    );
+}
+
+// A raid hall's colour wash, while its waves are on
+function HallWash({ client }: { client: GameClient }): JSX.Element | null {
+    const wash = useHudNumber(client, (n) => n.raidRoom?.wash);
+    return wash ? <div className="ui-hall-wash" style={{ backgroundColor: wash }} /> : null;
+}
+
+// A raid's room, of how many, and the raid points the player has
+function RaidRoomInfo({ client }: { client: GameClient }): JSX.Element | null {
+    const room = useHudNumber(client, (n) => n.raidRoom);
+    if (!room) {
+        return null;
+    }
+    return (
+        <>
+            <div className="ui-round">
+                Room {room.number} / {room.count}
+            </div>
+            <div className="ui-raid-points" title="Raid points, for the supply chest">
+                {room.points} pts
             </div>
         </>
     );
 }
 
+function HudQuests({ open, client }: { open: boolean; client: GameClient }): JSX.Element | null {
+    const quests = useHudNumber(client, (n) => n.quests);
+    return quests && quests.length > 0 ? (
+        <QuestTracker quests={quests} open={open} client={client} />
+    ) : null;
+}
+
+function HudBuffs({ client }: { client: GameClient }): JSX.Element | null {
+    const buffs = useHudNumber(client, (n) => n.buffs);
+    return buffs && buffs.length > 0 ? <Buffs buffs={buffs} /> : null;
+}
+
+function HpBar({ client }: { client: GameClient }): JSX.Element | null {
+    const hp = useHudNumber(client, (n) => n.hp);
+    const maxHp = useHudNumber(client, (n) => n.maxHp);
+    const poisoned = useHudNumber(client, (n) => n.poisoned);
+    if (hp === undefined || maxHp === undefined) {
+        return null;
+    }
+    return (
+        <div className={poisoned ? "ui-hp ui-hp-poisoned" : "ui-hp"}>
+            <div className="ui-hp-fill" style={{ transform: `scaleX(${hp / maxHp})` }} />
+            <span>
+                {hp} / {maxHp}
+            </span>
+        </div>
+    );
+}
+
+// The boss's bar while it's out, and a warning in the last minute before it is
+// (in a raid's hall, what the hall wants of you)
+function BossBar({ mapId, client }: { mapId: string; client: GameClient }): JSX.Element | null {
+    const boss = useHudNumber(client, (n) => n.boss);
+    const bossIn = useHudNumber(client, (n) => n.bossIn);
+    const raidRoom = useHudNumber(client, (n) => n.raidRoom);
+    if (!boss) {
+        if (raidRoom) {
+            return raidRoom.waves && bossIn !== undefined ? (
+                <RaidObjective room={raidRoom} bossIn={bossIn} />
+            ) : null;
+        }
+        return bossIn !== undefined && bossIn <= 60 ? (
+            <div className="ui-boss-warning">
+                {getMap(mapId).finalBossWarning} {bossIn}s
+            </div>
+        ) : null;
+    }
+    return (
+        <div className="ui-boss">
+            <div className="ui-boss-name">
+                {boss.name}
+                {boss.enraged && <span className="ui-boss-enraged"> (enraged)</span>}
+                {boss.fight && (
+                    <span className="ui-boss-phase">
+                        {" "}
+                        Phase {boss.fight.phase}/{boss.fight.phases}
+                    </span>
+                )}
+            </div>
+            {boss.fight?.stage === "totems" ? (
+                <div className="ui-boss-totems">
+                    {boss.fight.totems.map((charge, i) => (
+                        <div key={i} className="ui-boss-bar ui-boss-totem">
+                            <div
+                                className="ui-boss-fill ui-boss-fill-totem"
+                                style={{ transform: `scaleX(${charge})` }}
+                            />
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="ui-boss-bar">
+                    <div
+                        className={boss.fight ? "ui-boss-fill ui-boss-fill-shield" : "ui-boss-fill"}
+                        style={{ transform: `scaleX(${boss.fraction})` }}
+                    />
+                </div>
+            )}
+            {boss.fight && (
+                <div className="ui-boss-status">
+                    {boss.fight.stage === "totems"
+                        ? "Charge the totems!"
+                        : boss.fight.stage === "finale"
+                          ? "Stay on your feet!"
+                          : "Break her shield!"}
+                    {boss.fight.curseAttacks !== undefined && (
+                        <span className="ui-boss-curse"> Cursed: {boss.fight.curseAttacks}</span>
+                    )}
+                    {boss.fight.parasiteSeconds !== undefined && (
+                        <span className="ui-boss-curse">
+                            {" "}
+                            Parasite: {Math.ceil(boss.fight.parasiteSeconds)}s
+                        </span>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // The client's minimap frame and compass around a canvas the game draws on
 // (runs face north, so the compass does too)
-function Minimap({ client }: { client: GameClient }): JSX.Element {
+const Minimap = memo(function Minimap({ client }: { client: GameClient }): JSX.Element {
     const canvasRef = useCallback(
         (canvas: HTMLCanvasElement | null) => client.setMinimapCanvas(canvas),
         [client],
@@ -1471,7 +1910,7 @@ function Minimap({ client }: { client: GameClient }): JSX.Element {
             <img className="ui-minimap-compass" src={compass} />
         </div>
     );
-}
+});
 
 // A weapon's stats on a level up card: "Damage 10 → 13", the new value green
 // when it's better
@@ -1504,6 +1943,7 @@ function LevelUpModal({ ui, client }: ScreenProps): JSX.Element {
     // to its hilt level
     const hilt = ui.choices.some((choice) => choice.isHilt);
     const spell = ui.choices.some((choice) => choice.isSpell);
+    const banishes = ui.hud?.banishes ?? 0;
     return (
         <div className="ui-modal">
             <div className="ui-panel rs-border rs-background ui-levelup">
@@ -1523,57 +1963,84 @@ function LevelUpModal({ ui, client }: ScreenProps): JSX.Element {
                 </p>
                 <div className="ui-choices">
                     {ui.choices.map((choice, i) => (
-                        <button
+                        <div
                             key={i}
-                            className={
-                                "ui-card ui-choice" +
-                                (choice.isEvolution ? " ui-choice-evolve" : "")
-                            }
-                            style={choice.rarity ? { borderColor: choice.rarity.color } : undefined}
-                            onClick={() => client.choose(i)}
+                            className={"ui-choice-row" + (banishes > 0 ? " ui-has-banish" : "")}
                         >
-                            <span className="ui-choice-key">{i + 1}</span>
-                            <ItemIcon
-                                objId={choice.iconObjId}
-                                spriteId={choice.iconSpriteId}
-                                size={44}
-                            />
-                            <div className="ui-card-body">
-                                <div className="ui-card-title">
-                                    {choice.title}
-                                    {choice.isNew && <span className="ui-tag">New!</span>}
-                                    {choice.isEvolution && (
-                                        <span className="ui-tag ui-tag-evolve">Evolution!</span>
+                            <button
+                                className={
+                                    "ui-card ui-choice" +
+                                    (choice.isEvolution ? " ui-choice-evolve" : "") +
+                                    (choice.banished ? " ui-choice-banished" : "")
+                                }
+                                disabled={choice.banished}
+                                style={
+                                    choice.rarity ? { borderColor: choice.rarity.color } : undefined
+                                }
+                                onClick={() => client.choose(i)}
+                            >
+                                <KeyHint keyLabel={String(i + 1)} />
+                                <ItemIcon
+                                    objId={choice.iconObjId}
+                                    spriteId={choice.iconSpriteId}
+                                    size={44}
+                                />
+                                <div className="ui-card-body">
+                                    <div className="ui-card-title">
+                                        {choice.title}
+                                        {choice.banished ? (
+                                            <span className="ui-tag ui-tag-banished">Banished</span>
+                                        ) : (
+                                            choice.isNew && <span className="ui-tag">New!</span>
+                                        )}
+                                        {choice.isEvolution && (
+                                            <span className="ui-tag ui-tag-evolve">Evolution!</span>
+                                        )}
+                                        {choice.isHilt && (
+                                            <span className="ui-tag ui-tag-evolve">
+                                                {choice.isSpell ? "Spell" : "Hilt"}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="ui-card-text">{choice.text}</div>
+                                    {choice.evolves && (
+                                        <div
+                                            className={
+                                                "ui-card-evolves" +
+                                                (choice.evolves.held ? " ui-card-evolves-held" : "")
+                                            }
+                                        >
+                                            {choice.evolves.text}
+                                        </div>
                                     )}
-                                    {choice.isHilt && (
-                                        <span className="ui-tag ui-tag-evolve">
-                                            {choice.isSpell ? "Spell" : "Hilt"}
-                                        </span>
+                                    {choice.stats && choice.stats.length > 0 && (
+                                        <ChoiceStats stats={choice.stats} />
                                     )}
                                 </div>
-                                <div className="ui-card-text">{choice.text}</div>
-                                {choice.evolves && (
-                                    <div
-                                        className={
-                                            "ui-card-evolves" +
-                                            (choice.evolves.held ? " ui-card-evolves-held" : "")
-                                        }
+                                {choice.rarity && (
+                                    <span
+                                        className="ui-rarity"
+                                        style={{ color: choice.rarity.color }}
                                     >
-                                        {choice.evolves.text}
-                                    </div>
+                                        {choice.rarity.name}
+                                    </span>
                                 )}
-                                {choice.stats && choice.stats.length > 0 && (
-                                    <ChoiceStats stats={choice.stats} />
-                                )}
-                            </div>
-                            {choice.rarity && (
-                                <span className="ui-rarity" style={{ color: choice.rarity.color }}>
-                                    {choice.rarity.name}
-                                </span>
+                            </button>
+                            {/* Over the card's corner, under its rarity: a button can't go in a button */}
+                            {choice.banishable && (
+                                <BanishButton
+                                    title={`Never offered ${choice.title} again this run`}
+                                    onBanish={() => client.banish(i)}
+                                />
                             )}
-                        </button>
+                        </div>
                     ))}
                 </div>
+                {banishes > 0 && (
+                    <div className="ui-subtle ui-banishes">
+                        {banishes} {banishes === 1 ? "banish" : "banishes"} left
+                    </div>
+                )}
                 {!hilt && (
                     <div className="ui-levelup-actions">
                         <RerollButton
@@ -1600,17 +2067,21 @@ function LevelUpModal({ ui, client }: ScreenProps): JSX.Element {
 // Numbers are short (9.5K, 1.2B), as endless runs reach billions; pointing
 // at one gives it in full.
 function DamagePanel({
-    hud,
+    weapons,
     open,
     client,
 }: {
-    hud: HudView;
+    weapons: SlotView[];
     open: boolean;
     client: GameClient;
 }): JSX.Element {
-    const total = hud.weapons.reduce((sum, w) => sum + (w.dps ?? 0), hud.otherDps);
+    const totalDps = useHudNumber(client, (n) => n.dps) ?? 0;
+    const otherDps = useHudNumber(client, (n) => n.otherDps) ?? 0;
+    const weaponDamage = useHudNumber(client, (n) => n.weaponDamage);
+    const damageOf = (slot: SlotView) => weaponDamage?.[slot.id];
+    const total = weapons.reduce((sum, w) => sum + (damageOf(w)?.dps ?? 0), otherDps);
     // Most damage a second first; ties (weapons yet to hit) keep the HUD's order
-    const rows = [...hud.weapons].sort((a, b) => (b.dps ?? 0) - (a.dps ?? 0));
+    const rows = [...weapons].sort((a, b) => (damageOf(b)?.dps ?? 0) - (damageOf(a)?.dps ?? 0));
     return (
         <div className="ui-damage">
             <button
@@ -1618,7 +2089,7 @@ function DamagePanel({
                 onClick={() => client.toggleDamagePanel()}
                 title="Show or hide each weapon's damage (Tab)"
             >
-                <span className="ui-dps-label">DPS</span> {formatCompact(hud.dps)}{" "}
+                <span className="ui-dps-label">DPS</span> {formatCompact(totalDps)}{" "}
                 <span className="ui-dps-toggle">{open ? "▾" : "▸"}</span>
             </button>
             {open && (
@@ -1631,7 +2102,8 @@ function DamagePanel({
                         <span>Total</span>
                     </div>
                     {rows.map((slot) => {
-                        const dps = slot.dps ?? 0;
+                        const dps = damageOf(slot)?.dps ?? 0;
+                        const damage = damageOf(slot)?.damage ?? 0;
                         return (
                             <div key={slot.id} className="ui-damage-row">
                                 <ItemIcon
@@ -1658,23 +2130,21 @@ function DamagePanel({
                                 <span className="ui-damage-dps" title={exact(dps)}>
                                     {formatCompact(dps)}
                                 </span>
-                                <span className="ui-damage-total" title={exact(slot.damage ?? 0)}>
-                                    {formatCompact(slot.damage ?? 0)}
+                                <span className="ui-damage-total" title={exact(damage)}>
+                                    {formatCompact(damage)}
                                 </span>
                             </div>
                         );
                     })}
-                    {hud.otherDps >= 0.05 && (
+                    {otherDps >= 0.05 && (
                         <div className="ui-damage-row ui-damage-other">
                             <span />
                             <span className="ui-damage-weapon" title="Items, power-ups and recoil">
                                 Other
                             </span>
-                            <span className="ui-damage-share">
-                                {formatShare(hud.otherDps, total)}
-                            </span>
-                            <span className="ui-damage-dps" title={exact(hud.otherDps)}>
-                                {formatCompact(hud.otherDps)}
+                            <span className="ui-damage-share">{formatShare(otherDps, total)}</span>
+                            <span className="ui-damage-dps" title={exact(otherDps)}>
+                                {formatCompact(otherDps)}
                             </span>
                             <span />
                         </div>
@@ -1709,22 +2179,20 @@ function QuestTracker({
             >
                 Quests {open ? "▾" : "▸"}
             </button>
-            {open &&
-                quests.map((quest) => (
-                    <div
-                        key={quest.id}
-                        className={"ui-quest-track " + questTrackClass(quest)}
-                        title={quest.task}
-                    >
-                        <span className="ui-quest-track-name">{quest.name}</span>
-                        <span className="ui-quest-track-progress">
-                            {formatQuestProgress(quest)}
-                        </span>
-                    </div>
-                ))}
+            {open && quests.map((quest) => <QuestTrack key={quest.id} quest={quest} />)}
         </div>
     );
 }
+
+// Kept from the last update while its progress is the same (shareUnchanged)
+const QuestTrack = memo(function QuestTrack({ quest }: { quest: QuestTrackView }): JSX.Element {
+    return (
+        <div className={"ui-quest-track " + questTrackClass(quest)} title={quest.task}>
+            <span className="ui-quest-track-name">{quest.name}</span>
+            <span className="ui-quest-track-progress">{formatQuestProgress(quest)}</span>
+        </div>
+    );
+});
 
 // Coloured like the quest tab: red until started, yellow while under way,
 // green once done
@@ -1749,6 +2217,8 @@ function PauseModal({
 }): JSX.Element {
     // Co-op's menu doesn't stop the run
     const coop = ui.party.length > 0;
+    const quests = useHudNumber(client, (n) => n.quests) ?? [];
+    const padKind = usePadKind();
     // The host can remove anyone still in the run (one who's stopped playing)
     const kickable =
         coop && ui.coop.room?.hostId === ui.coop.you
@@ -1842,11 +2312,11 @@ function PauseModal({
                         )}
                     </div>
                     <div className="ui-pause-column">
-                        {hud.quests.length > 0 && (
+                        {quests.length > 0 && (
                             <>
                                 <h3 className="ui-pause-heading">Quests</h3>
                                 <div className="ui-pause-list">
-                                    {hud.quests.map((quest) => (
+                                    {quests.map((quest) => (
                                         <div
                                             key={quest.id}
                                             className={"ui-pause-quest " + questTrackClass(quest)}
@@ -1881,6 +2351,12 @@ function PauseModal({
                                 </div>
                             </>
                         )}
+                        {padKind && (
+                            <>
+                                <h3 className="ui-pause-heading">Controller</h3>
+                                <PadControls />
+                            </>
+                        )}
                         <h3 className="ui-pause-heading">Settings</h3>
                         <SoundSettings
                             ui={ui}
@@ -1890,6 +2366,7 @@ function PauseModal({
                         <AutoPauseSetting ui={ui} client={client} />
                         <AutoAlchSetting ui={ui} client={client} />
                         <MovePredictionSetting ui={ui} client={client} />
+                        <FrameRateSetting ui={ui} client={client} />
                     </div>
                 </div>
                 <div className="ui-row">
@@ -1935,7 +2412,8 @@ function formatPerSecond(perSecond: number): string {
 }
 
 // Big numbers the way OSRS shows a stack: in full up to 99,999, then 100K,
-// then 10M, so an endless run's totals still fit
+// then 10M, so an endless run's totals still fit. Past what a stack can hold
+// (10,000M), the damage panel's short form: 12B, 4.6Qa.
 function formatBig(value: number): string {
     const n = Math.round(value);
     if (n < 100_000) {
@@ -1944,7 +2422,10 @@ function formatBig(value: number): string {
     if (n < 10_000_000) {
         return `${Math.floor(n / 1000).toLocaleString()}K`;
     }
-    return `${Math.floor(n / 1_000_000).toLocaleString()}M`;
+    if (n < 10_000_000_000) {
+        return `${Math.floor(n / 1_000_000).toLocaleString()}M`;
+    }
+    return formatCompact(n);
 }
 
 // A stat's number, shortened when it's big, in full when pointed at
@@ -2011,6 +2492,7 @@ export function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                         {getMap(result.mapId).name}!
                     </p>
                 )}
+                {result?.raidChest && <RaidChestView chest={result.raidChest} />}
                 {result?.firstHardWin && (
                     <p className="ui-unlocked">
                         You've beaten {getMap(result.mapId).name} on hard!

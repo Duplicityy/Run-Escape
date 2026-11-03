@@ -236,6 +236,36 @@ describe("Sim", () => {
         expect(sim.pickups.reduce((total, p) => total + p.value, 0)).toBe(xp + 10);
     });
 
+    test("coins and food lying around don't keep new bones off the ground", () => {
+        const sim = createSim();
+        const { x, y } = sim.player;
+        // Left behind over a long run, far from the player
+        for (let i = 0; i < 400; i++) {
+            const kind = i % 4 === 0 ? "food" : "coins";
+            sim.dropPickup(kind, x - 30 + (i % 20), y - 30 + Math.floor(i / 20), 1);
+        }
+        for (let i = 0; i < 10; i++) {
+            sim.dropPickup("bones", x + 6 + i, y + 6, 10);
+        }
+        const bones = sim.pickups.filter((p) => p.kind === "bones");
+        expect(bones.map((p) => p.x)).toEqual([...Array(10).keys()].map((i) => x + 6 + i));
+    });
+
+    test("with too many coins lying around, the furthest pile comes to the new ones", () => {
+        const sim = createSim();
+        const { x, y } = sim.player;
+        for (let i = 0; i < 100; i++) {
+            sim.dropPickup("coins", x + 5 + (i % 10), y + 5 + Math.floor(i / 10), 2);
+        }
+        const furthest = sim.pickups[sim.pickups.length - 1];
+        sim.dropPickup("coins", x + 2, y, 3);
+        expect(sim.pickups.length).toBe(100);
+        expect(furthest).toMatchObject({ x: x + 2, y, value: 5, kind: "coins" });
+        // Bones aren't held back by them
+        sim.dropPickup("bones", x - 2, y, 10);
+        expect(sim.pickups.length).toBe(101);
+    });
+
     test("bones lying close together gather into the biggest pile, and coins into coins", () => {
         const sim = createSim();
         sim.weapons = [];
@@ -1266,6 +1296,111 @@ describe("caskets and items", () => {
         expect(sim.choices.length).toBeGreaterThan(0);
         expect(sim.rerollsLeft).toBe(0);
         expect(sim.reroll()).toBe(false);
+    });
+
+    test("banishing a level up's new reward keeps it out of the run and leaves the others", () => {
+        const sim = createSim("warrior", 1, "lumbridge", { ...emptyStats(), banish: 2 });
+        expect(sim.banishesLeft).toBe(2);
+        sim.stash("antique_lamp");
+        sim.useItem(0);
+        expect(sim.state).toBe("levelUp");
+        const starting = sim.weapons[0].def.id;
+        const axe = WEAPONS.find(
+            (w) =>
+                w.id !== starting &&
+                !w.style &&
+                !w.family &&
+                !w.evolved &&
+                !w.pickOnly &&
+                !w.unlock,
+        )!.id;
+        sim.choices = [
+            { kind: "newWeapon", weaponId: axe, quality: "common" },
+            { kind: "newPassive", passiveId: "piety", quality: "common" },
+            { kind: "weaponLevel", weaponId: starting, level: 2, quality: "common" },
+        ];
+        // Not what's already had
+        expect(sim.canBanishChoice(2)).toBe(false);
+        expect(sim.banishChoice(2)).toBe(false);
+        const before = [...sim.choices];
+        expect(sim.banishChoice(0)).toBe(true);
+        expect(sim.banishesLeft).toBe(1);
+        // Nothing takes its place: it stays, greyed out, and can't be picked
+        expect(sim.choices).toEqual(before);
+        expect(sim.isBanishedChoice(0)).toBe(true);
+        expect(sim.canBanishChoice(0)).toBe(false);
+        sim.choose(0);
+        expect(sim.state).toBe("levelUp");
+        expect(sim.weapons.some((w) => w.def.id === axe)).toBe(false);
+        // The last reward left to pick can't be banished
+        sim.choices = before.slice(0, 2);
+        expect(sim.canBanishChoice(1)).toBe(false);
+        sim.choices = before;
+        // Never offered again
+        sim.rerollsLeft = 200;
+        for (let i = 0; i < 200; i++) {
+            sim.reroll();
+            expect(sim.choices.some((c) => c.kind === "newWeapon" && c.weaponId === axe)).toBe(
+                false,
+            );
+        }
+        sim.choices = before;
+        expect(sim.banishChoice(1)).toBe(true);
+        // None left
+        expect(sim.banishesLeft).toBe(0);
+        sim.choose(2);
+        expect(sim.state).not.toBe("levelUp");
+    });
+
+    test("a casket's item can be banished, a whole set for a set's piece, but not what's worn or carried", () => {
+        const offer = (sim: Sim, itemId: string, tier: "easy" | "elite" = "elite") => {
+            sim.chests.length = 0;
+            sim.chests.push({ uid: -1, tier, itemId, upgrades: 0, coins: 0 });
+            sim.state = "chest";
+        };
+        const none = createSim();
+        offer(none, "torva_platebody");
+        // Without Firemaking there's nothing to banish with
+        expect(none.canBanishChest).toBe(false);
+        expect(none.banishChest()).toBe(false);
+
+        const sim = createSim("warrior", 1, "lumbridge", { ...emptyStats(), banish: 3 });
+        offer(sim, "torva_platebody");
+        expect(sim.canBanishChest).toBe(true);
+        const coins = sim.coins;
+        expect(sim.banishChest()).toBe(true);
+        expect(sim.banishesLeft).toBe(2);
+        expect([...sim.banishedSets]).toEqual(["torva"]);
+        // Alched, and that's the casket done
+        expect(sim.coins).toBeGreaterThan(coins);
+        expect(sim.chests.length).toBe(0);
+        expect(sim.state).toBe("playing");
+        // Never in a casket again
+        for (let i = 0; i < 300; i++) {
+            sim.openCasket("elite");
+            expect(getItem(sim.chests[0].itemId)).not.toMatchObject({ set: "torva" });
+            sim.chests.length = 0;
+        }
+
+        // A piece of a set that's worn
+        const worn = createSim("warrior", 1, "lumbridge", { ...emptyStats(), banish: 3 });
+        worn.gear.head = "torva_full_helm";
+        offer(worn, "torva_platebody");
+        expect(worn.canBanishChest).toBe(false);
+        // The piece itself, worn
+        const body = CASKET_GEAR.find((g) => g.slot === "body" && !g.set && !g.variantOf)!.id;
+        worn.gear.body = body;
+        offer(worn, body);
+        expect(worn.canBanishChest).toBe(false);
+
+        // Carried, or not
+        worn.stash("stamina_potion");
+        offer(worn, "stamina_potion", "easy");
+        expect(worn.canBanishChest).toBe(false);
+        offer(worn, "shark", "easy");
+        expect(worn.canBanishChest).toBe(true);
+        expect(worn.banishChest()).toBe(true);
+        expect([...worn.banishedItems]).toEqual(["shark"]);
     });
 
     test("a level up can be skipped for coins, dearer each time", () => {
@@ -2649,6 +2784,16 @@ describe("enemy mechanics", () => {
 describe("maps", () => {
     test("every map's waves, events and bosses make sense", () => {
         for (const map of MAPS) {
+            if (map.fight) {
+                // One boss fight: nothing but its final boss, from the start
+                expect(map.waves).toEqual([]);
+                expect(map.events.length).toBe(1);
+                expect(map.events[0]).toMatchObject({ at: 0, kind: "finalBoss" });
+                expect(getEnemy(map.events[0].enemyId).boss?.intro?.alone).toBe(true);
+                expect(getMap(map.fight.requires).fight).toBeUndefined();
+                expect(CHARACTERS.some((c) => c.id === map.fight!.character)).toBe(true);
+                continue;
+            }
             expect(map.waves.length).toBeGreaterThan(0);
             for (const wave of map.waves) {
                 expect(wave.enemies.length).toBeGreaterThan(0);
@@ -2931,6 +3076,7 @@ describe("maps", () => {
         for (const enemy of ENEMIES) {
             const ids = [
                 enemy.splits?.into,
+                enemy.hatches?.into,
                 ...(enemy.spawns?.enemies.map((e) => e.id) ?? []),
                 ...(enemy.heals?.targets ?? []),
                 enemy.boss?.rises?.into,

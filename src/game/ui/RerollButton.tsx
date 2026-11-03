@@ -1,3 +1,5 @@
+import { KeyHint } from "./PadHint";
+
 // Rolls a level up's rewards or a casket's item again (R), for one of the
 // run's rerolls
 export function RerollButton({
@@ -20,7 +22,7 @@ export function RerollButton({
                     e.currentTarget.blur();
                 }}
             >
-                <span className="ui-choice-key">R</span> Reroll ({rerolls} left)
+                <KeyHint keyLabel="R" pad="west" /> Reroll ({rerolls} left)
             </button>
         </div>
     );

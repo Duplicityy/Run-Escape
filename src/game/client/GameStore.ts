@@ -35,10 +35,6 @@ export type SlotView = {
     stats?: string[];
     // Weapons that evolve: the passive it takes, and what's done of it
     evolution?: { passive: string; maxed: boolean; hasPassive: boolean; ready: boolean };
-    // Weapons, for the damage panel: damage a second just now, and damage this
-    // run (since it became what it is, for one that's evolved)
-    dps?: number;
-    damage?: number;
     // The item's own rarity, for the slot's border
     rarityColor: string;
 };
@@ -99,6 +95,9 @@ export type ChestView = {
     recommended: ChestAction;
     // Caskets waiting after this one
     queued: number;
+    // Whether its item can be banished now (one's left, and it's not worn or
+    // carried), and the set that goes with it, for a set's piece
+    banish?: { set?: string };
 };
 
 // A random event's visitor with something on offer, the run waiting meanwhile
@@ -107,6 +106,8 @@ export type EventView = {
     name: string;
     speech: string;
     leaveLabel: string;
+    // A raid's supply chest: prices are in raid points, and this is what the player has
+    points?: number;
     options: {
         title: string;
         text?: string;
@@ -118,28 +119,15 @@ export type EventView = {
     }[];
 };
 
+// The HUD's slower parts: what the hero has, which changes with a level up, a
+// casket or an item used. The numbers that change as the run's played are in
+// HudNumbers.
 export type HudView = {
     // The run's map
     mapId: string;
     // An endless run's round
     round?: number;
-    // Seconds until this round's final boss
-    bossIn: number;
-    hp: number;
-    maxHp: number;
-    // The hitpoints bar turns green, like the client's orb
-    poisoned: boolean;
     level: number;
-    // Progress to the next level, 0-1
-    xpFraction: number;
-    seconds: number;
-    kills: number;
-    coins: number;
-    // Damage a second just now, every source counted
-    dps: number;
-    // For the damage panel (DamageMeter): what isn't a weapon's (items,
-    // power-ups, recoil), as each weapon's is on its slot
-    otherDps: number;
     maxWeapons: number;
     maxPassives: number;
     weapons: SlotView[];
@@ -149,17 +137,85 @@ export type HudView = {
     stats: string[];
     gear: GearSlotView[];
     inventory: InventorySlotView[];
-    buffs: BuffView[];
     // Left this run, for a level up's rewards or a casket's item
     rerolls: number;
+    // Banishes left (Firemaking)
+    banishes: number;
     // What skipping the level up's rewards costs, while they can be skipped
     skip?: { cost: number; affordable: boolean };
+};
+
+// The HUD's numbers that change as the run's played, 10 times a second. They're
+// in a store of their own (GameStore.subscribeNumbers), so only the parts of the
+// UI that show them draw again.
+export type HudNumbers = {
+    // Seconds until this round's final boss, rounded up
+    bossIn: number;
+    // A raid's room: which of how many, and its boss's name
+    // waves: still in its waves, so its boss is on the way (not fought or beaten)
+    // portal: the hall's teleporter can be used; first: the player's never beaten it
+    raidRoom?: {
+        // The hall's colour wash, while its waves are on (RaidRoomDef.hall)
+        wash?: string;
+        number: number;
+        count: number;
+        name: string;
+        points: number;
+        waves: boolean;
+        portal: boolean;
+        first: boolean;
+    };
+    hp: number;
+    maxHp: number;
+    // The hitpoints bar turns green, like the client's orb
+    poisoned: boolean;
+    // Progress to the next level, 0-1
+    xpFraction: number;
+    // Whole seconds into the run
+    seconds: number;
+    kills: number;
+    coins: number;
+    // Damage a second just now, every source counted
+    dps: number;
+    // For the damage panel (DamageMeter): each weapon's by its id, damage a
+    // second just now and damage this run (since it became what it is, for one
+    // that's evolved), and what isn't a weapon's (items, power-ups, recoil)
+    weaponDamage: Record<string, { dps: number; damage: number }>;
+    otherDps: number;
+    buffs: BuffView[];
     // enraged: below half its hitpoints, faster and with its enraged attacks
     boss?: BossView;
     // The quests this run can get on with: this map's, then the ones done all
     // over, leaving out the ones done before it
     quests: QuestTrackView[];
 };
+
+// next, keeping each of prev's fields that's the same (by value), so a memoized
+// part of the UI showing one sees the same object. prev itself if nothing's
+// changed. A list that's changed keeps the items in it that haven't (one quest's
+// progress moving leaves the others as they were).
+export function shareUnchanged<T extends object>(prev: T | undefined, next: T): T {
+    if (!prev) {
+        return next;
+    }
+    let changed = Object.keys(prev).length !== Object.keys(next).length;
+    const shared = { ...next };
+    for (const key of Object.keys(next) as (keyof T)[]) {
+        const value = next[key];
+        const old = prev[key];
+        if (value === old || JSON.stringify(value) === JSON.stringify(old)) {
+            shared[key] = old;
+        } else {
+            changed = true;
+            if (Array.isArray(value) && Array.isArray(old)) {
+                shared[key] = value.map((item, i) =>
+                    JSON.stringify(item) === JSON.stringify(old[i]) ? old[i] : item,
+                ) as T[keyof T];
+            }
+        }
+    }
+    return changed ? shared : prev;
+}
 
 // One row of the run's damage: what dealt it (a weapon by its last tier),
 // with its kills, and damage a second for a weapon (over the time it was had)
@@ -182,7 +238,8 @@ export type BossView = {
     fight?: {
         phase: number;
         phases: number;
-        stage: "shield" | "totems";
+        // finale: its last stand, and fraction is the time left in it
+        stage: "shield" | "totems" | "finale";
         // How charged each totem is, 0 to 1
         totems: number[];
         curseAttacks?: number;
@@ -239,6 +296,11 @@ export type ChoiceView = {
     stats?: WeaponStatLine[];
     // What it evolves or evolves with; held when the other half's owned
     evolves?: { text: string; held: boolean };
+    // Whether it can be banished now: a new weapon or passive, with a banish
+    // left, and not the last reward left to pick
+    banishable: boolean;
+    // Banished: greyed out, and can't be picked
+    banished: boolean;
 };
 
 // Co-op: a player in the run besides you, for the party frames
@@ -299,6 +361,8 @@ export type UiSnapshot = {
     mapId: string;
     endless: boolean;
     hard: boolean;
+    // A raid's expert mode (solo for now)
+    expert: boolean;
     hud?: HudView;
     overlay: RunOverlay;
     // Co-op: the room and its menus, everyone else in the run, and who the
@@ -360,6 +424,7 @@ export class GameStore {
             mapId: "lumbridge",
             endless: false,
             hard: false,
+            expert: false,
             overlay: "none",
             coop: OFFLINE,
             party: [],
@@ -374,7 +439,9 @@ export class GameStore {
                 questTracker: true,
                 damagePanel: false,
                 autoAlch: false,
-                movePrediction: false,
+                movePrediction: true,
+                coopFlag: true,
+                frameRate: "auto",
             },
         };
     }
@@ -385,6 +452,24 @@ export class GameStore {
     };
 
     getSnapshot = (): UiSnapshot => this.snapshot;
+
+    // The HUD's numbers, kept apart from the snapshot (see HudNumbers)
+    private numbers?: HudNumbers;
+    private readonly numberListeners = new Set<() => void>();
+
+    subscribeNumbers = (listener: () => void): (() => void) => {
+        this.numberListeners.add(listener);
+        return () => this.numberListeners.delete(listener);
+    };
+
+    getNumbers = (): HudNumbers | undefined => this.numbers;
+
+    setNumbers(numbers: HudNumbers | undefined): void {
+        this.numbers = numbers;
+        for (const listener of this.numberListeners) {
+            listener();
+        }
+    }
 
     set(changes: Partial<UiSnapshot>): void {
         this.snapshot = { ...this.snapshot, ...changes };

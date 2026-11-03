@@ -3,9 +3,11 @@ import { CSSProperties, Fragment, useEffect, useRef, useState } from "react";
 import { GameClient } from "../client/GameClient";
 import { ChestView } from "../client/GameStore";
 import { ChestAction } from "../core/Loot";
+import { BanishButton } from "./BanishButton";
 import "./ChestModal.css";
 import { Coins } from "./Coins";
 import { ItemIcon } from "./ItemIcon";
+import { KeyHint } from "./PadHint";
 import { RerollButton } from "./RerollButton";
 
 // Opening a reward casket: it drops in, rattles harder and harder while it
@@ -45,6 +47,53 @@ const SPARKS = scatter(30, 7, (random, i) => ({
     "--delay": `${Math.round(random() * 90)}ms`,
 }));
 
+// The rays behind the opened casket, as wedges from the centre of a 640 box.
+// Their fade outwards is in their fill (RaySet), not a mask: a mask over
+// turning layers is drawn again offscreen every frame, a big surface on a
+// phone.
+const RAY_BOX = 640;
+
+// One path of wedges `width` degrees wide, every `step` from `from`, clockwise
+// from the top
+function rayPath(width: number, step: number, from: number): string {
+    const c = RAY_BOX / 2;
+    const point = (deg: number) => {
+        const rad = (deg * Math.PI) / 180;
+        return `${(c + c * Math.sin(rad)).toFixed(1)} ${(c - c * Math.cos(rad)).toFixed(1)}`;
+    };
+    let d = "";
+    for (let a = from; a < from + 360; a += step) {
+        d += `M${c} ${c}L${point(a)}A${c} ${c} 0 0 1 ${point(a + width)}Z`;
+    }
+    return d;
+}
+
+const RAYS = rayPath(6, 22.5, 0);
+// Rarer items get a second, finer set turning the other way
+const FINE_RAYS = rayPath(2, 30, 11);
+
+function RaySet({ id, path, className }: { id: string; path: string; className: string }) {
+    const c = RAY_BOX / 2;
+    return (
+        <svg className={className} viewBox={`0 0 ${RAY_BOX} ${RAY_BOX}`} aria-hidden>
+            <defs>
+                {/* Solid to 12% of the way to the box's corner, gone by 68% */}
+                <radialGradient
+                    id={id}
+                    gradientUnits="userSpaceOnUse"
+                    cx={c}
+                    cy={c}
+                    r={c * Math.SQRT2}
+                >
+                    <stop offset="0.12" />
+                    <stop offset="0.68" stopOpacity="0" />
+                </radialGradient>
+            </defs>
+            <path d={path} fill={`url(#${id})`} />
+        </svg>
+    );
+}
+
 const COIN_ARCS = scatter(10, 3, (random, i) => {
     const side = i % 2 === 0 ? 1 : -1;
     return {
@@ -77,10 +126,10 @@ function getActions(chest: ChestView): ActionButton[] {
     ];
 }
 
-type Props = { chest: ChestView; rerolls: number; client: GameClient };
+type Props = { chest: ChestView; rerolls: number; banishes: number; client: GameClient };
 
 // Mount with key={chest.uid} so every casket gets its own animation
-export function ChestModal({ chest, rerolls, client }: Props): JSX.Element {
+export function ChestModal({ chest, rerolls, banishes, client }: Props): JSX.Element {
     const [phase, setPhase] = useState<Phase>("drop");
     // Bumped by each reroll, so the new item bursts out like the first
     const [rolls, setRolls] = useState(0);
@@ -133,6 +182,12 @@ export function ChestModal({ chest, rerolls, client }: Props): JSX.Element {
     const act = (action: ChestAction) => {
         clearTimers();
         client.resolveChest(action);
+    };
+
+    // A banished item is alched, which is the casket done
+    const banish = () => {
+        clearTimers();
+        client.banish();
     };
 
     // Another item from the same casket (the client plays the burst's sound)
@@ -192,7 +247,14 @@ export function ChestModal({ chest, rerolls, client }: Props): JSX.Element {
         >
             <div className="ui-chest-flash" />
             <div className="ui-chest-scene">
-                <div className="ui-chest-rays" />
+                <div className="ui-chest-rays">
+                    <RaySet id="ui-chest-rays-fade" path={RAYS} className="ui-chest-rays-main" />
+                    <RaySet
+                        id="ui-chest-rays-fine-fade"
+                        path={FINE_RAYS}
+                        className="ui-chest-rays-fine"
+                    />
+                </div>
                 <div className="ui-chest-halo" />
                 <div className="ui-chest-shockwave" />
                 <div className="ui-chest-casket">
@@ -243,6 +305,8 @@ export function ChestModal({ chest, rerolls, client }: Props): JSX.Element {
                     onAction={act}
                     rerolls={rerolls}
                     onReroll={reroll}
+                    banishes={banishes}
+                    onBanish={banish}
                 />
             )}
             {!opening && <div className="ui-chest-hint">Space or click to open</div>}
@@ -256,12 +320,16 @@ function ChestCard({
     onAction,
     rerolls,
     onReroll,
+    banishes,
+    onBanish,
 }: {
     chest: ChestView;
     actions: ActionButton[];
     onAction: (action: ChestAction) => void;
     rerolls: number;
     onReroll: () => void;
+    banishes: number;
+    onBanish: () => void;
 }): JSX.Element {
     const item = chest.item;
     return (
@@ -346,11 +414,24 @@ function ChestCard({
                         disabled={button.disabled}
                         onClick={() => onAction(button.action)}
                     >
-                        <span className="ui-choice-key">{i + 1}</span> {button.label}
+                        <KeyHint keyLabel={String(i + 1)} /> {button.label}
                     </button>
                 ))}
             </div>
-            <RerollButton rerolls={rerolls} onReroll={onReroll} />
+            <div className="ui-chest-rolls">
+                <RerollButton rerolls={rerolls} onReroll={onReroll} />
+                {chest.banish && (
+                    <BanishButton
+                        label={`Banish (${banishes} left)`}
+                        title={
+                            chest.banish.set
+                                ? `Alch it, and no ${chest.banish.set} pieces in a casket again this run`
+                                : `Alch it, and never see it in a casket again this run`
+                        }
+                        onBanish={onBanish}
+                    />
+                )}
+            </div>
             {chest.queued > 0 && (
                 <div className="ui-subtle ui-chest-queued">
                     {chest.queued} more {chest.queued === 1 ? "casket" : "caskets"} to open

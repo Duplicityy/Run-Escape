@@ -1,6 +1,8 @@
 import { NPC_IDLE_SEQ, NPC_WALK_SEQ } from "../../mapviewer/webgl/actor/ActorBakeTypes";
 import { FUN_ENEMIES } from "./fun/enemies";
 import { NIGHTMARE_ENEMIES } from "./nightmare";
+import { PHOSANI_ENEMIES } from "./phosani";
+import { getTheatreBosses } from "./theatre";
 import { BossAttackDef, EnemyDef, PlayerEffectDef } from "./types";
 
 // Animation ids come from scripts/cache/find-npc-seqs.ts and
@@ -4722,6 +4724,7 @@ export const ENEMIES: EnemyDef[] = [
         speed: 2.5,
         radius: 0.35,
         xp: 14,
+        onlyStyle: "melee",
         sounds: { attack: 3605, hit: 3607, death: 3606 },
     },
     {
@@ -4737,6 +4740,7 @@ export const ENEMIES: EnemyDef[] = [
         speed: 2.3,
         radius: 0.35,
         xp: 14,
+        onlyStyle: "ranged",
         sounds: { attack: 3605, hit: 3607, death: 3606 },
     },
     {
@@ -4752,6 +4756,7 @@ export const ENEMIES: EnemyDef[] = [
         speed: 2.3,
         radius: 0.35,
         xp: 14,
+        onlyStyle: "magic",
         sounds: { attack: 3605, hit: 3607, death: 3606 },
     },
     {
@@ -4767,6 +4772,7 @@ export const ENEMIES: EnemyDef[] = [
         speed: 2.2,
         radius: 0.45,
         xp: 24,
+        onlyStyle: "melee",
         sounds: { attack: 3605, hit: 3607, death: 3606 },
         scale: 0.8,
         knockbackResist: 0.4,
@@ -4785,6 +4791,7 @@ export const ENEMIES: EnemyDef[] = [
         speed: 2.0,
         radius: 0.45,
         xp: 24,
+        onlyStyle: "ranged",
         sounds: { attack: 3605, hit: 3607, death: 3606 },
         scale: 0.8,
         knockbackResist: 0.4,
@@ -4803,6 +4810,7 @@ export const ENEMIES: EnemyDef[] = [
         speed: 2.0,
         radius: 0.45,
         xp: 24,
+        onlyStyle: "magic",
         sounds: { attack: 3605, hit: 3607, death: 3606 },
         scale: 0.8,
         knockbackResist: 0.4,
@@ -5101,6 +5109,69 @@ export const ENEMIES: EnemyDef[] = [
                     enraged: true,
                 },
             ],
+        },
+    },
+
+    // The Theatre of Blood raid's adds: the blood spawn and Nylocas Matomenos that crawl out to
+    // the Maiden. Its bosses are in theatre.ts.
+    {
+        id: "blood_spawn",
+        name: "Blood spawn",
+        tags: ["vampyre"],
+        npcId: 8367,
+        idleSeq: 8102,
+        walkSeq: 8101,
+        attackSeq: 8104,
+        deathSeq: 8103,
+        hp: 6,
+        damage: 1,
+        speed: 2.3,
+        radius: 0.35,
+        xp: 6,
+        sounds: { attack: 3605, hit: 3607, death: 3606 },
+    },
+    {
+        id: "nylocas_matomenos",
+        name: "Nylocas Matomenos",
+        npcId: 8366,
+        idleSeq: 8096,
+        walkSeq: 8095,
+        attackSeq: 8098,
+        deathSeq: 8097,
+        hp: 14,
+        damage: 2,
+        speed: 1.8,
+        radius: 0.5,
+        xp: 10,
+        sounds: { attack: 3605, hit: 3607, death: 3606 },
+        scale: 0.8,
+        knockbackResist: 0.5,
+        expertAs: "nylocas_matomenos_healer",
+    },
+    {
+        id: "nylocas_matomenos_healer",
+        name: "Nylocas Matomenos",
+        npcId: 8366,
+        idleSeq: 8096,
+        walkSeq: 8095,
+        attackSeq: 8098,
+        deathSeq: 8097,
+        hp: 14,
+        damage: 2,
+        speed: 1.8,
+        radius: 0.5,
+        xp: 10,
+        sounds: { attack: 3605, hit: 3607, death: 3606 },
+        scale: 0.8,
+        knockbackResist: 0.5,
+        // Crawls to the Maiden and feeds her, as in OSRS: kill it on the way
+        heals: {
+            fraction: 0.02,
+            interval: 1.5,
+            range: 1.5,
+            targets: ["maiden_of_sugadinti"],
+            seek: 30,
+            spotAnim: 1579,
         },
     },
 
@@ -8268,7 +8339,19 @@ export const ENEMIES: EnemyDef[] = [
 
     // The Nightmare and all that comes with her (nightmare.ts)
     ...NIGHTMARE_ENEMIES,
+    ...PHOSANI_ENEMIES,
 ];
+
+// The Theatre of Blood raid's bosses, some of them copies of Morytania's above
+ENEMIES.push(
+    ...getTheatreBosses((id) => {
+        const def = ENEMIES.find((e) => e.id === id);
+        if (!def) {
+            throw new Error("Unknown enemy " + id);
+        }
+        return def;
+    }),
+);
 
 export const ENEMY_BY_ID: Map<string, EnemyDef> = new Map(ENEMIES.map((e) => [e.id, e]));
 

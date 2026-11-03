@@ -48,6 +48,7 @@ function createUi(solo = false, hard = false): UiSnapshot {
             mapId: "lumbridge",
             endless: false,
             hard,
+            expert: false,
             round: 1,
             victory: false,
             seconds: 123,

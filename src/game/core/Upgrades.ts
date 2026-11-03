@@ -312,6 +312,8 @@ export function rollChoices(
     endless = false,
     maxWeapons = MAX_WEAPONS,
     maxPassives = MAX_PASSIVES,
+    // Weapons and passives banished this run: never offered new
+    banished?: ReadonlySet<string>,
 ): UpgradeChoice[] {
     const random = () => rng.next();
     const pool: { choice: () => UpgradeChoice; weight: number }[] = [];
@@ -357,6 +359,7 @@ export function rollChoices(
                 weapon.evolved ||
                 weapon.pickOnly ||
                 ownedWeapons.has(weapon.id) ||
+                banished?.has(weapon.id) ||
                 !isAvailable(weapon, unlocked)
             ) {
                 continue;
@@ -402,7 +405,11 @@ export function rollChoices(
     }
     if (passives.length < maxPassives) {
         for (const passive of PASSIVES) {
-            if (!ownedPassives.has(passive.id) && isAvailable(passive, unlocked)) {
+            if (
+                !ownedPassives.has(passive.id) &&
+                !banished?.has(passive.id) &&
+                isAvailable(passive, unlocked)
+            ) {
                 pool.push({
                     choice: () => ({
                         kind: "newPassive",

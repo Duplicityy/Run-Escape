@@ -7,11 +7,28 @@ import {
 import { CHARACTERS } from "../content/characters";
 import { ENEMY_BY_ID } from "../content/enemies";
 import { ITEM_BY_ID, getGear } from "../content/items";
-import { ALL_MAPS, MAPS, isDevMap, isFunMap, isSeasonalMap } from "../content/maps";
+import {
+    ALL_MAPS,
+    MAPS,
+    MAP_BY_ID,
+    RAID_MAPS,
+    getMap,
+    isDevMap,
+    isFunMap,
+    isRaidMap,
+    isSeasonalMap,
+} from "../content/maps";
 import { QUESTS, QUEST_BY_ID } from "../content/quests";
 import { SHOP_UPGRADES, SHOP_UPGRADE_BY_ID, getUpgradeCost } from "../content/shop";
 import { TROPHY_BY_ID } from "../content/trophies";
-import { CharacterDef, QuestDef, Stats, UnlockTask, emptyStats } from "../content/types";
+import {
+    CharacterDef,
+    CombatStyle,
+    QuestDef,
+    Stats,
+    UnlockTask,
+    emptyStats,
+} from "../content/types";
 import { LOCKABLE_ITEMS, LOCKABLE_ITEM_BY_ID, LockableItem, isAvailable } from "../content/unlocks";
 import { WEAPONS } from "../content/weapons";
 
@@ -26,7 +43,17 @@ import { WEAPONS } from "../content/weapons";
 // 7: evolutions made, for the Collection log
 // 8: trophies found, for the Collection log
 // 9: hard mode's wins and endless records
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 11;
+
+export type SkillPage = {
+    upgrades: Record<string, number>;
+    upgradesSpent: number;
+    upgradeRefunds?: Record<string, number[]>;
+};
+
+function createSkillPage(): SkillPage {
+    return { upgrades: {}, upgradesSpent: 0 };
+}
 
 // Characters taken out of the game for now; saves keep them unlocked for when
 // they're back
@@ -40,10 +67,7 @@ export type SaveData = {
     gameVersion?: string;
     coins: number;
     totalCoins: number;
-    // Shop upgrade id -> ranks bought
-    upgrades: Record<string, number>;
-    // Coins spent on upgrades, given back by a refund
-    upgradesSpent: number;
+    skillPages: Record<CombatStyle, SkillPage>;
     unlockedCharacters: string[];
     // Ids of the weapons, passives and casket items brought in by map tasks
     unlockedItems: string[];
@@ -53,6 +77,8 @@ export type SaveData = {
     mapVictories: Record<string, number>;
     // Map id -> the times of those that were on hard mode
     hardVictories: Record<string, number>;
+    // A raid's expert mode wins, which also count as hard ones
+    expertVictories: Record<string, number>;
     totalKills: number;
     bestSeconds: number;
     bestLevel: number;
@@ -85,14 +111,18 @@ export function createSave(): SaveData {
         version: SAVE_VERSION,
         coins: 0,
         totalCoins: 0,
-        upgrades: {},
-        upgradesSpent: 0,
-        unlockedCharacters: CHARACTERS.filter((c) => !c.unlock).map((c) => c.id),
+        skillPages: {
+            melee: createSkillPage(),
+            ranged: createSkillPage(),
+            magic: createSkillPage(),
+        },
+        unlockedCharacters: CHARACTERS.filter((c) => !c.unlock && !c.only).map((c) => c.id),
         unlockedItems: [],
         runs: 0,
         victories: 0,
         mapVictories: {},
         hardVictories: {},
+        expertVictories: {},
         totalKills: 0,
         bestSeconds: 0,
         bestLevel: 0,
@@ -119,15 +149,20 @@ export function migrateSave(raw: unknown): SaveData {
         typeof value === "number" && isFinite(value) ? value : fallback;
     save.coins = num(data.coins, 0);
     save.totalCoins = num(data.totalCoins, save.coins);
-    if (data.upgrades && typeof data.upgrades === "object") {
-        for (const [id, rank] of Object.entries(data.upgrades)) {
-            const upgrade = SHOP_UPGRADE_BY_ID.get(id);
-            if (upgrade) {
-                save.upgrades[id] = Math.min(Math.max(num(rank, 0), 0), upgrade.maxRank);
-            }
+    if (data.skillPages && typeof data.skillPages === "object") {
+        for (const style of ["melee", "ranged", "magic"] as const) {
+            save.skillPages[style] = migrateSkillPage(data.skillPages[style]);
         }
+        if ((data.version ?? 0) < 11) {
+            const spent = Object.values(save.skillPages).reduce(
+                (sum, page) => sum + page.upgradesSpent,
+                0,
+            );
+            save.coins += spent - getMaxSkillSpending(save);
+        }
+    } else {
+        save.skillPages.melee = migrateSkillPage(raw);
     }
-    save.upgradesSpent = num(data.upgradesSpent, estimateSpent(save.upgrades));
     if (Array.isArray(data.unlockedCharacters)) {
         for (const id of data.unlockedCharacters) {
             const known = CHARACTERS.some((c) => c.id === id) || RETIRED_CHARACTERS.includes(id);
@@ -143,11 +178,14 @@ export function migrateSave(raw: unknown): SaveData {
             }
         }
     }
+    // The maps that can be won: the campaign's and seasonal ones, and the raids
+    const winnable = (id: string) =>
+        MAPS.some((m) => m.id === id) || RAID_MAPS.some((m) => m.id === id);
     save.runs = num(data.runs, 0);
     save.victories = num(data.victories, 0);
     if (data.mapVictories && typeof data.mapVictories === "object") {
         for (const [id, wins] of Object.entries(data.mapVictories)) {
-            if (MAPS.some((m) => m.id === id) && num(wins, 0) > 0) {
+            if (winnable(id) && num(wins, 0) > 0) {
                 save.mapVictories[id] = num(wins, 0);
             }
         }
@@ -157,8 +195,15 @@ export function migrateSave(raw: unknown): SaveData {
     }
     if (data.hardVictories && typeof data.hardVictories === "object") {
         for (const [id, wins] of Object.entries(data.hardVictories)) {
-            if (MAPS.some((m) => m.id === id) && num(wins, 0) > 0) {
+            if (winnable(id) && num(wins, 0) > 0) {
                 save.hardVictories[id] = num(wins, 0);
+            }
+        }
+    }
+    if (data.expertVictories && typeof data.expertVictories === "object") {
+        for (const [id, wins] of Object.entries(data.expertVictories)) {
+            if (isRaidMap(id) && num(wins, 0) > 0) {
+                save.expertVictories[id] = num(wins, 0);
             }
         }
     }
@@ -237,48 +282,171 @@ function isCasketGear(id: unknown): id is string {
     return item?.kind === "gear" && !item.variantOf;
 }
 
-export function getMetaStats(save: SaveData): Stats {
+function migrateSkillPage(raw: unknown): SkillPage {
+    const page = createSkillPage();
+    if (!raw || typeof raw !== "object") {
+        return page;
+    }
+    const data = raw as Partial<SkillPage>;
+    if (data.upgrades && typeof data.upgrades === "object") {
+        for (const [id, rank] of Object.entries(data.upgrades)) {
+            const upgrade = SHOP_UPGRADE_BY_ID.get(id);
+            if (upgrade && typeof rank === "number" && Number.isFinite(rank)) {
+                const bought = Math.min(Math.max(Math.floor(rank), 0), upgrade.maxRank);
+                if (bought > 0) {
+                    page.upgrades[id] = bought;
+                }
+            }
+        }
+    }
+    page.upgradesSpent =
+        Object.keys(page.upgrades).length === 0
+            ? 0
+            : Number.isSafeInteger(data.upgradesSpent) && data.upgradesSpent! >= 0
+              ? data.upgradesSpent!
+              : estimateSpent(page.upgrades);
+    if (data.upgradeRefunds && typeof data.upgradeRefunds === "object") {
+        const refunds: Record<string, number[]> = {};
+        let total = 0;
+        let valid = true;
+        for (const [id, rank] of Object.entries(page.upgrades)) {
+            const costs = data.upgradeRefunds[id];
+            if (
+                !Array.isArray(costs) ||
+                costs.length !== rank ||
+                !costs.every((cost) => Number.isSafeInteger(cost) && cost >= 0)
+            ) {
+                valid = false;
+                break;
+            }
+            refunds[id] = [...costs];
+            total += costs.reduce((sum, cost) => sum + cost, 0);
+        }
+        if (valid && total === page.upgradesSpent) {
+            page.upgradeRefunds = refunds;
+        }
+    }
+    return page;
+}
+
+export function getMetaStats(save: SaveData, style: CombatStyle = "melee"): Stats {
     const stats = emptyStats();
     for (const upgrade of SHOP_UPGRADES) {
-        const rank = save.upgrades[upgrade.id] ?? 0;
+        const rank = save.skillPages[style].upgrades[upgrade.id] ?? 0;
         stats[upgrade.stat] += upgrade.perRank * rank;
     }
     return stats;
 }
 
-export function getTotalUpgradesBought(save: SaveData): number {
-    return Object.values(save.upgrades).reduce((sum, rank) => sum + rank, 0);
+export function getTotalUpgradesBought(save: SaveData, style: CombatStyle = "melee"): number {
+    return Object.values(save.skillPages[style].upgrades).reduce((sum, rank) => sum + rank, 0);
 }
 
-export function getNextUpgradeCost(save: SaveData, upgradeId: string): number | undefined {
+function getMaxSkillSpending(save: SaveData): number {
+    return Math.max(...Object.values(save.skillPages).map((page) => page.upgradesSpent));
+}
+
+export function getSkillCoins(save: SaveData, style: CombatStyle = "melee"): number {
+    return save.coins + getMaxSkillSpending(save) - save.skillPages[style].upgradesSpent;
+}
+
+export function getNextUpgradeCost(
+    save: SaveData,
+    upgradeId: string,
+    style: CombatStyle = "melee",
+): number | undefined {
     const upgrade = SHOP_UPGRADE_BY_ID.get(upgradeId);
     if (!upgrade) {
         return undefined;
     }
-    const rank = save.upgrades[upgradeId] ?? 0;
+    const rank = save.skillPages[style].upgrades[upgradeId] ?? 0;
     if (rank >= upgrade.maxRank) {
         return undefined;
     }
-    return getUpgradeCost(upgrade, rank, getTotalUpgradesBought(save));
+    return getUpgradeCost(upgrade, rank, getTotalUpgradesBought(save, style));
 }
 
 // Returns false when it can't be bought (maxed or too expensive)
-export function buyUpgrade(save: SaveData, upgradeId: string): boolean {
-    const cost = getNextUpgradeCost(save, upgradeId);
-    if (cost === undefined || save.coins < cost) {
+export function buyUpgrade(
+    save: SaveData,
+    upgradeId: string,
+    style: CombatStyle = "melee",
+): boolean {
+    const cost = getNextUpgradeCost(save, upgradeId, style);
+    if (cost === undefined || getSkillCoins(save, style) < cost) {
         return false;
     }
-    save.coins -= cost;
-    save.upgradesSpent += cost;
-    save.upgrades[upgradeId] = (save.upgrades[upgradeId] ?? 0) + 1;
+    const reserved = getMaxSkillSpending(save);
+    const page = save.skillPages[style];
+    const refunds = getUpgradeRefunds(page);
+    (refunds[upgradeId] ??= []).push(cost);
+    page.upgradesSpent += cost;
+    save.coins -= getMaxSkillSpending(save) - reserved;
+    page.upgrades[upgradeId] = (page.upgrades[upgradeId] ?? 0) + 1;
     return true;
 }
 
+export function refundUpgrade(
+    save: SaveData,
+    upgradeId: string,
+    style: CombatStyle = "melee",
+): boolean {
+    const upgrade = SHOP_UPGRADE_BY_ID.get(upgradeId);
+    const page = save.skillPages[style];
+    const rank = page.upgrades[upgradeId] ?? 0;
+    if (!upgrade || rank <= 0) {
+        return false;
+    }
+    const reserved = getMaxSkillSpending(save);
+    const refunds = getUpgradeRefunds(page);
+    const refund = refunds[upgradeId].pop()!;
+    page.upgradesSpent -= refund;
+    save.coins += reserved - getMaxSkillSpending(save);
+    if (rank === 1) {
+        delete page.upgrades[upgradeId];
+        delete refunds[upgradeId];
+    } else {
+        page.upgrades[upgradeId] = rank - 1;
+    }
+    if (getTotalUpgradesBought(save, style) === 0) {
+        delete page.upgradeRefunds;
+    }
+    return true;
+}
+
+function getUpgradeRefunds(page: SkillPage): Record<string, number[]> {
+    if (page.upgradeRefunds) {
+        return page.upgradeRefunds;
+    }
+    const refunds: Record<string, number[]> = {};
+    let remaining = page.upgradesSpent;
+    let weightLeft = 0;
+    for (const [id, rank] of Object.entries(page.upgrades)) {
+        const upgrade = SHOP_UPGRADE_BY_ID.get(id)!;
+        refunds[id] = Array.from({ length: rank }, (_, index) => getUpgradeCost(upgrade, index, 0));
+        weightLeft += refunds[id].reduce((sum, weight) => sum + weight, 0);
+    }
+    for (const costs of Object.values(refunds)) {
+        for (let index = 0; index < costs.length; index++) {
+            const weight = costs[index];
+            const refund = Math.round((remaining * weight) / weightLeft);
+            costs[index] = refund;
+            remaining -= refund;
+            weightLeft -= weight;
+        }
+    }
+    page.upgradeRefunds = refunds;
+    return refunds;
+}
+
 // Sells every upgrade back for what it cost (VS lets you refund)
-export function refundUpgrades(save: SaveData): void {
-    save.coins += save.upgradesSpent;
-    save.upgradesSpent = 0;
-    save.upgrades = {};
+export function refundUpgrades(save: SaveData, style: CombatStyle = "melee"): void {
+    const reserved = getMaxSkillSpending(save);
+    const page = save.skillPages[style];
+    page.upgradesSpent = 0;
+    save.coins += reserved - getMaxSkillSpending(save);
+    page.upgrades = {};
+    delete page.upgradeRefunds;
 }
 
 // For saves from before spending was tracked: what buying these ranks one
@@ -291,7 +459,7 @@ function estimateSpent(upgrades: Record<string, number>): number {
             buyUpgrade(replay, id);
         }
     }
-    return replay.upgradesSpent;
+    return replay.skillPages.melee.upgradesSpent;
 }
 
 export type RunSummary = {
@@ -300,6 +468,8 @@ export type RunSummary = {
     endless?: boolean;
     round?: number;
     hard?: boolean;
+    // A raid's expert mode (hard as well)
+    expert?: boolean;
     victory: boolean;
     seconds: number;
     level: number;
@@ -331,6 +501,9 @@ export function recordRun(save: SaveData, run: RunSummary): QuestDef[] {
         save.mapVictories[run.mapId] = (save.mapVictories[run.mapId] ?? 0) + 1;
         if (run.hard) {
             save.hardVictories[run.mapId] = (save.hardVictories[run.mapId] ?? 0) + 1;
+        }
+        if (run.expert) {
+            save.expertVictories[run.mapId] = (save.expertVictories[run.mapId] ?? 0) + 1;
         }
     }
     save.totalKills += run.kills;
@@ -440,7 +613,7 @@ export function isEndlessRecord(save: SaveData, run: RunSummary): boolean {
 function isTaskDone(save: SaveData, task: UnlockTask, run?: RunSummary): boolean {
     switch (task.kind) {
         case "beatMap":
-            return (save.mapVictories[task.mapId] ?? 0) > 0;
+            return ((task.hard ? save.hardVictories : save.mapVictories)[task.mapId] ?? 0) > 0;
         case "killBoss":
             return run?.mapId === task.mapId && run.bossesKilled.includes(task.enemyId);
         case "survive":
@@ -479,8 +652,13 @@ export function applyUnlocks(save: SaveData, run?: RunSummary): void {
 // has been beaten, or once it's been beaten itself (a co-op guest can win on
 // a map the host had open). The fun and seasonal maps are open from the start.
 export function isMapUnlocked(save: SaveData, mapId: string): boolean {
-    if (isFunMap(mapId) || isSeasonalMap(mapId)) {
+    if (isFunMap(mapId) || isSeasonalMap(mapId) || isRaidMap(mapId)) {
         return true;
+    }
+    // A boss fight opens once the map it's the hard mode of has been beaten
+    const fight = MAP_BY_ID.get(mapId)?.fight;
+    if (fight) {
+        return (save.mapVictories[fight.requires] ?? 0) > 0 || (save.mapVictories[mapId] ?? 0) > 0;
     }
     const index = MAPS.findIndex((m) => m.id === mapId);
     return (
@@ -491,15 +669,50 @@ export function isMapUnlocked(save: SaveData, mapId: string): boolean {
 }
 
 // A map can be played endless once it's been beaten; the fun maps are only
-// ever endless
+// ever endless, and a boss fight never is (there's nothing after its boss)
 export function isEndlessUnlocked(save: SaveData, mapId: string): boolean {
+    // A raid ends with its last room: there's no round after it to come round again
+    if (MAP_BY_ID.get(mapId)?.fight || isRaidMap(mapId)) {
+        return false;
+    }
     return isFunMap(mapId) || (save.mapVictories[mapId] ?? 0) > 0;
 }
 
 // Hard mode opens the same way: once the map's been beaten, and from the start
 // on the fun maps, which can't be
 export function isHardUnlocked(save: SaveData, mapId: string): boolean {
-    return isEndlessUnlocked(save, mapId);
+    return isFunMap(mapId) || (save.mapVictories[mapId] ?? 0) > 0;
+}
+
+// A raid's expert mode, once it's been beaten on hard
+export function isExpertUnlocked(save: SaveData, mapId: string): boolean {
+    return isRaidMap(mapId) && (save.hardVictories[mapId] ?? 0) > 0;
+}
+
+// Which of a raid's halls have a teleporter: the rooms whose boss has been killed before, in any
+// of its forms (Nylocas Vasilias's colours, what Verzik rises into)
+export function getRaidPortals(save: SaveData, mapId: string): boolean[] {
+    const raid = getMap(mapId).raid;
+    if (!raid) {
+        return [];
+    }
+    return raid.rooms.map((room) => {
+        const seen = new Set<string>();
+        const ids = [room.boss];
+        while (ids.length > 0) {
+            const id = ids.pop()!;
+            if (seen.has(id)) {
+                continue;
+            }
+            seen.add(id);
+            const boss = ENEMY_BY_ID.get(id)?.boss;
+            ids.push(...(boss?.colours?.forms ?? []));
+            if (boss?.rises?.into) {
+                ids.push(boss.rises.into);
+            }
+        }
+        return [...seen].some((id) => (save.enemyKills[id] ?? 0) > 0);
+    });
 }
 
 // A piece's next upgrade in the Armoury: what it becomes, what that costs,

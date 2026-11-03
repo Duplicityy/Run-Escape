@@ -2,6 +2,7 @@ import { EXTRA_REVIVE_ITEM } from "../content/coop";
 import { getGearStats, upgradedName } from "../content/endless";
 import { CASKETS, GEAR_SLOTS, GEAR_SLOT_BY_ID, getItem } from "../content/items";
 import { getPowerUp } from "../content/powerups";
+import { getRaidSupply } from "../content/raids";
 import { RARITIES } from "../content/rarity";
 import { countSetPieces, describeSetProgress, getItemSet } from "../content/sets";
 import { diffStats } from "../content/stats";
@@ -131,6 +132,9 @@ export function getChestView(sim: Sim): ChestView | undefined {
         alchCoins: sim.alchValue(item.id, chest.upgrades),
         recommended,
         queued: sim.chests.length - 1,
+        banish: sim.canBanishChest
+            ? { set: getItemSet(getItem(chest.upgradedFrom ?? chest.itemId))?.name }
+            : undefined,
     };
 }
 
@@ -161,11 +165,13 @@ export function getEventView(sim: Sim): EventView | undefined {
     if (!offer || !effect || (effect.kind !== "shop" && effect.kind !== "quiz")) {
         return undefined;
     }
+    const forPoints = offer.options.some((option) => option.kind === "supply");
     return {
         uid: offer.uid,
         name: offer.def.name,
         speech: offer.def.speech ?? "",
         leaveLabel: effect.leaveLabel,
+        points: forPoints ? sim.raidPoints : undefined,
         options: offer.options.map((option) => {
             if (option.kind === "answer") {
                 const item = getItem(option.itemId);
@@ -180,6 +186,26 @@ export function getEventView(sim: Sim): EventView | undefined {
                     price: option.price,
                     sold: option.sold,
                     enabled: !option.sold && sim.coins >= option.price,
+                };
+            }
+            if (option.kind === "teleport") {
+                return {
+                    title: "Teleport",
+                    text: "Uses one of this raid's teleports.",
+                    // A teleport tablet
+                    iconObjId: 8013,
+                    enabled: true,
+                };
+            }
+            if (option.kind === "supply") {
+                const supply = getRaidSupply(option.supplyId);
+                return {
+                    title: supply.name,
+                    text: supply.description,
+                    iconObjId: supply.objId,
+                    price: option.price,
+                    sold: option.sold,
+                    enabled: !option.sold && sim.raidPoints >= option.price,
                 };
             }
             const powerUp = getPowerUp(option.powerUpId);

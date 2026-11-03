@@ -109,17 +109,20 @@ test("bounds prediction time and history during a stalled connection", () => {
     const maximum = sim.player.x + (PREDICTION_MS / 20) * PLAYER_SPEED;
     expect(prediction.render()!.x).toBeCloseTo(maximum);
     time(480);
-    // Correction easing can leave a small visual error beyond the replay
-    // window, but a stalled connection cannot move the picture indefinitely.
+    // The picture stops at the budget rather than walking on past it.
     const last = prediction.render()!.x;
-    expect(last).toBeLessThan(maximum + 0.1);
-    time(501);
-    expect(prediction.render()!.x).toBeLessThan(last);
-    time(1500);
-    expect(prediction.render()).toBeUndefined();
+    expect(last).toBeLessThan(maximum + 0.01);
+    expect(prediction.render()!.moving).toBe(false);
+    // Stale: it stands where it is, rather than walking back to the
+    // confirmed spot and rushing forward again when frames come back.
+    for (const now of [501, 900, 1500]) {
+        time(now);
+        expect(prediction.render()!.x).toBe(last);
+        expect(prediction.render()!.moving).toBe(false);
+    }
 
     for (let i = 0; i < 1000; i++) {
-        time(600 + i);
+        time(1600 + i);
         prediction.sample([i % 2 ? 127 : -127, 0]);
     }
     expect((prediction as unknown as { inputs: unknown[] }).inputs.length).toBeLessThanOrEqual(
@@ -191,6 +194,8 @@ test("the newest stop is replayed even when the confirmation lead exceeds the bu
     prediction.sample([0, 0]);
     for (let now = 360; now <= 480; now += 20) {
         time(now);
+        // Frames keep coming from a host that hasn't moved us yet
+        prediction.confirm([]);
         prediction.render();
     }
     expect(prediction.render()!.x).toBeLessThan(before - 0.2);
@@ -386,3 +391,133 @@ test.each([false, true])(
         expect(guest.desynced).toBe(false);
     },
 );
+
+// A host and guest whose messages each take delay(up) ms, in order on each
+// side, with nothing getting through while cut() is true.
+function link(delay: (up: boolean) => number, cut = () => false) {
+    let now = 0;
+    const deliveries: { at: number; fn: () => void }[] = [];
+    const lastDelivery = [0, 0];
+    const send = (channel: number, fn: () => void) => {
+        if (cut()) return;
+        const at = Math.max(now + delay(channel === 1), lastDelivery[channel]);
+        lastDelivery[channel] = at;
+        deliveries.push({ at, fn });
+    };
+    const heroes = new Map([
+        ["p0", 0],
+        ["p1", 1],
+    ]);
+    const host: CoopRun = new CoopRun(
+        makeSim(0),
+        true,
+        { sendUp() {}, sendDown: (message) => send(0, () => guest.receiveDown(message)) },
+        heroes,
+        "p0",
+        () => now,
+    );
+    const guest: CoopRun = new CoopRun(
+        makeSim(1),
+        false,
+        { sendUp: (message) => send(1, () => host.receiveUp("p1", message)), sendDown() {} },
+        heroes,
+        "p0",
+        () => now,
+    );
+    host.receiveUp("p1", { loaded: true });
+    // One 20ms frame: deliveries, the guest's input, a host tick, guest catch-up
+    const frame = (at: number, move: number, hostSteps = 1) => {
+        now = at;
+        for (let i = 0; i < deliveries.length; ) {
+            if (deliveries[i].at <= now) deliveries.splice(i, 1)[0].fn();
+            else i++;
+        }
+        guest.setMove(move, 0);
+        for (let i = 0; i < hostSteps; i++) host.stepFrame();
+        host.flush();
+        while (guest.canStep()) guest.stepFrame();
+        return getPlayerPose(guest.sim, 1, 1, guest.prediction!.render());
+    };
+    return { host, guest, frame };
+}
+
+test("echoes of a held move a tick early or late leave the walk steady", () => {
+    let sent = 0;
+    // Each refresh's echo comes back a tick sooner or later than the last.
+    const { frame } = link((up) => (up && sent++ % 2 ? 80 : 60));
+    let last = 0;
+    for (let now = 0; now <= 2000; now += 20) {
+        const x = frame(now, now >= 200 ? 1 : 0).x;
+        if (now > 1000) expect(Math.abs(x - last - PLAYER_SPEED)).toBeLessThan(PLAYER_SPEED * 0.05);
+        last = x;
+    }
+});
+
+test("standing still, a small error stays rather than creeping, and walking takes it out", () => {
+    let late = false;
+    // The stop takes a tick longer to reach the host than the start did.
+    const { guest, frame } = link(() => (late ? 80 : 60));
+    let stopped = 0;
+    for (let now = 0; now <= 1400; now += 20) {
+        late = now >= 500;
+        const pose = frame(now, now >= 100 && now < 500 ? 1 : 0);
+        if (now === 500) stopped = pose.x;
+        if (now > 500) expect(pose.x).toBe(stopped);
+    }
+    const error = Math.abs(stopped - guest.sim.player.x);
+    expect(error).toBeGreaterThan(PLAYER_SPEED / 2);
+    expect(error).toBeLessThan(0.1);
+    for (let now = 1420; now <= 2000; now += 20) frame(now, now < 1800 ? 1 : 0);
+    expect(frame(2020, 0).x).toBeCloseTo(guest.sim.player.x, 2);
+});
+
+test("after a dropped connection, the hero stands, then glides to the resent frames", () => {
+    let now = 0;
+    const { guest, frame } = link(
+        () => 60,
+        () => now >= 1000 && now < 2000,
+    );
+    let last = 0;
+    let largest = 0;
+    let resumed = false;
+    for (now = 0; now <= 3000; now += 20) {
+        if (now >= 2000 && !resumed) {
+            resumed = true;
+            guest.resumed();
+        }
+        const pose = frame(now, now >= 100 && now < 2600 ? 1 : 0);
+        // Never back towards the last confirmed spot, then forward again
+        if (now > 100) expect(pose.x).toBeGreaterThanOrEqual(last - 1e-9);
+        if (now >= 1700 && now < 2000) {
+            expect(pose.x).toBe(last);
+            expect(pose.moving).toBe(false);
+        }
+        if (now > 100) largest = Math.max(largest, pose.x - last);
+        last = pose.x;
+    }
+    // The host walked the hero on meanwhile: well past a snap, but glided
+    // over several frames
+    expect(guest.sim.player.x - 1033.5).toBeGreaterThan(5);
+    expect(largest).toBeLessThan(1);
+    expect(last).toBeCloseTo(guest.sim.player.x, 1);
+    expect(guest.desynced).toBe(false);
+});
+
+test("frames pausing before a stop reaches the host don't pull the hero back", () => {
+    // Slow enough that the lead passes PREDICTION_MS while walking
+    const { guest, frame } = link(() => 250);
+    let last = 0;
+    for (let now = 0; now <= 3000; now += 20) {
+        // The host stops for a moment, as a busy machine's can, then makes up
+        // the frames it missed
+        const steps = now >= 1500 && now < 1900 ? 0 : now === 1900 ? 21 : 1;
+        const x = frame(now, now >= 200 && now < 1500 ? 1 : 0, steps).x;
+        // Until the host's frames have the stop. Then where it left us is
+        // known, and settling there is right, back or not.
+        if (now > 1500 && guest.sim.player.moving) {
+            expect(x).toBeGreaterThanOrEqual(last - 1e-9);
+        }
+        last = x;
+    }
+    expect(last).toBeCloseTo(guest.sim.player.x, 2);
+});
