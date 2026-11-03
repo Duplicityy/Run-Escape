@@ -420,7 +420,8 @@ src/game/
   client/GameTouch.ts, ui/TouchControls.tsx, ui/Mobile.css   touch screens (see Touch screens)
 server/     coop-relay.mjs: co-op's rooms, and passes each run's frames between its players
 src/mapviewer/webgl/actor/   actor renderer: baked animation frames drawn anywhere in the world,
-                             any number of them, one multi-draw per pass
+                             any number of them, one multi-draw per pass (without multi draw,
+                             one instanced draw per frame of an animation)
 src/mapviewer/worker/        RegionDataLoader (collision and heights for the whole arena in one
                              scene build), ItemIconLoader (inventory icons drawn like the client)
                              SoundLoader (sound effects synthesized off the main thread),
@@ -480,7 +481,11 @@ doesn't. The boxes follow what `main.vert.glsl` does to a vertex (`CullGrid.addI
 to where the shader puts things needs one there too. `render-stats.ts --cull=8` checks it.
 
 Actors are culled as spheres in `ActorRenderer.draw`, by `ActorModel.reach`: the furthest any vertex
-gets from the model's origin in any frame of any animation, so bosses' big swings count.
+gets from the model's origin in any frame of any animation, so bosses' big swings count. Without
+`WEBGL_multi_draw` (Safari, Firefox) every draw is a real draw call, so `InstanceList.sortByFrame`
+puts the actors on the same frame of the same animation together and each run of them is one
+instanced draw: a crowd of one enemy is a few draws, not hundreds. The shader finds an actor's data
+by `DRAW_ID + gl_InstanceID`.
 
 Map squares keep only the world that can be seen. Past the play area the world fades into the sky
 over 6 tiles (`PLAY_AREA_FADE` in `fog.glsl`), and a ray from the camera only gets further from the
