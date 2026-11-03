@@ -57,6 +57,7 @@ the version in the corner).
   to get back to the boss you're learning quicker.
 - Beat the raid on hard for expert mode, with more of the real raid's mechanics, twice the coins
   and Lil' Zik's looks.
+- Refund a skill rank with its U-turn button, or right-click on desktop, without resetting the rest.
 
 ### Changed
 
@@ -78,6 +79,8 @@ the version in the corner).
   around the map.
 - The Nightmare's charge wind-up and sleepwalker animations tore her model apart, on Hallowed
   Night as well: they belonged to her other form.
+- Coin icons stay visible while a changed stack size loads after buying or refunding skills.
+- Maxed skills no longer look buyable, and touch long presses no longer refund ranks by accident.
 
 ## 0.23.0 - 2026-11-02
 

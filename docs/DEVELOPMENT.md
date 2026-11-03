@@ -1034,6 +1034,18 @@ the lock goes mid-run, a solo run pauses under the panel (co-op's goes on for th
 The desktop app has one window and plays the newest game it has, so neither tabs nor an older
 game come up there; an export from a newer version is turned away on import, as anywhere.
 
+Skill purchases keep an optional `upgradeRefunds` list of paid prices for each skill's ranks.
+The U-turn button on bought cards refunds the last price in that skill's list, through
+`GameClient.persist()`. It is separate from the purchase button and has a larger hit area on coarse
+pointers. Desktop right-clicking does the same; coarse-pointer context menus never refund.
+Unavailable purchases use `aria-disabled` and keep their disabled appearance on hover, without
+blocking the desktop right-click shortcut or the refund button.
+Older saves have only `upgradesSpent`: their first purchase or partial refund allocates that
+balance across the existing ranks in proportion to base prices, preserving the total exactly.
+Migration checks the lists against the ranks and total spent; invalid lists use the same fallback.
+Refund all clears both the ranks and their price records. No save version bump is needed for
+the optional field.
+
 ### Notice
 
 Whatever's written in [public/notice.md](../public/notice.md) pops up on the title screen until the
