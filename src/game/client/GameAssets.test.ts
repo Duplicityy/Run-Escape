@@ -1,7 +1,11 @@
 import { describe, expect, test } from "vitest";
 
 import { BakeRequest } from "../../mapviewer/webgl/actor/ActorBakeTypes";
-import { EquipSlot, createAppearance } from "../../rs/model/player/PlayerModelLoader";
+import {
+    EquipSlot,
+    createAppearance,
+    getAppearanceKey,
+} from "../../rs/model/player/PlayerModelLoader";
 import { CHARACTERS } from "../content/characters";
 import { REVIVE_SEQ } from "../content/coop";
 import { ENEMIES, getEnemy } from "../content/enemies";
@@ -17,10 +21,13 @@ import {
     GameAssets,
     getCharacterAttackSeqs,
     getEnemyModelKey,
+    getLookKey,
+    getOfferedAttackSeqs,
     getPlayerAttackSeqs,
     getPowerUpLookRequests,
     getRunAttackSeqs,
     getShieldedModelKey,
+    lookHas,
 } from "./GameAssets";
 import { getGameSoundIds } from "./GameSounds";
 
@@ -188,6 +195,34 @@ describe("player bakes", () => {
             const sim = createRun(1, character.id);
             expect(getRunAttackSeqs(sim)).toEqual(getCharacterAttackSeqs(character.id));
         }
+    });
+
+    test("bake the swings a level-up offers ahead, and not ones held", () => {
+        const sim = createRun(1);
+        const start = getWeapon(CHARACTERS[0].startingWeapon);
+        const whip = getWeapon("abyssal_whip");
+        expect(getOfferedAttackSeqs(sim)).toEqual([]);
+        sim.choices = [
+            { kind: "newWeapon", weaponId: whip.id, quality: "common" },
+            { kind: "newWeapon", weaponId: start.id, quality: "common" },
+            { kind: "coins", amount: 25 },
+        ];
+        const swings = [whip.playerSeq, whip.special?.playerSeq].filter((id) => id !== undefined);
+        expect(getOfferedAttackSeqs(sim)).toEqual([...new Set(swings)]);
+    });
+
+    test("a look with more swings than asked for does", () => {
+        const appearance = createAppearance({ [EquipSlot.WEAPON]: 1277 });
+        const key = getAppearanceKey(appearance);
+        const look = getLookKey(appearance, [390, 1658]);
+        expect(lookHas(look, key, [1658])).toBe(true);
+        expect(lookHas(look, key, [1658, 390])).toBe(true);
+        expect(lookHas(look, key, [])).toBe(true);
+        expect(lookHas(look, key, [7045])).toBe(false);
+        const other = getAppearanceKey(createAppearance({ [EquipSlot.WEAPON]: 1289 }));
+        expect(lookHas(look, other, [390])).toBe(false);
+        expect(lookHas(getLookKey(appearance, []), key, [])).toBe(true);
+        expect(lookHas(undefined, key, [])).toBe(false);
     });
 
     test("in co-op have the reviver's emote", () => {

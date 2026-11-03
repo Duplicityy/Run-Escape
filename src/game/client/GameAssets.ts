@@ -201,6 +201,26 @@ export function getRunAttackSeqs(sim: Sim, hero = sim.focus): number[] {
     return sim.heroes.length > 1 ? [...seqs, REVIVE_SEQ] : seqs;
 }
 
+// The swings of the weapons a hero's level-up choices offer that they don't
+// have yet (a new weapon, or what one evolves into), to bake ahead of the pick
+export function getOfferedAttackSeqs(sim: Sim, hero = sim.focus): number[] {
+    const choices = sim.heroes[hero].choices;
+    if (choices.length === 0) {
+        return [];
+    }
+    const offered = choices.flatMap((choice) => {
+        if (choice.kind === "newWeapon") {
+            return [getWeapon(choice.weaponId)];
+        }
+        if (choice.kind === "evolve" || choice.kind === "hilt") {
+            return [getWeapon(choice.into)];
+        }
+        return [];
+    });
+    const held = getRunAttackSeqs(sim, hero);
+    return getWeaponSeqs(offered).filter((seq) => !held.includes(seq));
+}
+
 // The swings of a character's starting weapon, what a solo run starts with
 export function getCharacterAttackSeqs(characterId: string): number[] {
     return getWeaponSeqs([getWeapon(getCharacter(characterId).startingWeapon)]);
@@ -321,6 +341,27 @@ type PlayerBake = {
     looks: Map<string, ActorModel>;
     pendingKey?: string;
 };
+
+// A look's key: its appearance, and the swings it's baked with, in any order
+export function getLookKey(appearance: PlayerAppearance, attackSeqs: number[]): string {
+    return getAppearanceKey(appearance) + "|" + [...attackSeqs].sort((a, b) => a - b).join(",");
+}
+
+// Whether a look's key is this appearance with at least these swings
+export function lookHas(
+    key: string | undefined,
+    appearanceKey: string,
+    attackSeqs: number[],
+): boolean {
+    if (!key?.startsWith(appearanceKey + "|")) {
+        return false;
+    }
+    const baked = key
+        .slice(appearanceKey.length + 1)
+        .split(",")
+        .map(Number);
+    return attackSeqs.every((seq) => baked.includes(seq));
+}
 
 // All the models a run draws, baked up front, and the players' models (one
 // for each in co-op, by hero), re-baked whenever their gear changes.
@@ -733,24 +774,34 @@ export class GameAssets {
         );
     }
 
-    // Bakes a player model for this look unless it's already the current one.
-    // The old model keeps drawing until the new one is ready. attackSeqs: the
-    // swings it needs (getRunAttackSeqs), none on the title screen.
+    // Bakes a player model for this look unless the current one (or the one
+    // on its way) already has it. The old model keeps drawing until the new
+    // one is ready. attackSeqs: the swings it needs (getRunAttackSeqs), none on
+    // the title screen. offeredSeqs: the swings of weapons a choice offers
+    // (getOfferedAttackSeqs), baked ahead so a weapon picked swings at once;
+    // the ones not picked go at the next re-bake.
     async setPlayerAppearance(
         appearance: PlayerAppearance,
         slot = 0,
         attackSeqs: number[] = [],
+        offeredSeqs: number[] = [],
     ): Promise<void> {
         const player = this.getPlayerBake(slot);
-        const key = getAppearanceKey(appearance) + "|" + attackSeqs.join(",");
-        if (key === player.key || key === player.pendingKey) {
+        const appearanceKey = getAppearanceKey(appearance);
+        const wanted = [...attackSeqs, ...offeredSeqs];
+        if (
+            lookHas(player.key, appearanceKey, wanted) ||
+            lookHas(player.pendingKey, appearanceKey, wanted)
+        ) {
             return;
         }
+        const seqs = wanted.filter((seq, i) => wanted.indexOf(seq) === i);
+        const key = getLookKey(appearance, seqs);
         player.pendingKey = key;
         const same = this.players.find((other) => other?.key === key && other.model);
         const look = same
             ? { models: same.looks, stance: same.stance }
-            : await this.bakeLook(key, appearance, attackSeqs);
+            : await this.bakeLook(key, appearance, seqs);
         if (player.pendingKey !== key || this.players[slot] !== player) {
             // A newer look was asked for while this one baked, or the player's
             // gone (and it's no use unless another player's waiting on it)

@@ -34,7 +34,7 @@ import { formatWeaponBonus, formatWeaponStat, weaponStats } from "../content/wea
 import { getWeapon } from "../content/weapons";
 import { ChestAction } from "../core/Loot";
 import { Hero, HeroOptions, Sim, TICKS_PER_SECOND } from "../core/Sim";
-import { canEvolve, describeChoice, getEvolutionHint } from "../core/Upgrades";
+import { UpgradeChoice, canEvolve, describeChoice, getEvolutionHint } from "../core/Upgrades";
 import { SimEvent, WeaponState } from "../core/entities";
 import { usePortableMath } from "../core/fmath";
 import { CoopAction, applyAction, hasBadNumber } from "../core/lockstep";
@@ -62,7 +62,13 @@ import { GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer
 import { installRecipe } from "../scaperune/squares";
 import { DamageMeter } from "./DamageMeter";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
-import { GameAssets, HITSPLAT_SPRITES, getRunAppearance, getRunAttackSeqs } from "./GameAssets";
+import {
+    GameAssets,
+    HITSPLAT_SPRITES,
+    getOfferedAttackSeqs,
+    getRunAppearance,
+    getRunAttackSeqs,
+} from "./GameAssets";
 import { GameAudio } from "./GameAudio";
 import { GameInput } from "./GameInput";
 import { ChestCue, GameSounds, getGameSoundIds } from "./GameSounds";
@@ -341,6 +347,8 @@ export class GameClient implements GameFrameHandler {
     private readonly damageMeter = new DamageMeter();
     // Each hero's look, as last baked
     private appearanceVersions: number[] = [];
+    // Each hero's level-up choices their look was last baked for
+    private lookChoices: (UpgradeChoice[] | undefined)[] = [];
     // The casket Auto alch last sent off (a co-op one takes a frame to come
     // back, and shouldn't go twice)
     private autoAlchedUid = -1;
@@ -1139,6 +1147,7 @@ export class GameClient implements GameFrameHandler {
         this.shownDpsTick = 0;
         this.damageMeter.reset();
         this.appearanceVersions = [];
+        this.lookChoices = [];
         this.decisionKey = "";
         this.autoAlchedUid = -1;
         this.coopStopped = false;
@@ -1602,12 +1611,19 @@ export class GameClient implements GameFrameHandler {
         }
 
         for (const hero of sim.heroes) {
-            if (hero.appearanceVersion !== this.appearanceVersions[hero.index]) {
+            // A level-up offering a weapon bakes its swing ahead of the pick
+            const choices = hero.choices.length > 0 ? hero.choices : undefined;
+            if (
+                hero.appearanceVersion !== this.appearanceVersions[hero.index] ||
+                choices !== this.lookChoices[hero.index]
+            ) {
                 this.appearanceVersions[hero.index] = hero.appearanceVersion;
+                this.lookChoices[hero.index] = choices;
                 this.assets.setPlayerAppearance(
                     getRunAppearance(sim, hero.index),
                     hero.index,
                     getRunAttackSeqs(sim, hero.index),
+                    getOfferedAttackSeqs(sim, hero.index),
                 );
             }
         }
