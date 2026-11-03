@@ -1,6 +1,6 @@
 import Denque from "denque";
 import { vec2, vec4 } from "gl-matrix";
-import { folder } from "leva";
+import type { folder as levaFolder } from "leva";
 import { Schema } from "leva/dist/declarations/src/types";
 import {
     DrawCall,
@@ -551,7 +551,7 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
         });
     }
 
-    getControls(): Schema {
+    override getControls(folder: typeof levaFolder): Schema {
         return {
             "Max Level": {
                 value: this.maxLevel,
