@@ -1101,6 +1101,7 @@ export function AdventurerPanel({
                 })}
             </div>
             <AdventurerDetails
+                key={fixed ?? peek ?? ui.characterId}
                 save={ui.save}
                 character={getCharacter(fixed ?? peek ?? ui.characterId)}
             />
@@ -1133,11 +1134,67 @@ function AdventurerDetails({
     );
 }
 
-// The maps in the order they open, two to a row, the campaign's and then the
-// fun ones, with details pinned below like the adventurers'
+interface MapGroup {
+    name: string;
+    hint?: string;
+    maps: MapDef[];
+}
+
+// The map screen's tabs, each a list or two of maps in the order they open
+const MAP_TABS: { id: string; name: string; groups: MapGroup[] }[] = [
+    {
+        id: "campaign",
+        name: "Campaign",
+        groups: [
+            { name: "Seasonal", hint: "open from the start", maps: SEASONAL_MAPS },
+            { name: "Campaign", maps: CAMPAIGN_MAPS },
+        ],
+    },
+    {
+        id: "bosses",
+        name: "Bosses",
+        groups: [
+            { name: "Boss fights", hint: "once their map's beaten", maps: FIGHT_MAPS },
+            { name: "Raids", hint: "room by room, open from the start", maps: RAID_MAPS },
+        ],
+    },
+    {
+        id: "fun",
+        name: "Fun",
+        groups: [{ name: "Fun maps", hint: "endless, open from the start", maps: FUN_MAPS }],
+    },
+    {
+        id: "dev",
+        name: "Dev",
+        groups: [{ name: "Dev maps", hint: "dev server only", maps: DEV_MAPS }],
+    },
+]
+    .map((tab) => ({ ...tab, groups: tab.groups.filter((group) => group.maps.length > 0) }))
+    .filter((tab) => tab.groups.length > 0);
+
+const MAP_TAB_IDS = MAP_TABS.map((tab) => tab.id);
+
+function getMapTab(mapId: string): string {
+    return (
+        MAP_TABS.find((tab) => tab.groups.some((group) => group.maps.some((m) => m.id === mapId)))
+            ?.id ?? MAP_TABS[0].id
+    );
+}
+
+// The maps by kind, a tab for each, two to a row, with details pinned below
+// like the adventurers'. Every tab's page is laid out at once, one over
+// another, so the list is the same height whichever's open, and the details
+// have a fixed place below it: what's pointed at only changes what they say,
+// never where a map is.
 function MapPanel({ ui, client }: ScreenProps): JSX.Element {
     const save = ui.save;
     const [peek, setPeek] = useState<string>();
+    const [open, setOpen] = useState(() => getMapTab(ui.mapId));
+    // A tab's own maps: the details go back to the one picked, not one from the last tab
+    const openTab = (id: string) => {
+        setOpen(id);
+        setPeek(undefined);
+    };
     const beaten = CAMPAIGN_MAPS.filter((m) => (save.mapVictories[m.id] ?? 0) > 0).length;
     const tile = (map: MapDef) => {
         const selected = map.id === ui.mapId;
@@ -1181,50 +1238,62 @@ function MapPanel({ ui, client }: ScreenProps): JSX.Element {
                     {beaten} / {CAMPAIGN_MAPS.length} beaten
                 </span>
             </h2>
-            <div className="ui-select-scroll">
-                <div className="ui-style-group">
-                    <div className="ui-style-name">
-                        Seasonal
-                        <span className="ui-style-treasure">open from the start</span>
-                    </div>
-                    <div className="ui-map-list">{SEASONAL_MAPS.map(tile)}</div>
-                </div>
-                <div className="ui-style-group">
-                    <div className="ui-style-name">Campaign</div>
-                    <div className="ui-map-list">{CAMPAIGN_MAPS.map(tile)}</div>
-                </div>
-                <div className="ui-style-group">
-                    <div className="ui-style-name">
-                        Boss fights
-                        <span className="ui-style-treasure">once their map's beaten</span>
-                    </div>
-                    <div className="ui-map-list">{FIGHT_MAPS.map(tile)}</div>
-                </div>
-                <div className="ui-style-group">
-                    <div className="ui-style-name">
-                        Raids
-                        <span className="ui-style-treasure">room by room, open from the start</span>
-                    </div>
-                    <div className="ui-map-list">{RAID_MAPS.map(tile)}</div>
-                </div>
-                <div className="ui-style-group">
-                    <div className="ui-style-name">
-                        Fun maps
-                        <span className="ui-style-treasure">endless, open from the start</span>
-                    </div>
-                    <div className="ui-map-list">{FUN_MAPS.map(tile)}</div>
-                </div>
-                {DEV_MAPS.length > 0 && (
-                    <div className="ui-style-group">
-                        <div className="ui-style-name">
-                            Dev maps
-                            <span className="ui-style-treasure">dev server only</span>
-                        </div>
-                        <div className="ui-map-list">{DEV_MAPS.map(tile)}</div>
-                    </div>
-                )}
+            <div
+                className="ui-tabs ui-map-tabs"
+                role="tablist"
+                aria-label="Kinds of map"
+                onKeyDown={(event) => {
+                    const next = getTabFromKey(event.key, MAP_TAB_IDS, open);
+                    if (next) {
+                        event.preventDefault();
+                        openTab(next);
+                        event.currentTarget
+                            .querySelector<HTMLButtonElement>(`#map-tab-${next}`)
+                            ?.focus();
+                    }
+                }}
+            >
+                {MAP_TABS.map((tab) => (
+                    <button
+                        key={tab.id}
+                        id={`map-tab-${tab.id}`}
+                        className="ui-button"
+                        role="tab"
+                        tabIndex={open === tab.id ? 0 : -1}
+                        aria-selected={open === tab.id}
+                        aria-controls={`map-page-${tab.id}`}
+                        onClick={() => openTab(tab.id)}
+                    >
+                        {tab.name}
+                    </button>
+                ))}
             </div>
-            <MapDetails save={save} map={getMap(peek ?? ui.mapId)} />
+            <div className="ui-map-pages">
+                {MAP_TABS.map((tab) => (
+                    <div
+                        key={tab.id}
+                        id={`map-page-${tab.id}`}
+                        className="ui-select-scroll ui-map-page"
+                        role="tabpanel"
+                        aria-labelledby={`map-tab-${tab.id}`}
+                        aria-hidden={open !== tab.id}
+                    >
+                        {tab.groups.map((group) => (
+                            <div key={group.name} className="ui-style-group">
+                                <div className="ui-style-name">
+                                    {group.name}
+                                    {group.hint && (
+                                        <span className="ui-style-treasure">{group.hint}</span>
+                                    )}
+                                </div>
+                                <div className="ui-map-list">{group.maps.map(tile)}</div>
+                            </div>
+                        ))}
+                    </div>
+                ))}
+            </div>
+            {/* Its own for each map, so a long one scrolled down doesn't leave the next scrolled */}
+            <MapDetails key={peek ?? ui.mapId} save={save} map={getMap(peek ?? ui.mapId)} />
         </div>
     );
 }
@@ -1330,6 +1399,21 @@ function MapTasks({ save, mapId }: { save: SaveData; mapId: string }): JSX.Eleme
     );
 }
 
+// The tab an arrow key, Home or End moves to from the one that's open, round from the last to
+// the first and back
+function getTabFromKey<T>(key: string, tabs: readonly T[], open: T): T | undefined {
+    const index = tabs.indexOf(open);
+    return key === "ArrowRight"
+        ? tabs[(index + 1) % tabs.length]
+        : key === "ArrowLeft"
+          ? tabs[(index + tabs.length - 1) % tabs.length]
+          : key === "Home"
+            ? tabs[0]
+            : key === "End"
+              ? tabs[tabs.length - 1]
+              : undefined;
+}
+
 function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
     const save = ui.save;
     const [style, setStyle] = useState<CombatStyle>(() => getCharacter(ui.characterId).style);
@@ -1341,21 +1425,11 @@ function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
                 <h2>Skills</h2>
                 <p className="ui-subtle">Coins found in runs train your skills for good.</p>
                 <div
-                    className="ui-row ui-shop-tabs"
+                    className="ui-row ui-tabs ui-shop-tabs"
                     role="tablist"
                     aria-label="Class skills"
                     onKeyDown={(event) => {
-                        const index = STYLES.indexOf(style);
-                        const next =
-                            event.key === "ArrowRight"
-                                ? STYLES[(index + 1) % STYLES.length]
-                                : event.key === "ArrowLeft"
-                                  ? STYLES[(index + STYLES.length - 1) % STYLES.length]
-                                  : event.key === "Home"
-                                    ? STYLES[0]
-                                    : event.key === "End"
-                                      ? STYLES[STYLES.length - 1]
-                                      : undefined;
+                        const next = getTabFromKey(event.key, STYLES, style);
                         if (next) {
                             event.preventDefault();
                             setStyle(next);
