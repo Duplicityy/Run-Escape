@@ -1,4 +1,5 @@
 import { ArmouryUpgrades, getUpgradedGear } from "../content/armoury";
+import { WeaponDamageBalance } from "../content/balance";
 import { getCharacter } from "../content/characters";
 import {
     EXTRA_REVIVE_PRICE,
@@ -100,7 +101,8 @@ import {
     emptyStats,
 } from "../content/types";
 import { RUN_LENGTH } from "../content/waves";
-import { getWeapon, getWeaponStyle } from "../content/weapons";
+import { getWeaponDamageMultiplier } from "../content/weaponBalance";
+import { WEAPONS, getWeapon, getWeaponStyle } from "../content/weapons";
 import { BulletPool, BulletTarget } from "./BulletPool";
 import {
     CASKET_DROP_CHANCE,
@@ -438,6 +440,8 @@ const PERSONAL_EVENTS = new Set<SimEvent["type"]>([
 export type SimState = "playing" | "levelUp" | "chest" | "event" | "dead" | "victory";
 
 export type SimOptions = {
+    // Tests and offline balance comparisons; live runs use the shipped config.
+    balance?: WeaponDamageBalance;
     grid: ArenaGrid;
     // Lumbridge when unset
     mapId?: string;
@@ -696,6 +700,7 @@ export class Sim {
     // What's dealing damage now, for damageBySource: set before each source
     // gets its turn
     private damageSource: DamageSource = "other";
+    private readonly weaponDamageMultipliers: Partial<Record<DamageSource, number>>;
     // The final boss is up
     bossSpawned = false;
     // Endless runs' round, and the tick it started; killing the final boss
@@ -984,6 +989,12 @@ export class Sim {
                 armoury: options.armoury,
             },
         ];
+        this.weaponDamageMultipliers = Object.fromEntries(
+            WEAPONS.map((weapon) => [
+                `weapon:${weapon.id}`,
+                getWeaponDamageMultiplier(weapon, party.length, this.hard, options.balance),
+            ]),
+        );
         this.partyScale = getPartyScale(party.length);
         this.partyXp = this.partyScale.xp;
         this.focus = Math.min(options.focus ?? 0, party.length - 1);
@@ -5411,6 +5422,12 @@ export class Sim {
             this.showBlocked(enemy);
             return 0;
         }
+        // Balance each weapon's damage once, including venom, burns and extra
+        // hits. Items, power-ups and recoil keep their own damage rules.
+        const weaponScale = this.weaponDamageMultipliers[this.damageSource] ?? 1;
+        if (weaponScale === 0) {
+            return 0;
+        }
         const drain = enemy.drainEnd > this.tick ? enemy.drain : 0;
         // Damage that ignores the damage bonus (mightScale 0: the nuke's share
         // of a boss's hitpoints, a ruby bolt's) ignores this one too
@@ -5419,6 +5436,7 @@ export class Sim {
             1,
             Math.round(
                 baseDamage *
+                    weaponScale *
                     (1 + this.stats.might * mightScale) *
                     (1 + bossMight) *
                     (1 + drain) *
@@ -6202,6 +6220,18 @@ export class Sim {
         enemy.drainEnd = this.tick + Math.round(ticks);
     }
 
+    // Keep the existing source on ties, for both venom and merged ground fire.
+    private strongerDot(
+        source: DamageSource,
+        damage: number,
+        currentSource: DamageSource,
+        currentDamage: number,
+    ): boolean {
+        const tunedDamage = (from: DamageSource, raw: number) =>
+            raw * (this.weaponDamageMultipliers[from] ?? 1);
+        return tunedDamage(source, damage) > tunedDamage(currentSource, currentDamage);
+    }
+
     // Venom damage every second for this many ticks. Topped up rather than
     // started again, so its next hit still comes on time.
     private envenom(enemy: Enemy, venom: number, ticks: number): void {
@@ -6209,10 +6239,12 @@ export class Sim {
             enemy.venomNext = this.tick + TICKS_PER_SECOND;
             enemy.venom = 0;
         }
-        enemy.venom = Math.max(enemy.venom, venom);
         enemy.venomEnd = Math.max(enemy.venomEnd, this.tick + ticks);
-        enemy.venomSource = this.damageSource;
-        enemy.venomHero = this.hero.index;
+        if (this.strongerDot(this.damageSource, venom, enemy.venomSource ?? "other", enemy.venom)) {
+            enemy.venom = venom;
+            enemy.venomSource = this.damageSource;
+            enemy.venomHero = this.hero.index;
+        }
     }
 
     // A hit's chance of healing the player: the weapon's (the Sanguinesti
@@ -6765,7 +6797,11 @@ export class Sim {
         );
         if (same) {
             same.endTick = Math.max(same.endTick, endTick);
-            same.damage = Math.max(same.damage, damage);
+            if (this.strongerDot(this.damageSource, damage, same.source, same.damage)) {
+                same.damage = damage;
+                same.source = this.damageSource;
+                same.hero = this.hero.index;
+            }
             return;
         }
         if (own.length >= MAX_FIRES) {

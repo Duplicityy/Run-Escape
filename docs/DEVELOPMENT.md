@@ -642,6 +642,10 @@ When adding to the sim:
 - Trigonometry goes through `fm`. `core/fmath.test.ts` fails on `Math.sin` and the like in
   `core/`.
 
+Weapon damage tuning lives in `content/balance.ts`; see [Weapon damage tuning](BALANCE.md) for
+class, evolution and normal/hard mode examples. Weapon damage rules use the starting party size
+throughout the run.
+
 How much bigger the crowd gets for each player is in `content/coop.ts`, worked out again whenever
 one goes down, is revived or leaves, with each of those down or gone still counting as half a
 player (`PLAYER_GONE`).

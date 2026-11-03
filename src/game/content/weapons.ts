@@ -159,15 +159,22 @@ const ANCIENT_SPELL_PICK = {
     ],
 };
 
-// An evolved weapon's levels: what it evolves into, then two more steps of
-// damage
+// Explicit damage curves give all three evolution levels. A single number
+// keeps the original 15%/30% progression for weapons with utility tradeoffs.
 function evolvedLevels(
-    first: Omit<WeaponLevel, "description"> & { description: string },
+    first: Omit<WeaponLevel, "description" | "damage"> & {
+        description: string;
+        damage: number | readonly [number, number, number];
+    },
 ): WeaponLevel[] {
+    const [initial, second, third] =
+        typeof first.damage === "number"
+            ? [first.damage, Math.round(first.damage * 1.15), Math.round(first.damage * 1.3)]
+            : first.damage;
     return levels(
-        first,
-        { damage: Math.round(first.damage * 1.15), description: "+15% damage." },
-        { damage: Math.round(first.damage * 1.3), description: "+15% damage." },
+        { ...first, damage: initial },
+        { damage: second, description: `+${second - initial} damage.` },
+        { damage: third, description: `+${third - second} damage.` },
     );
 }
 
@@ -247,7 +254,7 @@ export const WEAPONS: WeaponDef[] = [
         evolved: true,
         levels: evolvedLevels({
             name: "Abyssal whip",
-            damage: 42,
+            damage: [35, 38, 41],
             cooldown: 0.95,
             amount: 2,
             area: 3.1,
@@ -413,7 +420,7 @@ export const WEAPONS: WeaponDef[] = [
         evolved: true,
         unlock: { kind: "killBoss", mapId: "karamja", enemyId: "ket_zek" },
         levels: evolvedLevels({
-            damage: 14,
+            damage: [11, 12, 13],
             cooldown: 0.5,
             amount: 5,
             area: 0,
@@ -480,7 +487,7 @@ export const WEAPONS: WeaponDef[] = [
         freezes: true,
         levels: evolvedLevels({
             name: "Ice Barrage",
-            damage: 16,
+            damage: [12, 13, 14],
             cooldown: 1.6,
             amount: 1,
             area: 3.8,
@@ -631,7 +638,7 @@ export const WEAPONS: WeaponDef[] = [
         family: "ancient_burst",
         levels: evolvedLevels({
             name: "Smoke Barrage",
-            damage: 13,
+            damage: [7, 8, 9],
             cooldown: 1.6,
             amount: 1,
             area: 3.8,
@@ -661,7 +668,7 @@ export const WEAPONS: WeaponDef[] = [
         drain: 0.3,
         levels: evolvedLevels({
             name: "Shadow Barrage",
-            damage: 16,
+            damage: [12, 13, 14],
             cooldown: 1.6,
             amount: 1,
             area: 3.8,
@@ -690,7 +697,7 @@ export const WEAPONS: WeaponDef[] = [
         lifesteal: { chance: 0.08, fraction: 0.5, max: 4, spotAnim: 1542 },
         levels: evolvedLevels({
             name: "Blood Barrage",
-            damage: 17,
+            damage: [13, 15, 16],
             cooldown: 1.6,
             amount: 1,
             area: 3.8,
@@ -752,7 +759,7 @@ export const WEAPONS: WeaponDef[] = [
         freezes: true,
         unlock: { kind: "killBoss", mapId: "kourend", enemyId: "skotizo" },
         levels: evolvedLevels({
-            damage: 26,
+            damage: [23, 25, 27],
             cooldown: 2.6,
             amount: 6,
             area: 1.2,
@@ -848,7 +855,7 @@ export const WEAPONS: WeaponDef[] = [
         bigHits: [0.5],
         unlock: { kind: "beatMap", mapId: "varlamore" },
         levels: evolvedLevels({
-            damage: 54,
+            damage: [44, 48, 52],
             cooldown: 1.5,
             amount: 2,
             area: 3.6,
@@ -951,7 +958,7 @@ export const WEAPONS: WeaponDef[] = [
         evolved: true,
         levels: evolvedLevels({
             name: "Dark bow",
-            damage: 40,
+            damage: [34, 37, 40],
             cooldown: 1,
             amount: 2,
             area: 0.8,
@@ -1059,7 +1066,7 @@ export const WEAPONS: WeaponDef[] = [
         evolved: true,
         levels: evolvedLevels({
             name: "Chain-hit axes",
-            damage: 20,
+            damage: [16, 18, 19],
             cooldown: 0.9,
             amount: 3,
             area: 0,
@@ -1123,7 +1130,7 @@ export const WEAPONS: WeaponDef[] = [
         orbitObjIds: [9075, 560, 557],
         // They last as long as the wait to cast them again
         levels: evolvedLevels({
-            damage: 13,
+            damage: [10, 11, 12],
             cooldown: 4,
             amount: 6,
             area: 2.9,
@@ -1200,7 +1207,7 @@ export const WEAPONS: WeaponDef[] = [
             effect: { kind: "heal", fraction: 0.5, max: 2 },
         },
         levels: evolvedLevels({
-            damage: 60,
+            damage: [55, 59, 64],
             cooldown: 1.1,
             amount: 1,
             area: 3.5,
@@ -1394,7 +1401,7 @@ export const WEAPONS: WeaponDef[] = [
             effect: { kind: "burn", damage: 0.4, seconds: 4 },
         },
         levels: evolvedLevels({
-            damage: 18,
+            damage: [17, 18, 19],
             cooldown: 1.05,
             amount: 2,
             area: 2.6,
@@ -1455,7 +1462,7 @@ export const WEAPONS: WeaponDef[] = [
         // Crumble Undead's impact on each one it passes to
         chain: { tags: ["vampyre", "undead"], count: 3, range: 4, damage: 0.6, spotAnim: 147 },
         levels: evolvedLevels({
-            damage: 32,
+            damage: [30, 33, 35],
             cooldown: 0.95,
             amount: 2,
             area: 3,
@@ -1607,7 +1614,7 @@ export const WEAPONS: WeaponDef[] = [
             effect: { kind: "drain", amount: 0.3, seconds: 8 },
         },
         levels: evolvedLevels({
-            damage: 72,
+            damage: [67, 73, 78],
             cooldown: 1.5,
             amount: 1,
             area: 2.9,
@@ -1679,7 +1686,7 @@ export const WEAPONS: WeaponDef[] = [
             effect: { kind: "burn", damage: 0.3, seconds: 4 },
         },
         levels: evolvedLevels({
-            damage: 110,
+            damage: [97, 98, 99],
             cooldown: 2.8,
             amount: 1,
             area: 5,
@@ -1820,7 +1827,7 @@ export const WEAPONS: WeaponDef[] = [
         toughTargets: 1.8,
         bigHits: [0.35],
         levels: evolvedLevels({
-            damage: 24,
+            damage: [22, 24, 26],
             cooldown: 1,
             amount: 3,
             area: 0,
@@ -2036,7 +2043,7 @@ export const WEAPONS: WeaponDef[] = [
         evolved: true,
         split: { count: 5, damage: 0.35, pierce: 1 },
         levels: evolvedLevels({
-            damage: 20,
+            damage: [18, 19, 21],
             cooldown: 0.8,
             amount: 2,
             area: 0,
@@ -2138,7 +2145,7 @@ export const WEAPONS: WeaponDef[] = [
         evolved: true,
         mightScale: 3.5,
         levels: evolvedLevels({
-            damage: 32,
+            damage: [31, 33, 36],
             cooldown: 1.2,
             amount: 3,
             area: 1.6,
@@ -2200,7 +2207,7 @@ export const WEAPONS: WeaponDef[] = [
         split: { count: 3, damage: 0.4, pierce: 0 },
         levels: evolvedLevels({
             ...FIRE_SURGE,
-            damage: 14,
+            damage: [13, 14, 15],
             cooldown: 0.7,
             amount: 2,
             area: 1,
@@ -2333,7 +2340,7 @@ export const WEAPONS: WeaponDef[] = [
         evolved: true,
         lifesteal: { chance: 1 / 4, fraction: 0.5, max: 3, spotAnim: 1542 },
         levels: evolvedLevels({
-            damage: 28,
+            damage: [27, 29, 31],
             cooldown: 1.05,
             amount: 2,
             area: 0.9,
