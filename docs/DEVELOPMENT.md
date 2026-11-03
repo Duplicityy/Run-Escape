@@ -408,9 +408,9 @@ src/game/
             button on the dev server's title screen. Its CLAUDE.md is the guide to making one
   client/   GameClient (run flow, camera, input), GameView (3D actors + 2D overlay),
             BossFightView (a phased boss's ground marks, bullets and entrance),
-            GameAssets (what gets baked), GameStore (state for the React UI), SaveLock (one
-            tab saves at a time), DamageMeter (each weapon's damage a second for the HUD's
-            damage panel)
+            GameAssets (what gets baked), GameStore (state for the React UI, and the HUD's
+            numbers apart from it), SaveLock (one tab saves at a time), DamageMeter (each
+            weapon's damage a second for the HUD's damage panel), Minimap
     coop/     CoopLobby (the relay connection and the room), CoopRun (a run's lockstep, host or
               guest), protocol (the messages)
   render/   GameWebGLRenderer (the map viewer's renderer with the game's passes), CameraRig
@@ -496,6 +496,42 @@ checked against the other maps before a phone finds it.
 
 Combat sounds are picked by the server, not the cache, so the ids in `content/` come from the OSRS
 Wiki's [list of in-game sound IDs](https://oldschool.runescape.wiki/w/List_of_in-game_sound_IDs).
+A sound's samples are let go once it's first played and its `AudioBuffer` holds them
+(`GameAudio.getBuffer`), so each sound is only in memory once.
+
+### Keeping it light on a phone
+
+- **Frame cap**: `GameClient.update` sets `Renderer.fpsLimit` every frame: 60 on a touch screen
+  (90 and 120 Hz phones would draw twice as often for a sim that ticks 50 times a second), no cap
+  on a desktop, and 30 on the title screen and behind a solo run's menus (level up, casket, random
+  event, pause, results), where only the scenery moves. Co-op isn't capped behind its menus, as
+  its run goes on. The limiter keeps to a schedule rather than a gap since the last frame, so a
+  90 Hz screen capped at 60 draws two frames in three (`Renderer.test.ts`).
+- **Lost graphics**: a phone can take the WebGL context away (short of memory, or the game in the
+  background). `GameApp` calls `preventDefault`, pauses a solo run (`GameClient.onGraphicsLost`),
+  stops drawing (`GameWebGLRenderer.contextLost`; a co-op run still steps for the others) and
+  shows a Reload button, which ends the run as the pause menu's quit does, so its coins and quests
+  are kept. There's no restore: everything on the GPU (programs, the texture array, map squares,
+  the actor bakes, which aren't kept in JS) would have to be made again on the new context, which
+  means `WebGLMapViewerRenderer.init` again, `clearMaps`, and baking every actor again. To try it,
+  `game.renderer.app.gl.getExtension("WEBGL_lose_context").loseContext()`.
+- **The HUD** is updated 10 times a second, in two parts. `UiSnapshot.hud` (`HudView`) is what the
+  hero has (slots, gear, inventory), which changes with a level up or a casket. `HudNumbers` is
+  what changes as the run's played (hitpoints, xp, the clock, damage, buffs, the boss bar, quest
+  progress), in a store of its own (`GameStore.subscribeNumbers`): the UI's root doesn't see it,
+  and each part reads only its own number with `useHudNumber`. `shareUnchanged` keeps whatever
+  hasn't changed the same object, so the `memo`'d parts skip drawing, and nothing is told at all
+  when nothing's changed. Something new that changes often goes in `HudNumbers`, and its numbers
+  are rounded as they're shown (whole seconds), so they don't change when nothing on screen does.
+  The bars fill with `transform: scaleX`, not `width`, which would lay the page out again.
+- **The minimap** redraws 30 times a second at most, leaves out enemies off it, and draws its
+  dots a colour at a time.
+- **The casket's rays** have their fade drawn into them (an SVG gradient), not a `mask-image`, which
+  makes the browser draw the turning rays again offscreen every frame. They slow to a stop, and the
+  glow, float and shimmer stop after a few goes. A phone gets one set of rays and no shimmer.
+- **The bundle**: `WebGLMapViewerRenderer` is the game's renderer's base class, so anything it
+  imports is in the game's bundle. leva comes in only through the viewer's controls
+  (`getControls(folder)`), and the render worker loads jszip only for the viewer's exports.
 
 ### Scripts
 
@@ -721,8 +757,8 @@ Everything touch only hangs off `pointer: coarse`, so a mouse and keyboard never
 - `ui/Mobile.css` lays the screens out again for a phone held sideways (`max-height: 520px`). The
   UI's zoom never goes below 1, as the pixel fonts don't survive it, so a new screen needs rules
   there too. Check it at 844x390 and 667x375. It's imported last, so it wins over the other CSS.
-- A touch screen also gets a pixel ratio capped at 1.5, 2 workers instead of 4, and a closer camera
-  on a phone.
+- A touch screen also gets a pixel ratio capped at 1.5, 2 workers instead of 4, 60 frames a second
+  at most (see Keeping it light on a phone), and a closer camera on a phone.
 - `public/manifest.webmanifest` lets a browser install the game to the home screen (HTTPS only,
   apart from localhost), opening full screen and sideways. `enterFullscreen` leaves an installed
   game alone. iOS ignores `orientation`, so an iPhone still gets the rotate notice, and it can give

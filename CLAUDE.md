@@ -54,6 +54,7 @@ go stale. Add anything that cost you time to work out.
 | Finding ids in the cache                              | `scripts/cache/`                         |
 | ScapeRune: making maps that aren't in OSRS            | `src/game/scaperune/CLAUDE.md`           |
 | What a frame costs, and what's culled                 | `docs/DEVELOPMENT.md`, `scripts/dev/`    |
+| Frame cap, lost graphics, the HUD's two stores        | `docs/DEVELOPMENT.md`, Keeping it light  |
 
 `src/game/core/` has no DOM or rendering. The UI reads from `GameClient` and `GameStore`, and never
 changes the sim directly.
