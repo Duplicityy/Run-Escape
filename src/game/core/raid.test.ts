@@ -437,8 +437,8 @@ describe("the Theatre's bosses", () => {
         const melee = hit("scythe_of_vitur");
         const ranged = hit("twisted_bow");
         const magic = hit("sanguinesti_staff");
-        expect(ranged / melee).toBeCloseTo(0.2, 1);
-        expect(magic / melee).toBeCloseTo(0.2, 1);
+        expect(ranged / melee).toBeCloseTo(0.3, 1);
+        expect(magic / melee).toBeCloseTo(0.3, 1);
         // Everything else, as it was
         expect(getEnemy("sotetseg").protects).toBeUndefined();
         expect(getEnemy("tob_sotetseg").protects?.styles).toEqual(["ranged", "magic"]);

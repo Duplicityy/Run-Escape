@@ -18,7 +18,7 @@ import { BossAttackDef, BossDef, CombatStyle, EnemyDef } from "./types";
 const BRIGHT = 0.6;
 
 // ToB's a melee raid: its bosses pray against missiles and magic, taking this share from them
-const PROTECTS = { styles: ["ranged", "magic"], damage: 0.2 } as const;
+const PROTECTS = { styles: ["ranged", "magic"], damage: 0.3 } as const;
 const protects: EnemyDef["protects"] = {
     styles: [...PROTECTS.styles] as CombatStyle[],
     damage: PROTECTS.damage,
