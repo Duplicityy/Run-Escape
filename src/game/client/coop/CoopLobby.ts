@@ -32,6 +32,9 @@ export type CoopView = {
     you?: string;
     // This player's name, given by the relay on connecting ("" till then)
     name: string;
+    // Where the relay sees this player playing from, for their flag (see
+    // MemberView), if it knows
+    country?: string;
     // There's a relay to play co-op through (the game only offers it then);
     // undefined until it's been asked
     available?: boolean;
@@ -516,6 +519,7 @@ export class CoopLobby {
                     status: "online",
                     you: message.id,
                     name: message.name,
+                    country: message.country,
                     error: undefined,
                     available: true,
                     anyMap: message.anyMap === true,

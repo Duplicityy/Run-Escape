@@ -14,6 +14,12 @@ import {
     networkKey,
 } from "./coop-relay.mjs";
 
+// Cloudflare's addresses, for the tests behind it (PROXY=cloudflare): given,
+// so nothing's fetched
+vi.hoisted(() => {
+    process.env.CLOUDFLARE_IPS = "173.245.48.0/20";
+});
+
 type Message = { t: string; [key: string]: any };
 
 // A player's connection, with what's come in waiting to be taken
@@ -1301,6 +1307,44 @@ describe("co-op relay", () => {
         await third.saw("welcome");
         third.send({ t: "join", code, me: {} });
         await third.saw("wrong codes");
+    });
+
+    // Through Cloudflare (PROXY=cloudflare): a proxy of ours saw it come from
+    // Cloudflare, which says who it's from and where
+    function viaCloudflare(country: string): RawClient {
+        const port = Number(new URL(url).port);
+        return new RawClient(
+            port,
+            RELAY_PATH,
+            "X-Forwarded-For: 173.245.48.10\r\nCF-Connecting-IP: 198.51.100.7\r\n" +
+                `CF-IPCountry: ${country}\r\n`,
+        );
+    }
+
+    it("shows where players are from, as Cloudflare says, unless they hide it", async () => {
+        await restart({ proxy: "cloudflare" });
+        const host = viaCloudflare("fi");
+        await host.saw('"country":"FI"');
+        host.send({ t: "create", open: true, me: {} });
+        await host.saw('"t":"room"');
+        // Straight to the relay, not through Cloudflare: nowhere
+        const browser = new TestClient(url);
+        clients.push(browser);
+        expect((await browser.next("welcome")).country).toBeUndefined();
+        browser.send({ t: "list" });
+        const [listed] = (await browser.next("rooms")).rooms;
+        expect(listed.country).toBe("FI");
+        browser.send({ t: "join", code: listed.code, me: {} });
+        const { room } = await browser.roomWhere((r) => r.members.length === 2);
+        expect(room.members.map((m: { country?: string }) => m.country)).toEqual(["FI", undefined]);
+        // Hidden, from the room and the list
+        host.send({ t: "me", hideCountry: true });
+        await browser.roomWhere((r) => r.members[0].country === undefined);
+        const other = await connect();
+        other.send({ t: "list" });
+        expect((await other.next("rooms")).rooms[0].country).toBeUndefined();
+        host.send({ t: "me", hideCountry: false });
+        await browser.roomWhere((r) => r.members[0].country === "FI");
     });
 
     it("drops a host that sends its room more than a run does", async () => {

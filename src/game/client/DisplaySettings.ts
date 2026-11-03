@@ -15,6 +15,8 @@ export type DisplaySettings = {
     // Joining a co-op game, your own movement shows before the host confirms
     // it. A trial for now, so it's off until a player turns it on.
     movePrediction: boolean;
+    // Other co-op players see your country's flag, where the relay knows it
+    coopFlag: boolean;
     // Frames a second at most (frameCap)
     frameRate: FrameRate;
 };
@@ -54,6 +56,7 @@ function getDefaults(): DisplaySettings {
         damagePanel: false,
         autoAlch: false,
         movePrediction: false,
+        coopFlag: true,
         frameRate: "auto",
     };
 }
@@ -81,6 +84,9 @@ export function loadDisplaySettings(): DisplaySettings {
             }
             if (typeof data.movePrediction === "boolean") {
                 settings.movePrediction = data.movePrediction;
+            }
+            if (typeof data.coopFlag === "boolean") {
+                settings.coopFlag = data.coopFlag;
             }
             // Saved before there was a choice: auto
             if (FRAME_RATES.includes(data.frameRate)) {

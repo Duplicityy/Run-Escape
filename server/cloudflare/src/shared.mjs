@@ -83,6 +83,13 @@ export function addressKey(address) {
         .join(":")}::/64`;
 }
 
+// A country as ISO 3166's two letters ("FI"), or undefined. Cloudflare says
+// XX for one it doesn't know and T1 for Tor.
+export function countryCode(text) {
+    const code = typeof text === "string" ? text.trim().toUpperCase() : "";
+    return /^[A-Z]{2}$/.test(code) && code !== "XX" ? code : undefined;
+}
+
 export function guesserKey(address) {
     return address.endsWith("::/64") ? `${address.split(":").slice(0, 3).join(":")}::/48` : address;
 }

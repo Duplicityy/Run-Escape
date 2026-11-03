@@ -528,7 +528,9 @@ version and how to run it.
   everyone (the host too) is ready, which can be a party of one. The host can open or close the room, kick a
   player and disband it. A pasted invite link in the code box leaves just its code. Everyone
   gets a readable name to play under, like "Plucky Chinchompa", and rooms get one too, like "Moonlit
-  Crossing". **New name** picks another, any time but during a run.
+  Crossing". **New name** picks another, any time but during a run. Where the server knows it,
+  each player has their country's flag (and each open room its host's); **Co-op flag** in Settings
+  hides yours.
     - You can only join a room on a map you've unlocked yourself (and its endless or hard mode, for
       a room on them), and the host can only pick what everyone in the room has, so nobody skips ahead. A
       server can let anyone in instead (`MULTIPLAYER_ANY_MAP`); then a win opens the map it was

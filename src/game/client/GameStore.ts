@@ -430,6 +430,7 @@ export class GameStore {
                 damagePanel: false,
                 autoAlch: false,
                 movePrediction: false,
+                coopFlag: true,
                 frameRate: "auto",
             },
         };

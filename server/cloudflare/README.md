@@ -21,15 +21,16 @@ alternative to hosting the Node relay, not a replacement: the game works with ei
   sends `goto`, so the game works with either relay.
 - The Worker (`src/index.mjs`) only routes: `/coop` to the lobby, `/coop/room/<code>` to that
   room, and a plain GET of `/coop` answers whether co-op's there, as the game asks. It sets each
-  player's address from Cloudflare's `CF-Connecting-IP`, for the limits.
+  player's address from Cloudflare's `CF-Connecting-IP`, for the limits, and their country from
+  `request.cf.country`, for their flag in the rooms list and the party (unless they've hidden it).
 - A room tells the lobby it's there every 30 seconds; one that stops (its object restarted) drops
   off the list after 90. The rooms list is kept in the lobby's storage, so it survives the lobby
   hibernating.
 
 ## Setting it up
 
-You need a Cloudflare account (free is fine to start: see Cost below) and Node 20 or newer. Nothing
-else, and no domain: it runs at a `workers.dev` address.
+You need a Cloudflare account (free is fine to start: see Cost below) and Node 22 or newer, which
+Wrangler needs. Nothing else, and no domain: it runs at a `workers.dev` address.
 
 1. **Install and log in.** From the repository:
 
@@ -161,3 +162,5 @@ pointing a paid account at players, also:
   of everything.
 - The relay's total-connection limit (800 on the Node relay, for a server's open files) doesn't
   apply.
+- Players get flags for where they are wherever it runs. The Node relay only knows that behind
+  Cloudflare (`PROXY=cloudflare`).
