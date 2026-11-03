@@ -58,7 +58,8 @@ function bake(anims: { frames: number; size: FakeFrame }[]) {
             }),
         },
     ];
-    const absolute = buffer.indices.slice();
+    // Every frame's vertices are new ones, in order
+    const absolute = Array.from({ length: buffer.vertexBuf.offset }, (_, i) => i);
     const result = segments.finish(sets);
     return { ...result, absolute, anims: sets[0].anims, buffer };
 }
