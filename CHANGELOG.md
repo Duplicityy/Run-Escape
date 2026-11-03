@@ -5,6 +5,15 @@ the version in the corner).
 
 ## Unreleased
 
+### Changed
+
+- Most evolutions gain less damage over their maxed base weapons, while keeping an upgrade at every level.
+
+### Fixed
+
+- Weapon cards and tooltips include fixed damage adjustments, including venom.
+- Weaker poison and burning ground no longer take ownership of a stronger lingering effect.
+
 ## 0.23.0 - 2026-11-02
 
 ### Added
