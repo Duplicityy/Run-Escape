@@ -487,8 +487,11 @@ doesn't come from these squares (it's `RegionDataLoader`'s), so it isn't touched
 pitch or zoom changes, `CAMERA_REACH` has to follow it, or the hole where something was left out
 can show.
 
-The game has no hover menus, so its frames have no interact buffer, and with no multisampling
-they're drawn straight into the texture the screen quad reads.
+The game has no hover menus, multisampling or FXAA, so its frames are drawn straight to the canvas
+(`drawsToCanvas`), with no framebuffer of their own and no screen quad to copy them across. The
+canvas has `alpha: false`: the page behind it is black, so there's nothing to blend it with. The
+map viewer keeps its framebuffer, for its hover menus. A script that reads a frame back reads the
+canvas, in the same task as the frame (there's no `preserveDrawingBuffer`).
 
 Enemies are baked when a run starts, for that map (`getMapEnemies`, `GameAssets.loadEnemies`), in
 place of the last map's: they're most of the actors' memory, and a map uses few of them. It goes by
