@@ -387,10 +387,29 @@ describe("co-op lockstep", () => {
         const { run: host } = hostRun({ now: 0 });
         host.receiveUp("guest1", { action: { kind: "item", index: 1 }, actionSeq: 2 });
         host.receiveUp("guest1", { action: { kind: "item", index: 1 }, actionSeq: 2 });
-        host.receiveUp("guest1", { action: { kind: "item", index: 0 }, actionSeq: 1 });
         expect(host.stepFrame()).toEqual([
             { frame: 1, hero: 1, action: { kind: "item", index: 1 }, actionSeq: 2 },
         ]);
+    });
+
+    it("takes an item use sent again behind a later one, as a reconnect sends them", () => {
+        const { run: host } = hostRun({ now: 0 });
+        // The first was lost in the drop. The second waited for the
+        // connection and goes first; then both are sent again.
+        const item = (index: number, actionSeq: number) =>
+            host.receiveUp("guest1", { action: { kind: "item", index }, actionSeq });
+        item(1, 2);
+        item(0, 1);
+        item(1, 2);
+        expect(host.stepFrame().map((e) => e.actionSeq)).toEqual([2, 1]);
+        // One far older than the guest keeps is turned away
+        for (let seq = 3; seq < 20; seq++) {
+            item(0, seq);
+            host.stepFrame();
+        }
+        item(0, 3);
+        item(0, 5);
+        expect(host.stepFrame()).toEqual([]);
     });
 
     it("resends a long gap in messages a relay can carry, that a guest takes in order", () => {

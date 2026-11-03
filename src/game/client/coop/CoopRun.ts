@@ -99,12 +99,14 @@ export class CoopRun {
     private moveSeqSent = 0;
     // The decision the local player last answered, and when
     private sentDecision?: { on: object; itemId?: string; at: number };
-    // A guest's other actions (using an item) are numbered, and kept until
-    // the host's frames show them, to send again after a dropped connection.
-    // The host's: each hero's latest number, so one sent twice goes in once.
+    // A guest's other actions (using an item) are numbered, and the last
+    // MAX_QUEUED_ACTIONS kept until the host's frames show them, to send again
+    // after a dropped connection. The host's: the numbers each hero's had
+    // within that many of their highest, so one sent twice goes in once,
+    // whichever order a reconnect sends them in.
     private actionSeqSent = 0;
     private unconfirmed: { actionSeq: number; action: CoopAction }[] = [];
-    private readonly actionSeqs = new Map<number, number>();
+    private readonly actionSeqs = new Map<number, { top: number; had: Set<number> }>();
     // The host's: since when the run's been waiting on each hero
     private readonly waitingSince = new Map<number, number>();
     // The copies have gone apart (it's said once)
@@ -269,11 +271,19 @@ export class CoopRun {
         } else if (action) {
             const actionSeq = "actionSeq" in message ? cleanMoveSeq(message.actionSeq) : undefined;
             if (actionSeq !== undefined) {
-                if (actionSeq <= (this.actionSeqs.get(hero) ?? 0)) {
+                const seqs = this.actionSeqs.get(hero) ?? { top: 0, had: new Set<number>() };
+                this.actionSeqs.set(hero, seqs);
+                if (seqs.had.has(actionSeq) || actionSeq <= seqs.top - MAX_QUEUED_ACTIONS) {
                     // Sent again after a dropped connection, and it came the first time
                     return;
                 }
-                this.actionSeqs.set(hero, actionSeq);
+                seqs.had.add(actionSeq);
+                seqs.top = Math.max(seqs.top, actionSeq);
+                for (const seq of seqs.had) {
+                    if (seq <= seqs.top - MAX_QUEUED_ACTIONS) {
+                        seqs.had.delete(seq);
+                    }
+                }
             }
             this.queue({ frame: 0, hero, action, ...(actionSeq !== undefined && { actionSeq }) });
         }
