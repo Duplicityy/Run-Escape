@@ -7,10 +7,13 @@ the version in the corner).
 
 ### Added
 
+- Each class's skill page can spend the full gold budget without taking gold from the other pages.
+- Separate Melee, Ranged and Magic skill pages, kept in exported saves, with refunds limited to the selected class.
 - Right-click a bought skill to refund one rank, including maxed skills, without resetting the rest.
 
 ### Fixed
 
+- Class skill tabs stay grouped on the left, with the selected page pressed in and green immediately, even while hovered.
 - Coin icons stay visible while a changed stack size loads after buying or refunding skills.
 
 ## 0.23.0 - 2026-11-02

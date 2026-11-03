@@ -28,7 +28,7 @@ import { RARITIES, Rarity } from "../content/rarity";
 import { SHOP_UPGRADES } from "../content/shop";
 import { formatStats } from "../content/stats";
 import { TROPHY_BY_ID } from "../content/trophies";
-import { Stats, emptyStats } from "../content/types";
+import { CombatStyle, Stats, emptyStats } from "../content/types";
 import { LOCKABLE_ITEMS, describeUnlockTask, isAvailable } from "../content/unlocks";
 import { formatWeaponBonus, formatWeaponStat, weaponStats } from "../content/weaponStats";
 import { getWeapon } from "../content/weapons";
@@ -410,6 +410,7 @@ export class GameClient implements GameFrameHandler {
         this.coop.onLeft = (id) => this.toCoopRun((run) => run.playerLeft(id));
         this.coop.onGone = (reason) => this.onCoopGone(reason);
         this.coop.onClosed = () => this.onCoopClosed();
+        this.coop.onMapChanged = () => this.coop.setMe({ loadout: this.getLoadout() });
         // Co-op's offered only where there's a relay to play it through
         this.coop.checkAvailable();
         document.addEventListener("visibilitychange", this.onVisibilityChange);
@@ -460,7 +461,7 @@ export class GameClient implements GameFrameHandler {
         if (!this.sim) {
             this.assets.setPlayerAppearance(getCharacterAppearance(characterId));
         }
-        this.coop.setMe({ characterId });
+        this.coop.setMe({ characterId, loadout: this.getLoadout() });
     }
 
     // The map for the next run. Hosting a room, it's the room's map: the relay
@@ -623,9 +624,16 @@ export class GameClient implements GameFrameHandler {
     }
 
     private getLoadout(): Loadout {
-        return makeLoadout(getMetaStats(this.save), [...this.save.unlockedItems], {
-            ...this.save.armoury,
-        });
+        const characterId =
+            (this.coop.room && getMap(this.coop.room.mapId).fun?.character) ??
+            this.store.getSnapshot().characterId;
+        return makeLoadout(
+            getMetaStats(this.save, getCharacter(characterId).style),
+            [...this.save.unlockedItems],
+            {
+                ...this.save.armoury,
+            },
+        );
     }
 
     // The host's Start: everyone's ready, so off to the room's map. The relay
@@ -719,8 +727,8 @@ export class GameClient implements GameFrameHandler {
         this.updateHud(true);
     }
 
-    buyUpgrade(upgradeId: string): void {
-        if (buyUpgrade(this.save, upgradeId)) {
+    buyUpgrade(upgradeId: string, style: CombatStyle = "melee"): void {
+        if (buyUpgrade(this.save, upgradeId, style)) {
             this.sounds.buy();
             this.persist();
         } else {
@@ -798,14 +806,14 @@ export class GameClient implements GameFrameHandler {
         this.store.set({ display: this.display });
     }
 
-    refundUpgrade(upgradeId: string): void {
-        if (refundUpgrade(this.save, upgradeId)) {
+    refundUpgrade(upgradeId: string, style: CombatStyle = "melee"): void {
+        if (refundUpgrade(this.save, upgradeId, style)) {
             this.persist();
         }
     }
 
-    refundUpgrades(): void {
-        refundUpgrades(this.save);
+    refundUpgrades(style: CombatStyle = "melee"): void {
+        refundUpgrades(this.save, style);
         this.persist();
     }
 
@@ -1010,7 +1018,7 @@ export class GameClient implements GameFrameHandler {
             grid: this.grid,
             mapId,
             characterId,
-            metaStats: getMetaStats(this.save),
+            metaStats: getMetaStats(this.save, getCharacter(characterId).style),
             seed: (Math.random() * 0x7fffffff) | 0,
             spawnX: map.spawn.x,
             spawnY: map.spawn.y,

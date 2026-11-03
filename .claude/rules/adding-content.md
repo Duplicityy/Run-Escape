@@ -65,7 +65,8 @@ starting weapon).
 ## Shop upgrade
 
 Add it to `SHOP_UPGRADES` in `shop.ts`, themed as an OSRS skill, with its `stat`. Costs and
-refunds come from `getUpgradeCost` and the save code. New ones don't need a save migration.
+refunds come from `getUpgradeCost` and the save code, independently for each combat style's
+`skillPages` allocation. New ones don't need a save migration.
 
 ## Gear and utility items
 
