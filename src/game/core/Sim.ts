@@ -76,7 +76,7 @@ import {
     getQuizGroups,
 } from "../content/randomEvents";
 import { RARITIES, RARITY_ORDER } from "../content/rarity";
-import { getActiveSets, getSet } from "../content/sets";
+import { countSetPieces, getActiveSets, getItemSet, getSet } from "../content/sets";
 import { SOUNDS } from "../content/sounds";
 import {
     PUMPKIN_CHANCE,
@@ -620,6 +620,12 @@ export type Hero = {
     rerollsLeft: number;
     // Rerolls the run started with, for how many were used
     rerollsAtStart: number;
+    // Banishes left (Firemaking), and what's been banished: weapons and
+    // passives by id, casket items by the id caskets give, and whole sets
+    banishesLeft: number;
+    banished: Set<string>;
+    banishedItems: Set<string>;
+    banishedSets: Set<string>;
     // Level ups skipped this run, which make the next skip dearer
     skips: number;
     // For the run's stats: damage dealt and kills by what did it (a
@@ -960,6 +966,15 @@ export class Sim {
     set rerollsLeft(count: number) {
         this.hero.rerollsLeft = count;
     }
+    get banishesLeft(): number {
+        return this.hero.banishesLeft;
+    }
+    get banishedItems(): ReadonlySet<string> {
+        return this.hero.banishedItems;
+    }
+    get banishedSets(): ReadonlySet<string> {
+        return this.hero.banishedSets;
+    }
     get skips(): number {
         return this.hero.skips;
     }
@@ -1128,6 +1143,7 @@ export class Sim {
             hero.revivesLeft = hero.stats.revival;
             hero.rerollsLeft = BASE_REROLLS + hero.stats.reroll;
             hero.rerollsAtStart = hero.rerollsLeft;
+            hero.banishesLeft = hero.stats.banish;
             // Testing: the starting weapon at its max too
             if (this.testing?.maxLevelUps) {
                 this.maxEverything();
@@ -1200,6 +1216,10 @@ export class Sim {
             revivesLeft: 0,
             rerollsLeft: 0,
             rerollsAtStart: 0,
+            banishesLeft: 0,
+            banished: new Set(),
+            banishedItems: new Set(),
+            banishedSets: new Set(),
             skips: 0,
             damageBySource: {},
             recentDamage: new Float64Array(DPS_WINDOW_TICKS),
@@ -1590,7 +1610,8 @@ export class Sim {
     }
 
     choose(index: number): void {
-        if (!this.isChoosing(this.hero)) {
+        // A banished reward stays on the card, greyed out, and can't be taken
+        if (!this.isChoosing(this.hero) || this.isBanishedChoice(index)) {
             return;
         }
         const choice = this.choices[index];
@@ -1706,6 +1727,7 @@ export class Sim {
             this.endless,
             this.maxWeapons,
             this.maxPassives,
+            this.hero.banished,
         );
     }
 
@@ -1735,6 +1757,86 @@ export class Sim {
             return false;
         }
         this.rerollsLeft--;
+        return true;
+    }
+
+    // Banishing (Firemaking): a level up's new weapon or passive, or a casket's
+    // item, kept out of the rest of the run for one of the run's banishes. Only
+    // what the player hasn't got: nothing they're levelling, carrying or
+    // wearing, nor a piece of a set they're wearing. Nothing comes in its
+    // place: a banished reward greys out and the player picks another, and a
+    // banished item is alched.
+    canBanishChoice(index: number): boolean {
+        const choice = this.isChoosing() ? this.choices[index] : undefined;
+        return (
+            this.banishesLeft > 0 &&
+            !!choice &&
+            (choice.kind === "newWeapon" || choice.kind === "newPassive") &&
+            !this.isBanishedChoice(index) &&
+            // Never the last reward left to pick, which would leave nothing
+            this.choices.some((_, i) => i !== index && !this.isBanishedChoice(i))
+        );
+    }
+
+    // Whether a level up's reward has been banished, so can't be picked
+    isBanishedChoice(index: number): boolean {
+        const choice = this.choices[index];
+        return (
+            (choice?.kind === "newWeapon" && this.hero.banished.has(choice.weaponId)) ||
+            (choice?.kind === "newPassive" && this.hero.banished.has(choice.passiveId))
+        );
+    }
+
+    // Banishes a level up's reward: it stays where it is, greyed out, and is
+    // never offered again. False when it can't be banished.
+    banishChoice(index: number): boolean {
+        if (!this.canBanishChoice(index)) {
+            return false;
+        }
+        const choice = this.choices[index];
+        if (choice.kind === "newWeapon") {
+            this.hero.banished.add(choice.weaponId);
+        } else if (choice.kind === "newPassive") {
+            this.hero.banished.add(choice.passiveId);
+        }
+        this.hero.banishesLeft--;
+        return true;
+    }
+
+    // Whether the open casket's item can be banished
+    get canBanishChest(): boolean {
+        const chest = this.state === "chest" ? this.chest : undefined;
+        if (this.banishesLeft <= 0 || !chest) {
+            return false;
+        }
+        const found = getItem(chest.upgradedFrom ?? chest.itemId);
+        if (found.kind !== "gear") {
+            return !this.inventory.some((slot) => slot?.itemId === found.id);
+        }
+        const worn = this.gear[found.slot];
+        if (worn === chest.itemId || worn === found.id) {
+            return false;
+        }
+        const set = getItemSet(found);
+        return !set || countSetPieces(this.gear, set.id) === 0;
+    }
+
+    // Banishes the open casket's item (all of its set, for a set's piece), and
+    // alches it, which is the casket done. False when it can't be.
+    banishChest(): boolean {
+        const chest = this.chest;
+        if (!this.canBanishChest || !chest) {
+            return false;
+        }
+        const found = getItem(chest.upgradedFrom ?? chest.itemId);
+        const set = getItemSet(found);
+        if (set) {
+            this.hero.banishedSets.add(set.id);
+        } else {
+            this.hero.banishedItems.add(found.id);
+        }
+        this.hero.banishesLeft--;
+        this.resolveChest("alch");
         return true;
     }
 
@@ -9997,6 +10099,7 @@ export class Sim {
             this.armoury,
             this.declinedSets,
             this.heroes.length > 1,
+            { items: this.hero.banishedItems, sets: this.hero.banishedSets },
         );
         if (getItem(found).kind !== "gear") {
             return { itemId: found };

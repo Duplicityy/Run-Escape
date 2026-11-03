@@ -321,6 +321,37 @@ describe("co-op lockstep", () => {
         expect(sim.heroes[2].pendingLevelUps).toBe(pending - 1);
     });
 
+    it("decides for them with a reward they haven't banished", () => {
+        const clock = { now: 0 };
+        const { run } = hostRun(clock);
+        const sim = run.sim;
+        sim.xp = 100;
+        run.stepFrame();
+        expect(sim.state).toBe("levelUp");
+        run.act({ kind: "choose", index: 0 });
+        run.receiveUp("guest1", { action: { kind: "choose", index: 0 } });
+        run.stepFrame();
+        // The slow one banished their first reward, then went quiet
+        const hero = sim.heroes[2];
+        const choices = hero.choices;
+        const k = choices.findIndex((c) => c.kind === "newWeapon" || c.kind === "newPassive");
+        expect(k).toBeGreaterThanOrEqual(0);
+        [choices[0], choices[k]] = [choices[k], choices[0]];
+        const first = choices[0];
+        hero.banished.add(
+            first.kind === "newWeapon"
+                ? first.weaponId
+                : (first as { passiveId: string }).passiveId,
+        );
+        expect(sim.as(2, () => sim.isBanishedChoice(0))).toBe(true);
+        clock.now += DECIDE_AFTER_MS + 1;
+        const pending = hero.pendingLevelUps;
+        expect(run.stepFrame()).toEqual([
+            expect.objectContaining({ hero: 2, action: { kind: "choose", index: 1 }, auto: true }),
+        ]);
+        expect(hero.pendingLevelUps).toBe(pending - 1);
+    });
+
     it("answers each decision once, however often it's clicked before the frame comes", () => {
         const clock = { now: 0 };
         const { run } = hostRun(clock);

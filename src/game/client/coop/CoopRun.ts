@@ -54,6 +54,8 @@ const DECISIONS: ReadonlySet<CoopAction["kind"]> = new Set([
     "choose",
     "reroll",
     "skip",
+    "banish",
+    "banishChest",
     "chest",
     "event",
     "leaveEvent",
@@ -309,7 +311,8 @@ export class CoopRun {
             this.waitingSince.set(index, now);
             const action: CoopAction =
                 sim.state === "levelUp"
-                    ? { kind: "choose", index: 0 }
+                    ? // The first reward they can take: not one they've banished
+                      { kind: "choose", index: firstUnbanished(sim, index) }
                     : sim.state === "chest"
                       ? { kind: "chest", action: "take" }
                       : { kind: "leaveEvent" };
@@ -504,4 +507,13 @@ export class CoopRun {
             this.link.sendUp({ action, actionSeq });
         }
     }
+}
+
+// A hero's first level up reward that hasn't been banished (Firemaking). One
+// always is: the last pickable reward can't be banished.
+function firstUnbanished(sim: Sim, hero: number): number {
+    return sim.as(hero, () => {
+        const index = sim.choices.findIndex((_, i) => !sim.isBanishedChoice(i));
+        return Math.max(0, index);
+    });
 }

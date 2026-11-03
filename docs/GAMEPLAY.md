@@ -515,6 +515,11 @@ version and how to run it.
   Older saves without purchase prices split their tracked spending across ranks by base price.
   **Refund all** returns the selected page's remaining investment and resets only that class's skills.
   **Woodcutting** adds melee knockback, and every other level of a melee weapon raises it too.
+  **Firemaking** gives up to 3 banishes a run. Banish a new weapon or passive on a level up and
+  its card greys out (pick another; the last one left can't be banished), and it's never offered
+  again that run. Banish a casket's item and it's alched, and never comes again (a set's piece
+  banishes the whole set). Nothing you have can be banished: not what you're levelling, carrying
+  or wearing, nor a piece of a set you're wearing.
   **Smithing** and **Crafting** are the dear ones: up to 2 more weapon slots and 2 more passive
   slots.
   (The Dwarf engineer is out of the game for now; its cannon is a power-up. Saves keep it

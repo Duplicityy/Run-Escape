@@ -22,6 +22,7 @@ function hud(weapons: SlotView[]): HudView {
         gear: [],
         inventory: [null, null, null, null],
         rerolls: 0,
+        banishes: 0,
     };
 }
 

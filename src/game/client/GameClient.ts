@@ -248,7 +248,7 @@ function getEvolutionView(sim: Sim, weapon: WeaponState): SlotView["evolution"] 
 
 function getChoiceViews(sim: Sim): ChoiceView[] {
     const style = getCharacter(sim.characterId).style;
-    return sim.choices.map((choice) => {
+    return sim.choices.map((choice, index) => {
         const { title, text, iconObjId, iconSpriteId, quality, stats } = describeChoice(choice);
         const rarity = quality ? RARITIES[quality] : undefined;
         return {
@@ -263,6 +263,8 @@ function getChoiceViews(sim: Sim): ChoiceView[] {
             rarity: rarity && { name: rarity.name, color: rarity.color },
             stats,
             evolves: getEvolutionHint(choice, sim.weapons, sim.passives, style, sim.unlockedItems),
+            banishable: sim.canBanishChoice(index),
+            banished: sim.isBanishedChoice(index),
         };
     });
 }
@@ -1357,6 +1359,24 @@ export class GameClient implements GameFrameHandler {
                     this.sounds.denied();
                 }
                 break;
+            // A banished reward greys out where it is
+            case "banish":
+                if (done) {
+                    this.sounds.reroll();
+                    this.store.set({ choices: getChoiceViews(sim) });
+                } else {
+                    this.sounds.denied();
+                }
+                break;
+            // A banished item is alched, which is the casket done
+            case "banishChest":
+                if (done) {
+                    this.handleEvents(sim, sim.takeEvents());
+                    this.syncOverlay();
+                } else {
+                    this.sounds.denied();
+                }
+                break;
             case "skip":
                 if (done) {
                     this.sounds.buy();
@@ -1393,6 +1413,10 @@ export class GameClient implements GameFrameHandler {
     choose(index: number): void {
         const sim = this.sim;
         if (!sim || !sim.isChoosing()) {
+            return;
+        }
+        if (sim.isBanishedChoice(index)) {
+            this.sounds.denied();
             return;
         }
         this.act({ kind: "choose", index });
@@ -1454,6 +1478,22 @@ export class GameClient implements GameFrameHandler {
             this.sounds.reroll();
             this.store.set({ choices: getChoiceViews(sim) });
         }
+    }
+
+    // Banishes a level up's reward (by its place), or with none the open
+    // casket's item, for one of the run's banishes. False when it can't be.
+    banish(index?: number): boolean {
+        const sim = this.sim;
+        if (!sim) {
+            return false;
+        }
+        const allowed = index === undefined ? sim.canBanishChest : sim.canBanishChoice(index);
+        // Checked here in co-op too, as with a reroll (see reroll)
+        if (this.coopRun && !allowed) {
+            this.sounds.denied();
+            return false;
+        }
+        return this.act(index === undefined ? { kind: "banishChest" } : { kind: "banish", index });
     }
 
     // Takes none of the level up's rewards, for coins from the run. False when
@@ -2338,6 +2378,7 @@ export class GameClient implements GameFrameHandler {
             gear: getGearViews(sim),
             inventory: getInventoryViews(sim),
             rerolls: sim.rerollsLeft,
+            banishes: sim.banishesLeft,
             skip: sim.canSkip
                 ? { cost: sim.skipCost, affordable: sim.coins >= sim.skipCost }
                 : undefined,
