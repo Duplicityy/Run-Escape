@@ -948,6 +948,13 @@ export class GameClient implements GameFrameHandler {
                 RegionDataLoader
             >(new RegionDataLoader(), getArenaRegion(getMap(mapId)));
             grid = new ArenaGrid(region);
+            // Only the title screen's and this map's are kept: a phone needn't
+            // hold every map played
+            for (const id of this.grids.keys()) {
+                if (id !== TITLE_MAP.id) {
+                    this.grids.delete(id);
+                }
+            }
             this.grids.set(mapId, grid);
         }
         return grid;
@@ -1385,6 +1392,11 @@ export class GameClient implements GameFrameHandler {
         );
         if (!show) {
             return;
+        }
+        // A phone frees the map's enemies on the menus, a lot of memory on a
+        // big map. Playing it again bakes them again.
+        if (isCoarsePointer) {
+            this.assets.dropEnemies();
         }
         this.store.set({
             screen: wasCoop && this.coop.room ? "coop" : "title",
