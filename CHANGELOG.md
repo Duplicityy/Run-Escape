@@ -67,6 +67,8 @@ the version in the corner).
   carries on. Fixed by Okaeri.
 - Co-op: an item used just as the connection drops is used once it's back, and someone who joined,
   left or started a run just before a drop is remembered that way. Fixed by trippy22.
+- Co-op: after buying from the Mysterious Old Man, or banishing a level up's reward, the menu's
+  buttons work straight away, rather than doing nothing for a few seconds.
 - Huge numbers stay short: the damage panel, stats and hitsplats go on past trillions to Qa,
   Qi, Sx and on, then powers of ten, rather than growing digit by digit. Fixed by Okaeri.
 - In very long endless runs, bones no longer stop dropping once coins and food have built up

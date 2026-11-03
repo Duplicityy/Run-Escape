@@ -803,9 +803,13 @@ send anything (a downed player can't choose, reroll or skip, as `isChoosing` say
 waits on a slow guest; they see the run a little behind, and catch up at 8 ms a frame at most.
 A decision (a level up, a casket, a random event) is answered once: `CoopRun.act` drops a second
 answer to the same one until the host's frame moves it on, or 10 seconds pass, so a double click
-can't land on the next decision unseen. An action the host turns away counts as an answer too, so
-the client checks what the sim would refuse before sending it (a reroll with none left, or
-during a hilt choice), or a refused action would hold up the real one.
+can't land on the next decision unseen. Some stay open once answered (a banished reward, a rerolled
+casket item, something bought with the rest still for sale), so `CoopRun.decision` gives each a
+step that changes with those, and the next answer goes out. Anything else that changes a menu
+without closing it needs a step too, or its buttons do nothing for those 10 seconds. An action the
+host turns away counts as an answer too, so the client checks what the sim would refuse before
+sending it (a reroll with none left, during a hilt choice, or an event's option that's sold or too
+dear), or a refused action would hold up the real one.
 
 Guests predict their own **displayed** movement in `client/coop/MovementPrediction.ts`. The
 `movePrediction` display setting (Settings and the pause menu) is on by default, and

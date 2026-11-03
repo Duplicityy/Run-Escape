@@ -100,7 +100,7 @@ export class CoopRun {
     private moveSentAt = -Infinity;
     private moveSeqSent = 0;
     // The decision the local player last answered, and when
-    private sentDecision?: { on: object; itemId?: string; at: number };
+    private sentDecision?: { on: object; step: string | number; at: number };
     // A guest's other actions (using an item) are numbered, and the last
     // MAX_QUEUED_ACTIONS kept until the host's frames show them, to send again
     // after a dropped connection. The host's: the numbers each hero's had
@@ -205,7 +205,7 @@ export class CoopRun {
                 decision &&
                 sent &&
                 sent.on === decision.on &&
-                sent.itemId === decision.itemId &&
+                sent.step === decision.step &&
                 now - sent.at < DECISION_RESEND_MS
             ) {
                 return false;
@@ -228,17 +228,24 @@ export class CoopRun {
     }
 
     // What the local player is deciding on now: their level up's choices, the
-    // casket in front of them (and its item, which a reroll changes), or a
-    // random event's offer. Each is a new object once it's been answered.
-    private decision(): { on: object; itemId?: string } | undefined {
+    // casket in front of them, or a random event's offer. Each is a new object
+    // once it's been answered. The step is what changes while it stays open:
+    // a banished reward, a rerolled item, or something bought with the rest
+    // still for sale.
+    private decision(): { on: object; step: string | number } | undefined {
         const sim = this.sim;
         switch (sim.state) {
             case "levelUp":
-                return { on: sim.choices };
+                return { on: sim.choices, step: sim.banishesLeft };
             case "chest":
-                return sim.chest && { on: sim.chest, itemId: sim.chest.itemId };
+                return sim.chest && { on: sim.chest, step: sim.chest.itemId };
             case "event":
-                return sim.offer && { on: sim.offer };
+                return (
+                    sim.offer && {
+                        on: sim.offer,
+                        step: sim.offer.options.filter((o) => "sold" in o && o.sold).length,
+                    }
+                );
             default:
                 return undefined;
         }

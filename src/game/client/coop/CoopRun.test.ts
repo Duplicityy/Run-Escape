@@ -1,3 +1,4 @@
+import { getRandomEvent } from "../../content/randomEvents";
 import { emptyStats } from "../../content/types";
 import { Sim, TICKS_PER_SECOND } from "../../core/Sim";
 import { fm, usePortableMath } from "../../core/fmath";
@@ -371,6 +372,49 @@ describe("co-op lockstep", () => {
         expect(sim.heroes[0].pendingLevelUps).toBe(1);
         // The next level up is a new decision
         expect(run.act({ kind: "choose", index: 0 })).toBe(true);
+    });
+
+    it("lets a player buy more from the Old Man, or leave, once they've bought something", () => {
+        const { run } = hostRun({ now: 0 });
+        const sim = run.sim;
+        sim.coins = 1000;
+        const forSale = ["magnet", "stopwatch", "pumpkin"].map((powerUpId) => ({
+            kind: "powerUp" as const,
+            powerUpId,
+            price: 100,
+            sold: false,
+        }));
+        sim["openOffer"](getRandomEvent("mysterious_old_man"), forSale);
+        expect(run.act({ kind: "event", index: 0 })).toBe(true);
+        expect(run.act({ kind: "event", index: 0 })).toBe(false);
+        run.stepFrame();
+        expect(sim.state).toBe("event");
+        expect(sim.offer?.options[0]).toMatchObject({ sold: true });
+        expect(run.act({ kind: "event", index: 1 })).toBe(true);
+        run.stepFrame();
+        expect(sim.coins).toBe(800);
+        expect(run.act({ kind: "leaveEvent" })).toBe(true);
+        run.stepFrame();
+        expect(sim.state).toBe("playing");
+    });
+
+    it("lets a player pick a reward once they've banished another", () => {
+        const { run } = hostRun({ now: 0 });
+        const sim = run.sim;
+        sim.xp = 100;
+        run.stepFrame();
+        expect(sim.state).toBe("levelUp");
+        sim.heroes[0].banishesLeft = 1;
+        const banished = sim.choices.findIndex((_, i) => sim.canBanishChoice(i));
+        expect(banished).toBeGreaterThanOrEqual(0);
+        expect(run.act({ kind: "banish", index: banished })).toBe(true);
+        run.stepFrame();
+        expect(sim.isBanishedChoice(banished)).toBe(true);
+        const pending = sim.heroes[0].pendingLevelUps;
+        const pick = sim.choices.findIndex((_, i) => !sim.isBanishedChoice(i));
+        expect(run.act({ kind: "choose", index: pick })).toBe(true);
+        run.stepFrame();
+        expect(sim.heroes[0].pendingLevelUps).toBe(pending - 1);
     });
 
     it("lets a guest answer again if the host never applied it", () => {

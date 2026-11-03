@@ -9977,9 +9977,9 @@ export class Sim {
         return options;
     }
 
-    // Takes one of what's on offer. False when there's no such thing or the
-    // player can't pay for it.
-    chooseEventOption(index: number): boolean {
+    // Whether one of what's on offer can be taken: it's this hero's offer, and
+    // the thing is there, not sold already, and paid for
+    canChooseEventOption(index: number): boolean {
         const offer = this.offer;
         const option = offer?.options[index];
         if (this.state !== "event" || !offer || !option || offer.hero !== this.hero.index) {
@@ -9987,11 +9987,22 @@ export class Sim {
         }
         if (option.kind === "powerUp" || option.kind === "revive" || option.kind === "supply") {
             // A raid's supplies are paid for in its points
-            const points = option.kind === "supply";
-            if (option.sold || (points ? this.hero.raidPoints : this.coins) < option.price) {
-                return false;
-            }
-            if (points) {
+            const funds = option.kind === "supply" ? this.hero.raidPoints : this.coins;
+            return !option.sold && funds >= option.price;
+        }
+        return true;
+    }
+
+    // Takes one of what's on offer. False when there's no such thing or the
+    // player can't pay for it.
+    chooseEventOption(index: number): boolean {
+        if (!this.canChooseEventOption(index)) {
+            return false;
+        }
+        const offer = this.offer!;
+        const option = offer.options[index];
+        if (option.kind === "powerUp" || option.kind === "revive" || option.kind === "supply") {
+            if (option.kind === "supply") {
                 this.hero.raidPoints -= option.price;
             } else {
                 this.coins -= option.price;

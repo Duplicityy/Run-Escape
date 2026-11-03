@@ -1437,6 +1437,12 @@ export class GameClient implements GameFrameHandler {
         if (!sim || sim.state !== "event") {
             return;
         }
+        // Checked here in co-op too, as with a reroll (see reroll): a key
+        // pressed for something sold would hold up leaving
+        if (this.coopRun && !sim.canChooseEventOption(index)) {
+            this.sounds.denied();
+            return;
+        }
         this.act({ kind: "event", index });
     }
 
