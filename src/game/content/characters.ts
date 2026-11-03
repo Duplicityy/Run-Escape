@@ -545,8 +545,8 @@ export const CHARACTERS: CharacterDef[] = [
         id: "inquisitor",
         name: "Inquisitor",
         description:
-            "Made for Phosani's Nightmare, and everyone plays them there: starts with the " +
-            "Armadyl crossbow, moves 20% faster and has 20% more hitpoints.",
+            "Made for Phosani's Nightmare, and everyone plays them there, and nowhere else: " +
+            "starts with the Armadyl crossbow, moves 20% faster and has 20% more hitpoints.",
         style: "ranged",
         startingWeapon: "armadyl_crossbow",
         // The Inquisitor's armour, her own drop, with Barrows gloves and climbing boots
@@ -560,7 +560,8 @@ export const CHARACTERS: CharacterDef[] = [
         // A fight that's all dodging and one boss: feet, and hitpoints to learn
         // her on. The damage is the crossbow's alone, at the level the map says.
         bonus: { moveSpeed: 0.2, maxHp: 0.2 },
-        unlock: { kind: "killBoss", mapId: "phosani", enemyId: "phosanis_nightmare" },
+        // Hers alone: never in the roster, and no reward for beating her
+        only: "phosani",
     },
 ];
 

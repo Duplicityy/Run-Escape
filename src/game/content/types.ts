@@ -1038,6 +1038,10 @@ export type CharacterDef = {
     bonus: Partial<Stats>;
     // Always available when unset
     unlock?: UnlockTask;
+    // Played on this map alone (a boss fight's, MapDef.fight.character), and
+    // nowhere else: never in the roster, never unlocked, never counted (the
+    // Inquisitor, Phosani's)
+    only?: string;
 };
 
 export type ShopUpgradeDef = {

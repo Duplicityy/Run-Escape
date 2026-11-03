@@ -169,8 +169,9 @@ Add it to `MAPS` in `maps.ts` (fun maps go in `fun/maps.ts`), with its waves in 
 - A map with `fight` is one boss fight (Phosani's Nightmare): `waves: []`, one `finalBoss` event
   at 0 whose boss has an `intro` with `alone`, and it opens once `fight.requires` is beaten. There
   are no picks and no items: everyone plays `fight.character` there (`getMapCharacter` in `maps.ts`
-  is what reads it, and a fun map's `character`), an adventurer made for the fight with its own
-  `unlock` task, whose starting weapon begins at `fight.weaponLevel`. Nothing in the fight drops
+  is what reads it, and a fun map's `character`), an adventurer made for the fight and kept to it
+  (`only` on the `CharacterDef`: never in the roster, never unlocked), whose starting weapon
+  begins at `fight.weaponLevel`. Nothing in the fight drops
   experience, so that kit is the whole run, and the boss's hitpoints (the event's `hp`) are tuned
   to it. The spawn is the middle of the boss square, where the entrance puts the player anyway.
   The bot keeps away from bosses, so with nothing but melee it walks up to a shielded one and

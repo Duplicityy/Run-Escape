@@ -1423,7 +1423,7 @@ export class GameClient implements GameFrameHandler {
         const result = sim.getResult();
         const locked = MAPS.filter((m) => !isMapUnlocked(this.save, m.id));
         const lockedCharacters = CHARACTERS.filter(
-            (c) => !this.save.unlockedCharacters.includes(c.id),
+            (c) => !c.only && !this.save.unlockedCharacters.includes(c.id),
         );
         const lockedItems = LOCKABLE_ITEMS.filter((i) => !this.save.unlockedItems.includes(i.id));
         const endlessRecord = result.endless && isEndlessRecord(this.save, result);

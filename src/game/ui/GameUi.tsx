@@ -837,7 +837,9 @@ export function AdventurerPanel({
 }: ScreenProps & { fixed?: string }): JSX.Element {
     const unlocked = ui.save.unlockedCharacters;
     const [peek, setPeek] = useState<string>();
-    const opened = CHARACTERS.filter((c) => unlocked.includes(c.id)).length;
+    // The roster: not an adventurer played on one map alone (CharacterDef.only)
+    const roster = CHARACTERS.filter((c) => !c.only);
+    const opened = roster.filter((c) => unlocked.includes(c.id)).length;
     return (
         <div
             className={
@@ -849,7 +851,7 @@ export function AdventurerPanel({
             <h2 className="ui-select-heading">
                 Adventurer
                 <span className="ui-select-count">
-                    {opened} / {CHARACTERS.length}
+                    {opened} / {roster.length}
                 </span>
             </h2>
             {fixed && (
@@ -875,44 +877,46 @@ export function AdventurerPanel({
                                 )}
                             </div>
                             <div className="ui-tiles">
-                                {CHARACTERS.filter((c) => c.style === style).map((character) => {
-                                    const selected = character.id === ui.characterId;
-                                    return (
-                                        <button
-                                            key={character.id}
-                                            className={
-                                                "ui-card ui-tile" +
-                                                (selected ? " ui-card-selected" : "") +
-                                                (unlocked.includes(character.id)
-                                                    ? ""
-                                                    : " ui-card-locked")
-                                            }
-                                            aria-label={character.name}
-                                            aria-pressed={selected}
-                                            onMouseMove={() => setPeek(character.id)}
-                                            onFocus={() => setPeek(character.id)}
-                                            onBlur={() => setPeek(undefined)}
-                                            onClick={() => {
-                                                setPeek(character.id);
-                                                client.selectCharacter(character.id);
-                                            }}
-                                        >
-                                            <ItemIcon
-                                                objId={
-                                                    character.equipment[EquipSlot.TORSO] ??
-                                                    getStartingWeaponIcon(character)
+                                {roster
+                                    .filter((c) => c.style === style)
+                                    .map((character) => {
+                                        const selected = character.id === ui.characterId;
+                                        return (
+                                            <button
+                                                key={character.id}
+                                                className={
+                                                    "ui-card ui-tile" +
+                                                    (selected ? " ui-card-selected" : "") +
+                                                    (unlocked.includes(character.id)
+                                                        ? ""
+                                                        : " ui-card-locked")
                                                 }
-                                                size={34}
-                                            />
-                                            <span className="ui-tile-badge">
+                                                aria-label={character.name}
+                                                aria-pressed={selected}
+                                                onMouseMove={() => setPeek(character.id)}
+                                                onFocus={() => setPeek(character.id)}
+                                                onBlur={() => setPeek(undefined)}
+                                                onClick={() => {
+                                                    setPeek(character.id);
+                                                    client.selectCharacter(character.id);
+                                                }}
+                                            >
                                                 <ItemIcon
-                                                    objId={getStartingWeaponIcon(character)}
-                                                    size={18}
+                                                    objId={
+                                                        character.equipment[EquipSlot.TORSO] ??
+                                                        getStartingWeaponIcon(character)
+                                                    }
+                                                    size={34}
                                                 />
-                                            </span>
-                                        </button>
-                                    );
-                                })}
+                                                <span className="ui-tile-badge">
+                                                    <ItemIcon
+                                                        objId={getStartingWeaponIcon(character)}
+                                                        size={18}
+                                                    />
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
                             </div>
                         </div>
                     );

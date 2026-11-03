@@ -40,11 +40,10 @@ the version in the corner).
   quicker than the last, and after the last blast she stands twelve seconds more, untouchable,
   with her sleepwalkers walking in and her claws on your tile. Her sweeps' needles come in
   bursts, so each arm has holes along it to run through. She fights to The Bane of Ashihama. It has a hard mode once it's beaten, a quest,
-  and it can't be endless. Everyone plays the Inquisitor there, an adventurer made for the fight:
-  the Armadyl crossbow, quicker on their feet and with more hitpoints.
-  Beating her brings them to every other map, and the Nightmare staff, Phosani's own, whose
-  grasping claws come up under enemies around you, and the adventurer choice is blurred out while the
-  map's picked.
+  and it can't be endless. Everyone plays the Inquisitor there, an adventurer made for the fight
+  and played nowhere else: the Armadyl crossbow, quicker on their feet and with more hitpoints.
+  Beating her brings the Nightmare staff, Phosani's own, whose grasping claws come up under
+  enemies around you, and the adventurer choice is blurred out while the map's picked.
 
 ### Fixed
 

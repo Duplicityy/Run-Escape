@@ -87,7 +87,7 @@ export function createSave(): SaveData {
         totalCoins: 0,
         upgrades: {},
         upgradesSpent: 0,
-        unlockedCharacters: CHARACTERS.filter((c) => !c.unlock).map((c) => c.id),
+        unlockedCharacters: CHARACTERS.filter((c) => !c.unlock && !c.only).map((c) => c.id),
         unlockedItems: [],
         runs: 0,
         victories: 0,

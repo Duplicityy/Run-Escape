@@ -7,6 +7,7 @@ import { SANCTUARY_BOSS_ARENA } from "../scaperune/maps/sisterhoodSanctuary";
 import { yawFromVector } from "./PlayerMovement";
 import { Sim, TICKS_PER_SECOND } from "./Sim";
 import { Enemy } from "./entities";
+import { createSave } from "./save";
 import { makeGrid } from "./world/testGrid";
 
 // Phosani's Nightmare, on the Inquisitor's Field: a run that's one fight
@@ -122,11 +123,10 @@ describe("the map", () => {
         const inquisitor = getCharacter("inquisitor");
         expect(inquisitor.style).toBe("ranged");
         expect(inquisitor.startingWeapon).toBe("armadyl_crossbow");
-        expect(inquisitor.unlock).toEqual({
-            kind: "killBoss",
-            mapId: "phosani",
-            enemyId: "phosanis_nightmare",
-        });
+        // Hers alone: never unlocked for the roster, and not in a new save's
+        expect(inquisitor.unlock).toBeUndefined();
+        expect(inquisitor.only).toBe("phosani");
+        expect(createSave().unlockedCharacters).not.toContain("inquisitor");
         const sim = createSim();
         expect(sim.weapons.map((w) => [w.def.id, w.level])).toEqual([["armadyl_crossbow", 3]]);
         expect(sim.stats.moveSpeed).toBeGreaterThan(0);
