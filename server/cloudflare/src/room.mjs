@@ -201,16 +201,21 @@ export class Room extends DurableObject {
 
     // Saves the room and tells the lobby, now or, if that was done in the
     // last SAVE_MS, once that's passed: a host flicking settings can't make
-    // a storage write of every message
-    persist() {
+    // a storage write of every message. now: someone joining or leaving, or
+    // the run starting or ending, saved at once and before anyone's told
+    // (Cloudflare holds back what's sent after a write until it's stored), so
+    // a restart straight after can't bring back the room as it was.
+    persist(now = false) {
         const room = this.room;
         if (!room) {
             return;
         }
-        if (room.saveTimer) {
+        if (room.saveTimer && !now) {
             room.saveWaiting = true;
             return;
         }
+        clearTimeout(room.saveTimer);
+        room.saveWaiting = false;
         this.tellLobby();
         this.save();
         room.saveTimer = setTimeout(() => {
@@ -355,12 +360,12 @@ export class Room extends DurableObject {
         };
     }
 
+    // Saved first by whoever calls it (persist)
     broadcastRoom() {
         const view = this.roomView();
         for (const member of this.room.members) {
             this.send(member, { t: "room", room: view, you: member.id, token: member.token });
         }
-        this.persist();
     }
 
     broadcastMembers() {
@@ -372,6 +377,7 @@ export class Room extends DurableObject {
             room.updateWaiting = true;
             return;
         }
+        this.persist();
         this.broadcastRoom();
         room.updateTimer = setTimeout(() => {
             room.updateTimer = undefined;
@@ -440,6 +446,7 @@ export class Room extends DurableObject {
             }
             room.hostId = room.members[0].id;
         }
+        this.persist(true);
         if (room.started) {
             for (const member of room.members) {
                 this.send(member, { t: "left", id: client.id });
@@ -613,6 +620,9 @@ export class Room extends DurableObject {
                     room.started = true;
                     for (const member of room.members) {
                         member.ready = false;
+                    }
+                    this.persist(true);
+                    for (const member of room.members) {
                         this.send(member, { t: "start", game: message.game });
                     }
                     this.broadcastRoom();
@@ -621,6 +631,7 @@ export class Room extends DurableObject {
             case "end":
                 if (isHost && room.started) {
                     room.started = false;
+                    this.persist(true);
                     this.broadcastRoom();
                 }
                 return;
@@ -674,6 +685,7 @@ export class Room extends DurableObject {
             lastActive: now,
         };
         this.startHeartbeat(this.room);
+        this.persist(true);
         this.broadcastRoom();
     }
 
@@ -738,6 +750,7 @@ export class Room extends DurableObject {
         client.token = randomToken();
         room.members.push(client);
         room.lastActive = Date.now();
+        this.persist(true);
         this.broadcastRoom();
     }
 }

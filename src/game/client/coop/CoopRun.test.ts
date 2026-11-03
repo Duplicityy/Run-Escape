@@ -362,6 +362,87 @@ describe("co-op lockstep", () => {
         expect(run.act({ kind: "item", index: 0 })).toBe(true);
     });
 
+    it("sends a guest's item use again after a dropped connection, and it goes in once", () => {
+        const ups: UpMessage[] = [];
+        const link: CoopLink = { sendUp: (m) => ups.push(m), sendDown: () => {} };
+        const heroes = new Map(IDS.map((id, i) => [id, i]));
+        const guest = new CoopRun(createSim(1), false, link, heroes, "host", () => 0);
+        guest.act({ kind: "item", index: 0 });
+        guest.act({ kind: "item", index: 1 });
+        expect(ups).toEqual([
+            { action: { kind: "item", index: 0 }, actionSeq: 1 },
+            { action: { kind: "item", index: 1 }, actionSeq: 2 },
+        ]);
+        // The host's frames show the first, then the connection drops
+        guest.receiveDown({
+            from: 0,
+            upTo: 1,
+            events: [{ frame: 1, hero: 1, action: { kind: "item", index: 0 }, actionSeq: 1 }],
+        });
+        ups.length = 0;
+        guest.resumed();
+        expect(ups).toEqual([{ action: { kind: "item", index: 1 }, actionSeq: 2 }]);
+
+        // It had reached the host the first time: the second is the same one
+        const { run: host } = hostRun({ now: 0 });
+        host.receiveUp("guest1", { action: { kind: "item", index: 1 }, actionSeq: 2 });
+        host.receiveUp("guest1", { action: { kind: "item", index: 1 }, actionSeq: 2 });
+        expect(host.stepFrame()).toEqual([
+            { frame: 1, hero: 1, action: { kind: "item", index: 1 }, actionSeq: 2 },
+        ]);
+    });
+
+    it("takes an item use sent again behind a later one, as a reconnect sends them", () => {
+        const { run: host } = hostRun({ now: 0 });
+        // The first was lost in the drop. The second waited for the
+        // connection and goes first; then both are sent again.
+        const item = (index: number, actionSeq: number) =>
+            host.receiveUp("guest1", { action: { kind: "item", index }, actionSeq });
+        item(1, 2);
+        item(0, 1);
+        item(1, 2);
+        expect(host.stepFrame().map((e) => e.actionSeq)).toEqual([2, 1]);
+        // One far older than the guest keeps is turned away
+        for (let seq = 3; seq < 20; seq++) {
+            item(0, seq);
+            host.stepFrame();
+        }
+        item(0, 3);
+        item(0, 5);
+        expect(host.stepFrame()).toEqual([]);
+    });
+
+    it("resends a long gap in messages a relay can carry, that a guest takes in order", () => {
+        const clock = { now: 0 };
+        const { run, sent } = hostRun(clock);
+        for (let i = 0; i < 900; i++) {
+            run.receiveUp("guest1", { move: [i % 2 ? 127 : -127, 0] });
+            run.receiveUp("guest2", { move: [0, i % 2 ? 127 : -127] });
+            run.stepFrame();
+            run.flush(true);
+        }
+        const events = sent.flatMap((m) => m.events);
+        sent.length = 0;
+        run.receiveUp("guest1", { resend: 0 });
+        expect(sent.length).toBeGreaterThan(1);
+        expect(sent[0].from).toBe(0);
+        expect(sent[sent.length - 1].upTo).toBe(900);
+        for (let i = 0; i < sent.length; i++) {
+            expect(sent[i].events.length).toBeLessThanOrEqual(1000);
+            if (i > 0) {
+                expect(sent[i].from).toBe(sent[i - 1].upTo);
+            }
+        }
+        expect(sent.flatMap((m) => m.events)).toEqual(events);
+        // A guest that had none of it takes it all
+        const link: CoopLink = { sendUp: () => {}, sendDown: () => {} };
+        const guest = new CoopRun(createSim(1), false, link, new Map(), "host", () => 0);
+        for (const message of sent) {
+            guest.receiveDown(message);
+        }
+        expect(guest.behind).toBe(900);
+    });
+
     it("sends a move a touch stick keeps changing no more than about 15 times a second", () => {
         const clock = { now: 0 };
         const ups: UpMessage[] = [];

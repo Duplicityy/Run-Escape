@@ -958,8 +958,13 @@ Cloudflare restarts its objects now and then, dropping their connections, so the
 frames sees it from `from` on the next `down` and asks for them with a `resend` up message; the
 host keeps 20 seconds of what it's sent (longer than the room holds a dropped player) and answers
 once a second at most, from the earliest frame asked for, to every guest; each takes only frames
-after the ones it has. That part works on either relay. The Node relay sends no
-token, so with it a dropped connection still ends a guest's run.
+after the ones it has, in messages of `RESEND_EVENTS` at most. That part works on either relay.
+A guest numbers its actions that aren't decisions (`actionSeq`, so using an item), and the host's
+frames echo the number; after reconnecting it sends again those not echoed yet, and the host takes
+each number once. Decisions have their own resend (`DECISION_RESEND_MS`). The room saves someone
+joining or leaving, and the run starting or ending, at once and before telling anyone; other
+changes at most once a second. The Node relay sends no token, so with it a dropped connection
+still ends a guest's run.
 
 The open rooms list comes a page at a time (8 rooms, the fullest first, then the ones waiting
 longest), worked out once after each change rather than for every request; the menu asks for its

@@ -75,6 +75,8 @@ the version in the corner).
 - Co-op: a guest who misses some of the host's updates gets them again, rather than freezing.
   With a relay that supports it, a dropped connection reconnects within a few seconds and the run
   carries on.
+- Co-op: an item used just as the connection drops is used once it's back, and someone who joined,
+  left or started a run just before a drop is remembered that way.
 - Huge numbers stay short: the damage panel, stats and hitsplats go on past trillions to Qa,
   Qi, Sx and on, then powers of ten, rather than growing digit by digit.
 - In very long endless runs, bones no longer stop dropping once coins and food have built up
