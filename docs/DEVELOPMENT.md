@@ -394,7 +394,13 @@ src/game/
     world/            ArenaGrid (collision + heights), Collision (circle vs tiles and walls),
                       FlowField (Dijkstra from the player, how hundreds of enemies find a way),
                       FlightGrid (the terrain walls that stop what flies: blocked floor that
-                      isn't liquid, and solid clumps too big to be a tree)
+                      isn't liquid, and solid clumps too big to be a tree). A grid works out
+                      once, as it's made, which steps out of each tile are allowed (`Steps`,
+                      for flow fields and straight walks). Sim makes the FlightGrid with the
+                      map when anything on it flies (`hasFliers` in content/maps.ts), since
+                      making it takes a while
+    SpatialHash.ts    enemies (and piles of bones) by cell, for what's near: flat arrays over
+                      the arena, kept from tick to tick
     lockstep.ts       co-op's frame events, applying them, and the check that copies agree
     fmath.ts          trigonometry that every browser works out the same, for co-op
     Upgrades.ts       level up choices
@@ -641,6 +647,14 @@ When adding to the sim:
 - A new event that's about one player goes in `PERSONAL_EVENTS`, so it's tagged with who.
 - Trigonometry goes through `fm`. `core/fmath.test.ts` fails on `Math.sin` and the like in
   `core/`.
+- `core/runHash.test.ts` pins three seeded runs (solo, hard mode, a party of four) to a hash of
+  everything in them, tick by tick. A change that's meant to leave play alone, like a speed-up,
+  has to leave them as they are; one meant to change play changes them, so check it's only the
+  runs it should, then update the numbers.
+- `sim.enemies`, `projectiles`, `enemyProjectiles`, `effects` and `pickups` are the same arrays
+  from tick to tick, tidied in place, so don't keep one and expect it to stay as it was. Enemies
+  and pickups stay in uid order, which finding one by uid relies on: add them only through
+  `spawnEnemy` and `dropPickup`, at the end.
 
 How much bigger the crowd gets for each player is in `content/coop.ts`, worked out again whenever
 one goes down, is revived or leaves, with each of those down or gone still counting as half a
