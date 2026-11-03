@@ -1344,6 +1344,19 @@ export class GameClient implements GameFrameHandler {
         }
     }
 
+    // The page lost its graphics (GameApp): a solo run stops where it stands, and
+    // nothing happens to it while its player can't see it. Says what was going on.
+    onGraphicsLost(): "none" | "solo" | "coop" {
+        if (!this.sim || this.sim.runOver) {
+            return "none";
+        }
+        if (this.coopRun) {
+            return "coop";
+        }
+        this.pause();
+        return "solo";
+    }
+
     resume(): void {
         this.paused = false;
         this.accumulator = 0;

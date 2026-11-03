@@ -122,6 +122,19 @@ export class GameWebGLRenderer extends WebGLMapViewerRenderer {
         return [...programs, actorProgram, actorSilhouetteProgram];
     }
 
+    // The browser took the WebGL context away (GameApp). Everything made on it is
+    // gone, so frames only move the game on (a co-op run carries on for the
+    // others) and draw nothing.
+    contextLost = false;
+
+    override render(time: number, deltaTime: number, resized: boolean): void {
+        if (this.contextLost) {
+            this.game?.update(deltaTime, this.mapViewer.camera);
+            return;
+        }
+        super.render(time, deltaTime, resized);
+    }
+
     override handleInput(deltaTime: number): void {
         this.game?.update(deltaTime, this.mapViewer.camera);
     }
