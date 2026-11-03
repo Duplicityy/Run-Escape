@@ -874,6 +874,26 @@
     overflow-y: auto;
 }
 
+.ui-shop-tabs {
+    justify-content: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.ui-shop-tabs .ui-button {
+    box-shadow:
+        inset 1px 1px 0 var(--ui-edge-light),
+        inset -1px -1px 0 rgba(0, 0, 0, 0.55);
+}
+
+.ui-shop-tabs .ui-button[aria-selected="true"] {
+    color: var(--ui-green);
+    box-shadow:
+        inset 2px 2px 0 rgba(0, 0, 0, 0.75),
+        inset -1px -1px 0 var(--ui-edge-light);
+    transform: translateY(1px);
+}
+
 .ui-shop-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));

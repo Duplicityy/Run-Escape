@@ -3,7 +3,38 @@ import { getUpgradeLine } from "../../content/armoury";
 import { CASKET_GEAR } from "../../content/items";
 import { SHOP_UPGRADES } from "../../content/shop";
 import { LOCKABLE_ITEMS } from "../../content/unlocks";
-import { makeLoadout, parseRoomCode } from "./CoopLobby";
+import { createSave } from "../../core/save";
+import { GameStore } from "../GameStore";
+import { CoopLobby, CoopView, makeLoadout, parseRoomCode } from "./CoopLobby";
+import { RoomView } from "./protocol";
+
+test("loadouts refresh only when the room's map changes", () => {
+    expect.hasAssertions();
+    const lobby = new CoopLobby(new GameStore(createSave()));
+    const onMapChanged = vi.fn();
+    lobby.onMapChanged = onMapChanged;
+    const update = (changes: Partial<CoopView>) =>
+        (lobby as unknown as { update(changes: Partial<CoopView>): void }).update(changes);
+    const room: RoomView = {
+        code: "ABCDEFGH",
+        name: "Test room",
+        open: false,
+        hostId: "host",
+        mapId: "lumbridge",
+        endless: false,
+        hard: false,
+        started: false,
+        members: [],
+    };
+    update({ room });
+    expect(onMapChanged).toHaveBeenCalledTimes(1);
+    update({ room: { ...room, hard: true } });
+    expect(onMapChanged).toHaveBeenCalledTimes(1);
+    update({ room: { ...room, mapId: "falador" } });
+    expect(onMapChanged).toHaveBeenCalledTimes(2);
+    update({ room: undefined });
+    expect(onMapChanged).toHaveBeenCalledTimes(3);
+});
 
 describe("room codes", () => {
     it("takes the code out of a pasted invite link", () => {

@@ -54,6 +54,7 @@ import {
     NewerSaveError,
     SaveData,
     getNextUpgradeCost,
+    getSkillCoins,
     importSave,
     isEndlessUnlocked,
     isExpertUnlocked,
@@ -1288,16 +1289,64 @@ function MapTasks({ save, mapId }: { save: SaveData; mapId: string }): JSX.Eleme
 
 function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
     const save = ui.save;
+    const [style, setStyle] = useState<CombatStyle>(() => getCharacter(ui.characterId).style);
+    const page = save.skillPages[style];
+    const coins = getSkillCoins(save, style);
     return (
         <div className="ui-fill ui-center">
             <div className="ui-panel rs-border rs-background ui-shop">
                 <h2>Skills</h2>
                 <p className="ui-subtle">Coins found in runs train your skills for good.</p>
-                <div className="ui-shop-grid">
+                <div
+                    className="ui-row ui-shop-tabs"
+                    role="tablist"
+                    aria-label="Class skills"
+                    onKeyDown={(event) => {
+                        const index = STYLES.indexOf(style);
+                        const next =
+                            event.key === "ArrowRight"
+                                ? STYLES[(index + 1) % STYLES.length]
+                                : event.key === "ArrowLeft"
+                                  ? STYLES[(index + STYLES.length - 1) % STYLES.length]
+                                  : event.key === "Home"
+                                    ? STYLES[0]
+                                    : event.key === "End"
+                                      ? STYLES[STYLES.length - 1]
+                                      : undefined;
+                        if (next) {
+                            event.preventDefault();
+                            setStyle(next);
+                            event.currentTarget
+                                .querySelector<HTMLButtonElement>(`#skills-tab-${next}`)
+                                ?.focus();
+                        }
+                    }}
+                >
+                    {STYLES.map((tab) => (
+                        <button
+                            key={tab}
+                            id={`skills-tab-${tab}`}
+                            className="ui-button"
+                            role="tab"
+                            tabIndex={style === tab ? 0 : -1}
+                            aria-selected={style === tab}
+                            aria-controls="skills-page"
+                            onClick={() => setStyle(tab)}
+                        >
+                            {STYLE_NAMES[tab]}
+                        </button>
+                    ))}
+                </div>
+                <div
+                    className="ui-shop-grid"
+                    id="skills-page"
+                    role="tabpanel"
+                    aria-labelledby={`skills-tab-${style}`}
+                >
                     {SHOP_UPGRADES.map((upgrade) => {
-                        const rank = save.upgrades[upgrade.id] ?? 0;
-                        const cost = getNextUpgradeCost(save, upgrade.id);
-                        const affordable = cost !== undefined && save.coins >= cost;
+                        const rank = page.upgrades[upgrade.id] ?? 0;
+                        const cost = getNextUpgradeCost(save, upgrade.id, style);
+                        const affordable = cost !== undefined && coins >= cost;
                         return (
                             <div key={upgrade.id} className="ui-shop-entry">
                                 <button
@@ -1312,14 +1361,14 @@ function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
                                     }
                                     onClick={() => {
                                         if (affordable) {
-                                            client.buyUpgrade(upgrade.id);
+                                            client.buyUpgrade(upgrade.id, style);
                                         }
                                     }}
                                     onContextMenu={(event) => {
                                         if (rank > 0) {
                                             event.preventDefault();
                                             if (!isCoarsePointer) {
-                                                client.refundUpgrade(upgrade.id);
+                                                client.refundUpgrade(upgrade.id, style);
                                             }
                                         }
                                     }}
@@ -1343,7 +1392,7 @@ function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
                                         className="ui-button ui-shop-refund"
                                         aria-label={`Refund one ${upgrade.name} rank`}
                                         title={`Refund one ${upgrade.name} rank`}
-                                        onClick={() => client.refundUpgrade(upgrade.id)}
+                                        onClick={() => client.refundUpgrade(upgrade.id, style)}
                                     >
                                         <Undo2 size={18} aria-hidden="true" />
                                     </button>
@@ -1356,11 +1405,11 @@ function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
                     <button className="ui-button" onClick={() => client.showScreen("title")}>
                         Back
                     </button>
-                    <Coins amount={save.coins} />
+                    <Coins amount={coins} />
                     <button
                         className="ui-button"
-                        disabled={save.upgradesSpent === 0}
-                        onClick={() => client.refundUpgrades()}
+                        disabled={page.upgradesSpent === 0}
+                        onClick={() => client.refundUpgrades(style)}
                     >
                         Refund all
                     </button>

@@ -504,10 +504,16 @@ version and how to run it.
   power-ups in their colours. Bosses, caskets and power-ups out of range sit on the rim.
 - **Hitsplats** are the client's own sprites: red for damage (on you too), green for poison.
 - **Coins** are banked when a run ends. Spend them on **Skills** (permanent bonuses, refundable).
+  Melee, Ranged and Magic each have their own skill page, ranks and prices. Each can allocate the
+  full gold budget: 10,000 coins can fund 10,000 in skills on every class, not 10,000 split between them.
+  Only the largest page's investment is reserved from the coin bank; the Skills balance shows what
+  the selected class can still spend. Refunding one page never creates extra gold or changes the others.
+  A run uses its adventurer's class page, including in co-op. Existing shared skills move to Melee;
+  the other pages start empty. All three pages are kept when exporting and importing a save.
   Click or tap a bought skill's U-turn button to refund one rank, even when maxed, for its purchase
   price. On desktop, right-clicking its card does the same; touch long presses do not refund.
   Older saves without purchase prices split their tracked spending across ranks by base price.
-  **Refund all** returns the remaining investment and resets every skill.
+  **Refund all** returns the selected page's remaining investment and resets only that class's skills.
   **Woodcutting** adds melee knockback, and every other level of a melee weapon raises it too.
   **Smithing** and **Crafting** are the dear ones: up to 2 more weapon slots and 2 more passive
   slots.
