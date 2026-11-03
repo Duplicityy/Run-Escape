@@ -648,7 +648,10 @@ scripts/game/simulate-run.ts [character] [seeds]        a bot plays full runs, f
                                                         map, FRESH=1 straight at it, SAFE_WAVES=1
                                                         with what a run earned, FLAT=1 with no
                                                         walls, DODGE=1 keeping off its marks,
-                                                        PARTY=4 a co-op party of that adventurer)
+                                                        PARTY=4 a co-op party of that adventurer;
+                                                        GOD=1 untouchable and FUNNEL=1 all into
+                                                        its best weapon, with ENDLESS=1, to see
+                                                        how damage keeps up with the rounds)
 scripts/dev/icon-test.ts 1321            draw an item icon as ASCII
 scripts/dev/render-stats.ts lumbridge    what a map costs to draw, without a browser: triangles,
                                          draw ranges, bytes (--cull=8 checks the culling boxes and
