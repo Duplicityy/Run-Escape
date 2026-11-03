@@ -1,6 +1,7 @@
 import { REGION_TILE_LIQUID } from "../../../mapviewer/worker/RegionData";
 import { CollisionFlag } from "../../../rs/pathfinder/flag/CollisionFlag";
 import { ArenaGrid, Box } from "./ArenaGrid";
+import { Steps } from "./FlowField";
 
 // A clump of blocked tiles this many across, all ways, is terrain rather than
 // things standing about: no tree's that big, and a river bank's too thin
@@ -15,6 +16,7 @@ export class FlightGrid {
     private readonly sizeX: number;
     private readonly sizeY: number;
     private readonly terrain: Uint8Array;
+    readonly steps: Steps;
 
     constructor(grid: ArenaGrid) {
         this.baseX = grid.baseX;
@@ -22,6 +24,7 @@ export class FlightGrid {
         this.sizeX = grid.sizeX;
         this.sizeY = grid.sizeY;
         this.terrain = findTerrain(grid);
+        this.steps = new Steps(this, this.baseX, this.baseY, this.sizeX, this.sizeY);
     }
 
     isSolid(tileX: number, tileY: number): boolean {
