@@ -52,6 +52,7 @@ go stale. Add anything that cost you time to work out.
 | Weapon attack benchmark                               | `scripts/game/measure-weapon-dps.ts`     |
 | Co-op: how it works, hosting its relay                | `docs/DEVELOPMENT.md` (Co-op)            |
 | Co-op relay server                                    | `server/coop-relay.mjs`                  |
+| The same relay on Cloudflare, and its setup           | `server/cloudflare/`                     |
 | Co-op lockstep and rooms; the lobby UI                | `src/game/client/coop/`, `ui/CoopScreen` |
 | Finding ids in the cache                              | `scripts/cache/`                         |
 | ScapeRune: making maps that aren't in OSRS            | `src/game/scaperune/CLAUDE.md`           |

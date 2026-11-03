@@ -13,6 +13,9 @@ the version in the corner).
 
 - Weapon cards and tooltips include fixed damage adjustments, including venom.
 - Weaker poison and burning ground no longer take ownership of a stronger lingering effect.
+- Co-op: a guest who misses some of the host's updates gets them again, rather than freezing.
+  With a relay that supports it, a dropped connection reconnects within a few seconds and the run
+  carries on.
 
 ## 0.23.0 - 2026-11-02
 
