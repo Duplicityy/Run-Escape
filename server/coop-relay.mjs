@@ -819,14 +819,17 @@ export function createRelay(limits = {}) {
                 ready: client.ready,
                 loadout: client.loadout,
                 unlocks: client.unlocks,
-                country: shownCountry(client),
+                country: shownCountry(client, room),
             })),
         };
     }
 
-    // A player's country, for their flag, unless they've hidden it
-    function shownCountry(client) {
-        return client.hideCountry ? undefined : client.country;
+    // A player's country, for their flag, unless they've hidden it. An open
+    // room's host shows theirs anyway: it's where the room is, for whoever's
+    // picking one from the list.
+    function shownCountry(client, room) {
+        const openHost = room.open && room.hostId === client.id;
+        return client.hideCountry && !openHost ? undefined : client.country;
     }
 
     // The view's encoded once, for everyone. The open rooms list catches up
@@ -874,7 +877,7 @@ export function createRelay(limits = {}) {
             code: room.code,
             name: room.name,
             host: host?.name ?? "",
-            country: host ? shownCountry(host) : undefined,
+            country: host ? shownCountry(host, room) : undefined,
             players: room.members.length,
             max: MAX_PARTY,
             mapId: room.mapId,

@@ -971,16 +971,17 @@ The open rooms list comes a page at a time (8 rooms, the fullest first, then the
 longest), worked out once after each change rather than for every request; the menu asks for its
 page every 5 seconds, and again when joining fails (a room that filled up or started meanwhile).
 
-**Flags.** A relay that knows where a player is sends it as `country` (ISO 3166's two letters):
-in `welcome` for their own, on each room member, and on a room in the list for its host. The
-Cloudflare relay's Worker gets it from `request.cf.country` and hands it on as `x-country`,
-replacing whatever a player sent; the Node relay gets it only behind Cloudflare (`PROXY`, above).
-A player who turns off **Co-op flag** in Settings sends `hideCountry` with what they say about
-themselves, and the relay leaves their country out everywhere. The game draws a flag with
-`CountryFlag` (`ui/CountryFlag.tsx`): the login screen's world list flags (sprite 815, a frame for
-each country it has, in `content/flags.ts`), or the country's letters where there's no flag, with
-its name from `Intl.DisplayNames` as the tooltip. Emoji flags won't do: Windows has none, so
-they show as two letters there anyway. A room's flag is its host's, which on the Cloudflare relay
+**Flags.** A relay that knows where a player is sends it as `country` (ISO 3166's two letters): in
+`welcome` for their own, on each room member, and on a room in the list for its host. The Cloudflare
+relay's Worker gets it from `request.cf.country` and hands it on as `x-country`, replacing whatever
+a player sent; the Node relay gets it only behind Cloudflare (`PROXY`, above). A player who turns
+off **Co-op flag** in Settings sends `hideCountry` with what they say about themselves, and the
+relay leaves their country out, except while they host an open room: then it shows in the room and
+the list anyway (`shownCountry` in each relay), and the game says so on Open to all. The game draws
+a flag with `CountryFlag` (`ui/CountryFlag.tsx`): the login screen's world list flags (sprite 815, a
+frame for each country it has, in `content/flags.ts`), or the country's letters where there's no
+flag, with its name from `Intl.DisplayNames` as the tooltip. Emoji flags won't do: Windows has none,
+so they show as two letters there anyway. A room's flag is its host's, which on the Cloudflare relay
 is roughly where the room runs too.
 
 To try it locally, `npm start` and open the game in two windows (one private, for a

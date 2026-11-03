@@ -321,7 +321,10 @@ function MovePredictionSetting({ ui, client }: ScreenProps): JSX.Element {
 
 function CoopFlagSetting({ ui, client }: ScreenProps): JSX.Element {
     return (
-        <Setting name="Co-op flag" text="Other co-op players see your country's flag">
+        <Setting
+            name="Co-op flag"
+            text="Other co-op players see your country's flag (an open room shows its host's either way)"
+        >
             <Toggle
                 on={ui.display.coopFlag}
                 label="Co-op flag"

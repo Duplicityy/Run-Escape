@@ -19,6 +19,15 @@ import { ItemIcon } from "./ItemIcon";
 
 type Props = { ui: UiSnapshot; client: GameClient };
 
+// An open room shows its host's flag even if they've hidden it (it's where the
+// room is, for whoever's picking one), so making one says so
+function openRoomTitle(ui: UiSnapshot): string {
+    return (
+        "Open rooms are listed for anyone" +
+        (ui.coop.country && !ui.display.coopFlag ? ", showing your flag" : "")
+    );
+}
+
 export function CoopScreen({ ui, client }: Props): JSX.Element {
     const room = ui.coop.room;
     return room ? (
@@ -101,6 +110,7 @@ function CoopMenu({ ui, client }: Props): JSX.Element {
                                     "ui-button ui-button-small" + (open ? " ui-toggle-on" : "")
                                 }
                                 aria-pressed={open}
+                                title={openRoomTitle(ui)}
                                 onClick={() => setOpen(true)}
                             >
                                 Open to all
@@ -302,7 +312,7 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
                         {copied ? "Copied!" : "Copy invite"}
                     </button>
                     {isHost ? (
-                        <span className="ui-coop-open" title="Open rooms are listed for anyone">
+                        <span className="ui-coop-open" title={openRoomTitle(ui)}>
                             Open
                             <Toggle
                                 on={room.open}

@@ -48,9 +48,12 @@ const ENTER_MS = 10_000;
 // The room's saved, and the lobby told, this often at most
 const SAVE_MS = 1000;
 
-// A player's country, for their flag, unless they've hidden it
-function shownCountry(member) {
-    return member.hideCountry ? undefined : member.country;
+// A player's country, for their flag, unless they've hidden it. An open
+// room's host shows theirs anyway: it's where the room is, for whoever's
+// picking one from the list.
+function shownCountry(member, room) {
+    const openHost = room.open && room.hostId === member.id;
+    return member.hideCountry && !openHost ? undefined : member.country;
 }
 
 export class Room extends DurableObject {
@@ -363,7 +366,7 @@ export class Room extends DurableObject {
                 ready: client.ready,
                 loadout: client.loadout,
                 unlocks: client.unlocks,
-                country: shownCountry(client),
+                country: shownCountry(client, room),
             })),
         };
     }
@@ -412,7 +415,7 @@ export class Room extends DurableObject {
                 endless: room.endless,
                 hard: room.hard === true,
                 host: host?.name ?? "",
-                country: host ? shownCountry(host) : undefined,
+                country: host ? shownCountry(host, room) : undefined,
                 hostAddress: host?.address ?? "",
                 order: room.order,
             })

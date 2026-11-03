@@ -1335,16 +1335,27 @@ describe("co-op relay", () => {
         const [listed] = (await browser.next("rooms")).rooms;
         expect(listed.country).toBe("FI");
         browser.send({ t: "join", code: listed.code, me: {} });
-        const { room } = await browser.roomWhere((r) => r.members.length === 2);
-        expect(room.members.map((m: { country?: string }) => m.country)).toEqual(["FI", undefined]);
-        // Hidden, from the room and the list
+        await browser.roomWhere((r) => r.members.length === 2);
+        // A guest who's hidden theirs, until they show it
+        const guest = viaCloudflare("SE");
+        await guest.saw('"country":"SE"');
+        guest.send({ t: "join", code: listed.code, me: { hideCountry: true } });
+        const { room } = await browser.roomWhere((r) => r.members.length === 3);
+        const countries = (r: { members: { country?: string }[] }) =>
+            r.members.map((m) => m.country);
+        expect(countries(room)).toEqual(["FI", undefined, undefined]);
+        guest.send({ t: "me", hideCountry: false });
+        await browser.roomWhere((r) => r.members[2].country === "SE");
+        // The host of an open room shows theirs either way: it's where the
+        // room is. Invite only, they can hide it.
         host.send({ t: "me", hideCountry: true });
-        await browser.roomWhere((r) => r.members[0].country === undefined);
+        host.send({ t: "settings", open: false });
+        expect(countries((await browser.roomWhere((r) => !r.open)).room)[0]).toBeUndefined();
+        host.send({ t: "settings", open: true });
+        expect(countries((await browser.roomWhere((r) => r.open)).room)[0]).toBe("FI");
         const other = await connect();
         other.send({ t: "list" });
-        expect((await other.next("rooms")).rooms[0].country).toBeUndefined();
-        host.send({ t: "me", hideCountry: false });
-        await browser.roomWhere((r) => r.members[0].country === "FI");
+        expect((await other.next("rooms")).rooms[0].country).toBe("FI");
     });
 
     it("drops a host that sends its room more than a run does", async () => {

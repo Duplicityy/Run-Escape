@@ -9,7 +9,7 @@ the version in the corner).
 
 - Multiplayer shows where players are from: each open room has its host's flag and each player in
   a room theirs, the world list's own flags (a country without one shows its letters). Turn off
-  Co-op flag in Settings to keep yours to yourself.
+  Co-op flag in Settings to keep yours to yourself, unless you host an open room.
 
 - Phosani's Nightmare: a boss fight on its own, open once Hallowed Night's beaten. The run is one
   fight in her dream, as the real one is: her dark floor walled round in the Sanctuary's stone, with a barred

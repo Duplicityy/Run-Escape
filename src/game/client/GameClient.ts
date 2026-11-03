@@ -884,7 +884,8 @@ export class GameClient implements GameFrameHandler {
         this.coopRun?.setPrediction(this.display.movePrediction);
     }
 
-    // The room hears at once, and the rooms list from the next update
+    // The room hears at once, and the rooms list from the next update. An open
+    // room's host shows theirs either way (the relays' shownCountry).
     toggleCoopFlag(): void {
         this.setDisplay({ coopFlag: !this.display.coopFlag });
         this.coop.setMe({ hideCountry: !this.display.coopFlag });
