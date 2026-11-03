@@ -38,7 +38,7 @@ import {
     getHardScale,
 } from "../content/hard";
 import { CASKETS, getGear, getItem } from "../content/items";
-import { getMap, hasPoison } from "../content/maps";
+import { getMap, hasFliers, hasPoison } from "../content/maps";
 import { canLevelPassive, getPassive, getPassiveGain } from "../content/passives";
 import {
     POWER_UPS,
@@ -569,7 +569,7 @@ export type Hero = {
     appearanceVersion: number;
     // Enemies after this hero find their way to them with it
     flowField: FlowField;
-    // And flying ones, once there are any
+    // And flying ones, on maps they're on or once there are any
     flightField?: FlowField;
     regenAccumulator: number;
     // When a hit next gets the Amulet of blood fury's roll to heal
@@ -971,6 +971,11 @@ export class Sim {
         this.grid = options.grid;
         this.map = getMap(options.mapId ?? "lumbridge");
         this.rng = new Rng(options.seed);
+        // Building it takes a while, so it's done here, with the map, rather
+        // than on the tick the first flier turns up (getFlight still can)
+        if (hasFliers(this.map)) {
+            this.flightGrid = new FlightGrid(this.grid);
+        }
         // Fun maps are endless from the start
         this.endless = (options.endless ?? false) || this.map.fun !== undefined;
         this.hard = options.hard ?? false;
@@ -1024,6 +1029,9 @@ export class Sim {
         );
         const flowField = new FlowField(FLOW_FIELD_SIZE);
         flowField.ditchY = this.map.ditch?.y;
+        // Updated with the ground one from the start (getFlight's would be at
+        // the same target by the time it's needed)
+        const flightField = this.flightGrid && new FlowField(FLOW_FIELD_SIZE);
         return {
             index,
             name: options.name,
@@ -1083,6 +1091,7 @@ export class Sim {
             weaponSince: {},
             appearanceVersion: 0,
             flowField,
+            flightField,
             regenAccumulator: 0,
             bloodFuryRollTick: 0,
             sledEndTick: 0,
