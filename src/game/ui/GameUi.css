@@ -411,6 +411,17 @@
     color: var(--ui-green);
 }
 
+/* The frame rate's choices: the one picked lit up */
+.ui-setting-control .ui-frame-rate {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.ui-frame-rate-on {
+    color: var(--ui-yellow);
+    background: var(--ui-card-hover);
+}
+
 .ui-volume {
     width: 140px;
     accent-color: var(--ui-orange);
@@ -883,10 +894,12 @@
     border-bottom: 1px solid #000;
 }
 
+/* The bars fill by scaling (GameUi's Hud), which doesn't lay the page out again */
 .ui-xp-fill {
     height: 100%;
     background: linear-gradient(#3fa7ff, #1550c0);
-    transition: width 0.1s linear;
+    transform-origin: left;
+    transition: transform 0.1s linear;
 }
 
 .ui-xp-level {
@@ -1158,25 +1171,28 @@
     box-shadow: inset 0 0 0 1px rgba(107, 94, 74, 0.6);
 }
 
-/* A weapon ready to evolve, on the next level up */
+/* A weapon ready to evolve, on the next level up. The glow pulses by its
+   opacity, which doesn't paint the slot again every frame as a changing shadow
+   would (it can be minutes until the next level up). */
 .ui-slot-evolve {
     border-color: #ffd700 !important;
-    box-shadow:
-        inset 0 0 0 1px rgba(107, 94, 74, 0.6),
-        0 0 8px 2px rgba(255, 215, 0, 0.8);
+}
+
+.ui-slot-evolve::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    pointer-events: none;
+    box-shadow: 0 0 10px 3px rgba(255, 215, 0, 0.9);
     animation: ui-slot-evolve 1.2s ease-in-out infinite alternate;
 }
 
 @keyframes ui-slot-evolve {
     from {
-        box-shadow:
-            inset 0 0 0 1px rgba(107, 94, 74, 0.6),
-            0 0 4px 1px rgba(255, 215, 0, 0.5);
+        opacity: 0.45;
     }
     to {
-        box-shadow:
-            inset 0 0 0 1px rgba(107, 94, 74, 0.6),
-            0 0 10px 3px rgba(255, 215, 0, 0.9);
+        opacity: 1;
     }
 }
 
@@ -1265,9 +1281,11 @@
 .ui-buff-bar {
     position: absolute;
     left: 0;
+    right: 0;
     bottom: 0;
     height: 3px;
     background: var(--ui-cyan);
+    transform-origin: left;
 }
 
 /* Drained by a boss */
@@ -1338,6 +1356,7 @@
 .ui-hp-fill {
     height: 100%;
     background: #00c800;
+    transform-origin: left;
 }
 
 /* Poisoned: a sicker green, like the client's hitpoints orb */
@@ -1385,6 +1404,7 @@
 .ui-boss-fill {
     height: 100%;
     background: linear-gradient(#e01010, #800000);
+    transform-origin: left;
 }
 
 /* A fight in phases: its shield, then its totems filling up */

@@ -27,6 +27,15 @@ const LOAD_WAIT_MS = 20_000;
 // A move goes out this often at most: a touch stick changes nearly every
 // frame, and each one sent is a message from the host to everyone
 const MOVE_INTERVAL_MS = 66;
+// The host keeps what it's sent for this many frames (20 seconds), to send
+// again to a guest that missed some. A gap only comes from a dropped
+// connection, and the relay gives up on one after 15 seconds
+// (RESUME_GRACE_MS in server/cloudflare/src/room.mjs), so this outlasts any
+// gap while keeping a resend well inside the relay's limits.
+const RESEND_FRAMES = 1000;
+// A guest asks for missing frames this often at most, and the host resends
+// this often at most whoever asks: one resend covers every guest behind
+const RESEND_ASK_MS = 1000;
 // Someone the run's waited on this long (a hidden tab, gone to make tea) has
 // it decided for them: the first reward, taking the casket, or walking away
 export const DECIDE_AFTER_MS = 20_000;
@@ -72,8 +81,13 @@ export class CoopRun {
     private next: FrameEvent[] = [];
     private outgoing: FrameEvent[] = [];
     private outgoingHash?: [number, number];
-    // The host's: the frames it's said are out
+    // The host's: the frames it's said are out, and what it's sent lately
     private sentUpTo = 0;
+    private sent: DownMessage[] = [];
+    // A guest's: when it last asked for frames it missed. The host's: when it
+    // last resent, and the earliest frame asked for since
+    private askedAt = -Infinity;
+    private resendAsked?: number;
     // A guest's checks from the host still to compare
     private hashes = new Map<number, number>();
     private lastMove: [number, number] = [0, 0];
@@ -220,6 +234,18 @@ export class CoopRun {
         const action = "action" in message ? cleanAction(message.action) : undefined;
         if ("loaded" in message) {
             this.loading.delete(from);
+        } else if ("resend" in message) {
+            const after = message.resend;
+            // Nobody honest is further behind than what's kept, and an ask from
+            // before it would only hold back the rest
+            if (
+                Number.isSafeInteger(after) &&
+                this.sent.length > 0 &&
+                (after as number) >= this.sent[0].from!
+            ) {
+                this.resendAsked = Math.min(this.resendAsked ?? Infinity, after as number);
+                this.resendIfDue();
+            }
         } else if (move) {
             const moveSeq = "moveSeq" in message ? cleanMoveSeq(message.moveSeq) : undefined;
             this.queue({ frame: 0, hero, move, ...(moveSeq !== undefined && { moveSeq }) });
@@ -275,9 +301,24 @@ export class CoopRun {
         ) {
             return;
         }
+        if (message.upTo <= this.upTo) {
+            // Had it already (sent again for someone else)
+            return;
+        }
+        if (Number.isSafeInteger(message.from) && message.from! > this.upTo) {
+            // Some went missing: these come again with them
+            const now = this.now();
+            if (now - this.askedAt >= RESEND_ASK_MS) {
+                this.askedAt = now;
+                this.link.sendUp({ resend: this.upTo });
+            }
+            return;
+        }
         for (const raw of message.events) {
             const event = cleanFrameEvent(raw, this.sim.heroes.length);
-            if (event) {
+            // A resend asked for by a guest further behind starts before this
+            // one's frames: those it has already (and may have applied)
+            if (event && event.frame > this.upTo) {
                 this.incoming.push(event);
             }
         }
@@ -343,6 +384,7 @@ export class CoopRun {
     // The host's: sends the frames stepped since last time (quiet ones once
     // there are a couple, unless everything's to go now)
     flush(everything = false): void {
+        this.resendIfDue();
         if (
             !this.isHost ||
             this.upTo === this.sentUpTo ||
@@ -350,13 +392,59 @@ export class CoopRun {
         ) {
             return;
         }
-        this.link.sendDown({
+        const message: DownMessage = {
+            from: this.sentUpTo,
             upTo: this.upTo,
             events: this.outgoing,
             ...(this.outgoingHash && { hash: this.outgoingHash }),
-        });
+        };
+        this.link.sendDown(message);
+        this.sent.push(message);
+        while (this.sent.length > 0 && this.upTo - this.sent[0].upTo > RESEND_FRAMES) {
+            this.sent.shift();
+        }
         this.outgoing = [];
         this.outgoingHash = undefined;
         this.sentUpTo = this.upTo;
+    }
+
+    // The host's: the frames asked for, once RESEND_ASK_MS has passed since
+    // the last resend. However many guests ask, and however often, it's one
+    // message a second from the earliest frame asked for.
+    private resendIfDue(): void {
+        const after = this.resendAsked;
+        const now = this.now();
+        if (!this.isHost || after === undefined || now - this.askedAt < RESEND_ASK_MS) {
+            return;
+        }
+        this.askedAt = now;
+        this.resendAsked = undefined;
+        this.resend(after);
+    }
+
+    // The host's: everything sent after a frame, again, as one message. Every
+    // guest gets it; those that had some of it already take only the rest.
+    private resend(after: number): void {
+        // An honest ask is where a message starts. One that isn't still gets the
+        // next one on, so that it can't swallow the honest asks made with it.
+        const start = this.sent.findIndex((m) => m.from! >= after);
+        if (start < 0) {
+            return;
+        }
+        const missed = this.sent.slice(start);
+        const hash = missed.findLast((m) => m.hash)?.hash;
+        this.link.sendDown({
+            from: missed[0].from,
+            upTo: missed[missed.length - 1].upTo,
+            events: missed.flatMap((m) => m.events),
+            ...(hash && { hash }),
+        });
+    }
+
+    // After the connection's come back: the next move goes out whatever it
+    // is, in case the last one didn't make it
+    resumed(): void {
+        this.lastMove = [NaN, NaN];
+        this.moveSentAt = -Infinity;
     }
 }

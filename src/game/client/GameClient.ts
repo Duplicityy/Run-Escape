@@ -34,7 +34,7 @@ import { formatWeaponBonus, formatWeaponStat, weaponStats } from "../content/wea
 import { getWeapon } from "../content/weapons";
 import { ChestAction } from "../core/Loot";
 import { Hero, HeroOptions, Sim, TICKS_PER_SECOND } from "../core/Sim";
-import { canEvolve, describeChoice, getEvolutionHint } from "../core/Upgrades";
+import { UpgradeChoice, canEvolve, describeChoice, getEvolutionHint } from "../core/Upgrades";
 import { SimEvent, WeaponState } from "../core/entities";
 import { usePortableMath } from "../core/fmath";
 import { CoopAction, applyAction, hasBadNumber } from "../core/lockstep";
@@ -57,16 +57,23 @@ import {
     refundUpgrades,
 } from "../core/save";
 import { ArenaGrid } from "../core/world/ArenaGrid";
-import { CameraRig } from "../render/CameraRig";
-import { GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer";
+import { CameraRig, MAX_CAMERA_DISTANCE, getGroundReach } from "../render/CameraRig";
+import { CameraReach, GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer";
 import { installRecipe } from "../scaperune/squares";
 import { DamageMeter } from "./DamageMeter";
-import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
+import {
+    DisplaySettings,
+    FrameRate,
+    frameCap,
+    loadDisplaySettings,
+    saveDisplaySettings,
+} from "./DisplaySettings";
 import {
     GameAssets,
     HITSPLAT_SPRITES,
-    getCharacterAppearance,
+    getOfferedAttackSeqs,
     getRunAppearance,
+    getRunAttackSeqs,
 } from "./GameAssets";
 import { GameAudio } from "./GameAudio";
 import { GameInput } from "./GameInput";
@@ -74,12 +81,14 @@ import { ChestCue, GameSounds, getGameSoundIds } from "./GameSounds";
 import {
     ChoiceView,
     GameStore,
+    HudNumbers,
     HudView,
     QuestTrackView,
     ReviveView,
     SaveBlock,
     Screen,
     SlotView,
+    shareUnchanged,
 } from "./GameStore";
 import { GameView } from "./GameView";
 import {
@@ -102,6 +111,10 @@ import { saveFile } from "./saveFile";
 // 20ms: the OSRS client tick, also the unit of animation frame lengths
 export const TICK_MS = 1000 / TICKS_PER_SECOND;
 const MAX_TICKS_PER_FRAME = 10;
+// A solo run makes up a late frame's ticks this many a frame at most, rather than
+// all in the next one, so one slow frame doesn't make the next slow too. Every
+// tick still runs: it's at most MAX_TICKS_PER_FRAME behind, as before.
+const SOLO_TICKS_PER_FRAME = 4;
 // A co-op guest that's fallen well behind the host catches up this fast
 const MAX_CATCH_UP_TICKS = 120;
 // A frame spends this long at most on catching up, so a slow phone stays
@@ -140,6 +153,31 @@ const CAMERA_GROUND_EASE = 110;
 // window does, and the player stays big enough to see
 const PHONE_RUN_DISTANCE = 15;
 const PHONE_MAX_HEIGHT = 520;
+
+// How far past the arena the camera can get: a run's is behind the player, zoomed
+// all the way out, and the title screen's circles them
+const CAMERA_REACH: CameraReach = {
+    behind: getGroundReach(RUN_PITCH, MAX_CAMERA_DISTANCE),
+    around: getGroundReach(ATTRACT_PITCH, ATTRACT_DISTANCE),
+};
+
+// The world fades out past the arena's edge. A ScapeRune map's world carries on: it
+// has scenery there (scaperune/CLAUDE.md).
+function setPlayArea(
+    renderer: GameWebGLRenderer,
+    arena: { baseX: number; baseY: number; sizeX: number; sizeY: number },
+    scaperune: boolean,
+): void {
+    const { baseX, baseY, sizeX, sizeY } = arena;
+    const open = scaperune ? OPEN_WORLD_MARGIN : 0;
+    renderer.setPlayArea(
+        baseX - open,
+        baseY - open,
+        baseX + sizeX + open,
+        baseY + sizeY + open,
+        CAMERA_REACH,
+    );
+}
 
 // The level up's rewards, as the UI shows them
 // What a new endless round brings, for its toast
@@ -274,6 +312,8 @@ export class GameClient implements GameFrameHandler {
         saveLock: SaveLock,
         options: GameClientOptions,
     ): Promise<GameClient> {
+        // Before the first map squares load, so they're only what the title screen needs
+        setPlayArea(renderer, getArenaRegion(TITLE_MAP), false);
         const workerPool = mapViewer.workerPool;
         const regionPromise = workerPool.queueLoad<RegionDataInput, RegionData, RegionDataLoader>(
             new RegionDataLoader(),
@@ -291,7 +331,7 @@ export class GameClient implements GameFrameHandler {
             store.set({ loadingProgress: 10 + Math.round((done / total) * 70) });
         });
         store.set({ loadingText: "Dressing up", loadingProgress: 85 });
-        await assets.setPlayerAppearance(getCharacterAppearance(store.getSnapshot().characterId));
+        await assets.setCharacterLook(store.getSnapshot().characterId);
         store.set({ loadingText: `Building ${TITLE_MAP.name}`, loadingProgress: 95 });
         const grid = new ArenaGrid(await regionPromise);
         await soundsPromise;
@@ -346,6 +386,8 @@ export class GameClient implements GameFrameHandler {
     private readonly damageMeter = new DamageMeter();
     // Each hero's look, as last baked
     private appearanceVersions: number[] = [];
+    // Each hero's level-up choices their look was last baked for
+    private lookChoices: (UpgradeChoice[] | undefined)[] = [];
     // The casket Auto alch last sent off (a co-op one takes a frame to come
     // back, and shouldn't go twice)
     private autoAlchedUid = -1;
@@ -409,6 +451,17 @@ export class GameClient implements GameFrameHandler {
         this.coop.onLeft = (id) => this.toCoopRun((run) => run.playerLeft(id));
         this.coop.onGone = (reason) => this.onCoopGone(reason);
         this.coop.onClosed = () => this.onCoopClosed();
+        this.coop.onReconnecting = () => {
+            if (this.coopRun) {
+                this.store.toast("Connection dropped. Reconnecting...", 4000);
+            }
+        };
+        this.coop.onResumed = () => {
+            if (this.coopRun) {
+                this.store.toast("Reconnected.", 2000);
+            }
+            this.toCoopRun((run) => run.resumed());
+        };
         // Co-op's offered only where there's a relay to play it through
         this.coop.checkAvailable();
         document.addEventListener("visibilitychange", this.onVisibilityChange);
@@ -457,7 +510,7 @@ export class GameClient implements GameFrameHandler {
         }
         this.store.set({ characterId });
         if (!this.sim) {
-            this.assets.setPlayerAppearance(getCharacterAppearance(characterId));
+            this.assets.setCharacterLook(characterId);
         }
         this.coop.setMe({ characterId });
     }
@@ -791,6 +844,11 @@ export class GameClient implements GameFrameHandler {
         this.coopRun?.setPrediction(this.display.movePrediction);
     }
 
+    // Takes hold from the next frame (update)
+    setFrameRate(frameRate: FrameRate): void {
+        this.setDisplay({ frameRate });
+    }
+
     private setDisplay(changes: Partial<DisplaySettings>): void {
         this.display = { ...this.display, ...changes };
         saveDisplaySettings(this.display);
@@ -947,6 +1005,13 @@ export class GameClient implements GameFrameHandler {
                 RegionDataLoader
             >(new RegionDataLoader(), getArenaRegion(getMap(mapId)));
             grid = new ArenaGrid(region);
+            // Only the title screen's and this map's are kept: a phone needn't
+            // hold every map played
+            for (const id of this.grids.keys()) {
+                if (id !== TITLE_MAP.id) {
+                    this.grids.delete(id);
+                }
+            }
             this.grids.set(mapId, grid);
         }
         return grid;
@@ -1137,6 +1202,7 @@ export class GameClient implements GameFrameHandler {
         this.shownDpsTick = 0;
         this.damageMeter.reset();
         this.appearanceVersions = [];
+        this.lookChoices = [];
         this.decisionKey = "";
         this.autoAlchedUid = -1;
         this.coopStopped = false;
@@ -1338,6 +1404,31 @@ export class GameClient implements GameFrameHandler {
         }
     }
 
+    // The page lost its graphics (GameApp): a solo run stops where it stands, and
+    // nothing happens to it while its player can't see it. Says what was going on.
+    onGraphicsLost(): "none" | "solo" | "coop" {
+        if (!this.sim || this.sim.runOver) {
+            return "none";
+        }
+        if (this.coopRun) {
+            return "coop";
+        }
+        this.pause();
+        return "solo";
+    }
+
+    // Before the page reloads for its lost graphics: the run counts as the pause
+    // menu's quit does (its coins and quests are kept), with nothing more drawn
+    // or let go on the GPU
+    endRunForReload(): void {
+        if (this.sim) {
+            this.finishRun();
+        }
+        if (this.coopRun) {
+            this.coop.leave();
+        }
+    }
+
     resume(): void {
         this.paused = false;
         this.accumulator = 0;
@@ -1379,12 +1470,11 @@ export class GameClient implements GameFrameHandler {
         this.view.reset();
         this.cameraRig.pitch = ATTRACT_PITCH;
         this.cameraRig.distance = ATTRACT_DISTANCE;
-        this.assets.setPlayerAppearance(
-            getCharacterAppearance(this.store.getSnapshot().characterId),
-        );
+        this.assets.setCharacterLook(this.store.getSnapshot().characterId);
         if (!show) {
             return;
         }
+        this.store.setNumbers(undefined);
         this.store.set({
             screen: wasCoop && this.coop.room ? "coop" : "title",
             overlay: "none",
@@ -1557,6 +1647,11 @@ export class GameClient implements GameFrameHandler {
     // ---- Frame ----
 
     update(deltaTimeMs: number, camera: Camera): void {
+        this.renderer.fpsLimit = frameCap(
+            this.display.frameRate,
+            isCoarsePointer,
+            this.isStoppedBehindMenu(),
+        );
         this.fps = this.fps * 0.95 + (deltaTimeMs > 0 ? 1000 / deltaTimeMs : 0) * 0.05;
         const wheel = this.input.takeWheel();
         if (wheel !== 0 && this.sim) {
@@ -1564,16 +1659,7 @@ export class GameClient implements GameFrameHandler {
         }
         this.store.expireToasts();
 
-        // The world fades out past the edge of the map
-        const { baseX, baseY, sizeX, sizeY } = this.grid;
-        // The world fades out past the arena's edge. A ScapeRune map's world carries on: it
-        // has scenery there (scaperune/CLAUDE.md).
-        const open = this.sim?.map.scaperune === true ? OPEN_WORLD_MARGIN : 0;
-        const playArea = this.renderer.playArea;
-        playArea[0] = baseX - open;
-        playArea[1] = baseY - open;
-        playArea[2] = baseX + sizeX + open;
-        playArea[3] = baseY + sizeY + open;
+        setPlayArea(this.renderer, this.grid, this.sim?.map.scaperune === true);
 
         const sim = this.sim;
         if (!sim) {
@@ -1585,8 +1671,17 @@ export class GameClient implements GameFrameHandler {
             this.updateCoop(deltaTimeMs, sim, this.coopRun);
         } else if (!this.paused && (sim.state === "playing" || sim.runOver)) {
             const wasOver = sim.runOver;
-            this.accumulator += Math.min(deltaTimeMs, TICK_MS * MAX_TICKS_PER_FRAME);
-            while (this.accumulator >= TICK_MS && (sim.state === "playing" || sim.runOver)) {
+            this.accumulator = Math.min(
+                this.accumulator + deltaTimeMs,
+                TICK_MS * MAX_TICKS_PER_FRAME,
+            );
+            let steps = 0;
+            while (
+                this.accumulator >= TICK_MS &&
+                steps < SOLO_TICKS_PER_FRAME &&
+                (sim.state === "playing" || sim.runOver)
+            ) {
+                steps++;
                 this.accumulator -= TICK_MS;
                 const move = this.input.getMoveVector(this.move);
                 sim.step(move.x, move.y);
@@ -1602,9 +1697,20 @@ export class GameClient implements GameFrameHandler {
         }
 
         for (const hero of sim.heroes) {
-            if (hero.appearanceVersion !== this.appearanceVersions[hero.index]) {
+            // A level-up offering a weapon bakes its swing ahead of the pick
+            const choices = hero.choices.length > 0 ? hero.choices : undefined;
+            if (
+                hero.appearanceVersion !== this.appearanceVersions[hero.index] ||
+                choices !== this.lookChoices[hero.index]
+            ) {
                 this.appearanceVersions[hero.index] = hero.appearanceVersion;
-                this.assets.setPlayerAppearance(getRunAppearance(sim, hero.index), hero.index);
+                this.lookChoices[hero.index] = choices;
+                this.assets.setPlayerAppearance(
+                    getRunAppearance(sim, hero.index),
+                    hero.index,
+                    getRunAttackSeqs(sim, hero.index),
+                    getOfferedAttackSeqs(sim, hero.index),
+                );
             }
         }
 
@@ -1634,6 +1740,17 @@ export class GameClient implements GameFrameHandler {
             this.cameraGround = ground;
         }
         this.cameraRig.apply(camera, px, ground - 0.6, py);
+    }
+
+    // Nothing but the scenery moves: the title screen, or a solo run that's stopped
+    // for a menu (a level up, a casket, the pause menu, the results). A co-op run
+    // carries on behind its menus.
+    private isStoppedBehindMenu(): boolean {
+        const sim = this.sim;
+        if (!sim) {
+            return true;
+        }
+        return !this.coopRun && (this.paused || sim.state !== "playing");
     }
 
     // A co-op run: frames step at the run's pace, the host's whenever it
@@ -1982,7 +2099,7 @@ export class GameClient implements GameFrameHandler {
         this.lastHudUpdate = performance.now();
         const thisLevel = sim.xpForThisLevel;
         const nextLevel = sim.xpForNextLevel;
-        let boss: HudView["boss"];
+        let boss: HudNumbers["boss"];
         const shownBoss = sim.shownBoss;
         if (shownBoss) {
             const phase = shownBoss.bossState?.phase;
@@ -2014,23 +2131,44 @@ export class GameClient implements GameFrameHandler {
         }
         this.damageMeter.sample(sim.tick, sim.damageBySource);
         const meter = this.damageMeter.read();
-        const hud: HudView = {
-            mapId: sim.map.id,
-            round: sim.endless ? sim.round : undefined,
-            bossIn: sim.timeLeftForBoss,
+        const weaponDamage: HudNumbers["weaponDamage"] = {};
+        for (const w of sim.weapons) {
+            weaponDamage[w.def.id] = {
+                dps: meter.perSecond[`weapon:${w.def.id}`] ?? 0,
+                damage: meter.totals[`weapon:${w.def.id}`] ?? 0,
+            };
+        }
+        const numbers: HudNumbers = {
+            // Whole seconds, as they're shown, so standing still changes nothing
+            bossIn: Math.ceil(sim.timeLeftForBoss),
             hp: Math.max(0, Math.round(sim.player.hp)),
             maxHp: sim.player.maxHp,
             poisoned: sim.player.poisonEnd !== -1,
-            level: sim.level,
             xpFraction: Math.min(
                 1,
                 Math.max(0, (sim.xp - thisLevel) / Math.max(1, nextLevel - thisLevel)),
             ),
-            seconds: sim.seconds,
+            seconds: Math.floor(sim.seconds),
             kills: sim.kills,
             coins: sim.coins,
             dps: this.shownDps,
+            weaponDamage,
             otherDps: meter.otherPerSecond,
+            buffs: getBuffViews(sim),
+            boss,
+            quests: getQuestTrackViews(this.save, sim),
+        };
+        // What hasn't changed stays the same object, so a part of the HUD that shows
+        // only that doesn't draw again
+        const shownNumbers = this.store.getNumbers();
+        const sharedNumbers = shareUnchanged(shownNumbers, numbers);
+        if (force || sharedNumbers !== shownNumbers) {
+            this.store.setNumbers(sharedNumbers);
+        }
+        const hud: HudView = {
+            mapId: sim.map.id,
+            round: sim.endless ? sim.round : undefined,
+            level: sim.level,
             maxWeapons: sim.maxWeapons,
             maxPassives: sim.maxPassives,
             weapons: sim.weapons.map((w) => {
@@ -2046,8 +2184,6 @@ export class GameClient implements GameFrameHandler {
                     stats: weaponStats(w.def, level).map(formatWeaponStat),
                     evolution: getEvolutionView(sim, w),
                     rarityColor: RARITIES[w.def.rarity].color,
-                    dps: meter.perSecond[`weapon:${w.def.id}`] ?? 0,
-                    damage: meter.totals[`weapon:${w.def.id}`] ?? 0,
                 };
             }),
             passives: sim.passives.map((p) => {
@@ -2066,17 +2202,15 @@ export class GameClient implements GameFrameHandler {
             stats: formatStats(sim.stats),
             gear: getGearViews(sim),
             inventory: getInventoryViews(sim),
-            buffs: getBuffViews(sim),
             rerolls: sim.rerollsLeft,
             skip: sim.canSkip
                 ? { cost: sim.skipCost, affordable: sim.coins >= sim.skipCost }
                 : undefined,
-            boss,
-            quests: getQuestTrackViews(this.save, sim),
         };
         const previous = this.store.getSnapshot().hud;
-        if (force || !previous || JSON.stringify(previous) !== JSON.stringify(hud)) {
-            this.store.set({ hud });
+        const shared = shareUnchanged(previous, hud);
+        if (force || shared !== previous) {
+            this.store.set({ hud: shared });
         }
         if (sim.heroes.length > 1) {
             const party = sim.heroes

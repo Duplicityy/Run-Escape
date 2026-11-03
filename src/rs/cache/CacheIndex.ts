@@ -10,13 +10,34 @@ import { ReferenceTable } from "./ref/ReferenceTable";
 import { CacheStore } from "./store/CacheStore";
 import { SectorCluster } from "./store/SectorCluster";
 
+// A table, or how to get it the first time it's needed: an index's table is
+// only decoded if something reads the index
+export type ReferenceTableSource = ReferenceTable | (() => ReferenceTable);
+
 export abstract class CacheIndex<A extends ApiType = ApiType.SYNC> {
     static META_INDEX_ID = 255;
 
+    private _table?: ReferenceTable;
+    private loadTable?: () => ReferenceTable;
+
     constructor(
         readonly id: number,
-        readonly table: ReferenceTable,
-    ) {}
+        table: ReferenceTableSource,
+    ) {
+        if (table instanceof ReferenceTable) {
+            this._table = table;
+        } else {
+            this.loadTable = table;
+        }
+    }
+
+    get table(): ReferenceTable {
+        if (!this._table) {
+            this._table = this.loadTable!();
+            this.loadTable = undefined;
+        }
+        return this._table;
+    }
 
     getArchiveIds(): Int32Array {
         return this.table.archiveIds;
@@ -47,7 +68,7 @@ export abstract class CacheIndex<A extends ApiType = ApiType.SYNC> {
     }
 
     getFileCount(archiveId: number): number {
-        return this.table.getArchiveReference(archiveId)?.fileCount ?? 0;
+        return this.table.getFileCount(archiveId);
     }
 
     abstract getArchive(archiveId: number, key?: number[]): ApiReturnType<A, Archive>;
@@ -71,7 +92,7 @@ export abstract class CacheIndex<A extends ApiType = ApiType.SYNC> {
 export abstract class CacheStoreIndex<A extends ApiType> extends CacheIndex<A> {
     constructor(
         id: number,
-        table: ReferenceTable,
+        table: ReferenceTableSource,
         readonly store: CacheStore<A>,
     ) {
         super(id, table);
@@ -166,14 +187,19 @@ function decodeArchiveData<A extends ApiType>(
 
 export class CacheIndexDat2 extends CacheStoreIndexSync {
     static fromStore(id: number, store: CacheStore<ApiType.SYNC>): CacheIndexDat2 {
-        const data = store.read(CacheIndex.META_INDEX_ID, id);
-        try {
-            const table = decodeTable(data);
-            return new CacheIndexDat2(id, table, store);
-        } catch (e) {
-            console.error(data, e);
-            throw new Error("Failed to decode index: " + id);
-        }
+        return new CacheIndexDat2(
+            id,
+            () => {
+                const data = store.read(CacheIndex.META_INDEX_ID, id);
+                try {
+                    return decodeTable(data);
+                } catch (e) {
+                    console.error(data, e);
+                    throw new Error("Failed to decode index: " + id);
+                }
+            },
+            store,
+        );
     }
 
     override getArchive(id: number, key?: number[] | undefined): Archive {

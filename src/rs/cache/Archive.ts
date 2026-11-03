@@ -6,6 +6,12 @@ import { ArchiveFile } from "./ArchiveFile";
 
 type HashFunction = (str: string) => number;
 
+// Files kept in one array: file i is data[offsets[i]] to data[offsets[i + 1]]
+type ArchiveData = {
+    data: Int8Array;
+    offsets: Int32Array;
+};
+
 export class Archive {
     static create(id: number, data: Int8Array): Archive {
         const fileCount = 1;
@@ -14,23 +20,14 @@ export class Archive {
         const fileIds = new Int32Array(fileCount);
         const fileNameHashes = new Int32Array(fileCount);
 
-        const files = new Map<number, ArchiveFile>();
-        files.set(lastFileId, new ArchiveFile(lastFileId, id, data));
-
-        return new Archive(
-            StringUtil.hashOld,
-            id,
-            lastFileId,
-            fileCount,
-            fileIds,
-            fileNameHashes,
-            files,
-        );
+        return new Archive(StringUtil.hashOld, id, lastFileId, fileCount, fileIds, fileNameHashes, [
+            data,
+        ]);
     }
 
     static decodeOld(id: number, data: Int8Array, multipleFiles: boolean) {
         const buffer = new ByteBuffer(data);
-        const files = new Map<number, ArchiveFile>();
+        const files: Int8Array[] = [];
 
         let fileCount: number;
         let fileIds: Int32Array;
@@ -70,7 +67,7 @@ export class Archive {
                     const data = dataBuffer.readUnsignedBytes(fileSize);
                     decompressedFile = Bzip2.decompress(data, fileActualSize);
                 }
-                files.set(i, new ArchiveFile(i, id, decompressedFile));
+                files.push(decompressedFile);
                 fileIds[i] = i;
                 fileNameHashes[i] = nameHash;
             }
@@ -80,7 +77,7 @@ export class Archive {
             fileCount = 1;
             fileIds = new Int32Array(fileCount);
             fileNameHashes = new Int32Array(fileCount);
-            files.set(0, new ArchiveFile(0, id, decompressed));
+            files.push(decompressed);
         }
 
         const lastFileId = fileCount - 1;
@@ -104,9 +101,9 @@ export class Archive {
         fileNameHashes: Int32Array,
         buffer: ByteBuffer,
     ): Archive {
-        const files = new Map<number, ArchiveFile>();
+        let files: Int8Array[] | ArchiveData;
         if (fileCount === 1) {
-            files.set(lastFileId, new ArchiveFile(lastFileId, id, buffer.data));
+            files = [buffer.data];
         } else {
             buffer.offset = buffer.length - 1;
             const chunks = buffer.readUnsignedByte();
@@ -124,26 +121,30 @@ export class Archive {
                 }
             }
 
-            const fileData = new Array<ByteBuffer>(fileCount);
+            // The files one after the other in one array, rather than an array
+            // each: a config group has thousands of them
+            const offsets = new Int32Array(fileCount + 1);
             for (let fileIdx = 0; fileIdx < fileCount; fileIdx++) {
-                fileData[fileIdx] = new ByteBuffer(fileSizes[fileIdx]);
+                offsets[fileIdx + 1] = offsets[fileIdx] + fileSizes[fileIdx];
             }
-
-            buffer.offset = 0;
-
-            for (let chunk = 0; chunk < chunks; chunk++) {
-                for (let fileIdx = 0; fileIdx < fileCount; fileIdx++) {
-                    const chunkSize = chunkSizes[chunk * fileCount + fileIdx];
-                    const bytes = buffer.readBytes(chunkSize);
-                    fileData[fileIdx].writeBytes(bytes);
+            const total = offsets[fileCount];
+            let data: Int8Array;
+            if (chunks === 1) {
+                // Already in that order
+                data = buffer.data.subarray(0, total);
+            } else {
+                data = new Int8Array(total);
+                const written = offsets.slice(0, fileCount);
+                buffer.offset = 0;
+                for (let chunk = 0; chunk < chunks; chunk++) {
+                    for (let fileIdx = 0; fileIdx < fileCount; fileIdx++) {
+                        const chunkSize = chunkSizes[chunk * fileCount + fileIdx];
+                        data.set(buffer.readBytes(chunkSize), written[fileIdx]);
+                        written[fileIdx] += chunkSize;
+                    }
                 }
             }
-
-            for (let fileIdx = 0; fileIdx < fileCount; fileIdx++) {
-                const fileId = fileIds[fileIdx];
-                const data = fileData[fileIdx].data;
-                files.set(fileId, new ArchiveFile(fileId, id, data));
-            }
+            files = { data, offsets };
         }
         return new Archive(
             StringUtil.hashDjb2,
@@ -156,6 +157,11 @@ export class Archive {
         );
     }
 
+    // Whether file i's id is i, for all of them
+    private readonly denseIds: boolean;
+    // File name hash to file id, made the first time a file's asked for by name
+    private fileNameHashIdMap?: Map<number, number>;
+
     constructor(
         private readonly _hashFunction: HashFunction,
         readonly id: number,
@@ -163,24 +169,72 @@ export class Archive {
         readonly fileCount: number,
         readonly fileIds: Int32Array,
         readonly fileNameHashes: Int32Array,
-        private readonly _files: Map<number, ArchiveFile>,
-        private readonly _fileNameHashIdMap: Map<number, number> = new Map(),
+        // Each file's data, in the order of fileIds
+        private readonly fileData: Int8Array[] | ArchiveData,
     ) {
-        if (fileNameHashes) {
-            for (let i = 0; i < this.fileIds.length; i++) {
-                this._fileNameHashIdMap.set(this.fileNameHashes[i], this.fileIds[i]);
+        let dense = true;
+        for (let i = 0; i < fileIds.length && dense; i++) {
+            dense = fileIds[i] === i;
+        }
+        this.denseIds = dense;
+    }
+
+    private indexOf(id: number): number {
+        const count = Array.isArray(this.fileData)
+            ? this.fileData.length
+            : this.fileData.offsets.length - 1;
+        if (count === 1) {
+            // A group of one file can be listed under its id alone
+            return id === this.lastFileId || id === this.fileIds[0] ? 0 : -1;
+        }
+        if (this.denseIds) {
+            return id >= 0 && id < count ? id : -1;
+        }
+        const ids = this.fileIds;
+        let low = 0;
+        let high = count - 1;
+        while (low <= high) {
+            const mid = (low + high) >>> 1;
+            const value = ids[mid];
+            if (value < id) {
+                low = mid + 1;
+            } else if (value > id) {
+                high = mid - 1;
+            } else {
+                return mid;
             }
         }
+        return -1;
+    }
+
+    private getData(i: number): Int8Array {
+        const files = this.fileData;
+        if (Array.isArray(files)) {
+            return files[i];
+        }
+        return files.data.subarray(files.offsets[i], files.offsets[i + 1]);
     }
 
     getFile(id: number): ArchiveFile | undefined {
-        return this._files.get(id);
+        const i = this.indexOf(id);
+        if (i === -1) {
+            return undefined;
+        }
+        return new ArchiveFile(id, this.id, this.getData(i));
     }
 
     getFileId(name: string): number {
+        if (!this.fileNameHashIdMap) {
+            this.fileNameHashIdMap = new Map();
+            if (this.fileNameHashes) {
+                for (let i = 0; i < this.fileIds.length; i++) {
+                    this.fileNameHashIdMap.set(this.fileNameHashes[i], this.fileIds[i]);
+                }
+            }
+        }
         const hash = this._hashFunction(name);
 
-        return this._fileNameHashIdMap.get(hash) ?? -1;
+        return this.fileNameHashIdMap.get(hash) ?? -1;
     }
 
     getFileNamed(name: string): ArchiveFile | undefined {
@@ -192,6 +246,17 @@ export class Archive {
     }
 
     get files(): ArchiveFile[] {
-        return Array.from(this._files.values());
+        const count = Array.isArray(this.fileData)
+            ? this.fileData.length
+            : this.fileData.offsets.length - 1;
+        const files = new Array<ArchiveFile>(count);
+        for (let i = 0; i < count; i++) {
+            files[i] = new ArchiveFile(
+                this.fileIds[i] ?? this.lastFileId,
+                this.id,
+                this.getData(i),
+            );
+        }
+        return files;
     }
 }

@@ -70,7 +70,8 @@ void main() {
     v_texId = vertex.textureId;
     v_alphaCutOff = material.alphaCutOff;
 
-    int dataIndex = (DRAW_ID + u_instanceOffset) * 2;
+    // Without multi draw, a run of instances of one frame is one instanced draw
+    int dataIndex = (DRAW_ID + gl_InstanceID + u_instanceOffset) * 2;
     vec4 data0 = fetchActorData(dataIndex);
     vec4 data1 = fetchActorData(dataIndex + 1);
 

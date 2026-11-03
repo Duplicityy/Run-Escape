@@ -1,8 +1,8 @@
-import { CSSProperties, useCallback, useEffect, useRef } from "react";
+import { CSSProperties, memo, useCallback, useEffect, useRef } from "react";
 
 import { isCoarsePointer } from "../../util/DeviceUtil";
 import { GameClient } from "../client/GameClient";
-import { HudView, UiSnapshot } from "../client/GameStore";
+import { InventorySlotView, UiSnapshot } from "../client/GameStore";
 import { STICK_RADIUS, SharedTaps } from "../client/GameTouch";
 import { ItemIcon } from "./ItemIcon";
 import "./Mobile.css";
@@ -84,13 +84,21 @@ export function enterFullscreen(): void {
         .catch(() => {});
 }
 
-type Props = { hud: HudView; overlay: UiSnapshot["overlay"]; client: GameClient };
+type Props = {
+    inventory: InventorySlotView[];
+    overlay: UiSnapshot["overlay"];
+    client: GameClient;
+};
 
 // What a run needs on a touch screen. The whole screen is the stick, with the
 // buttons on top. Fingers go by pointer events on the zone, so the thumb stays
 // on the stick while another finger taps (a click wouldn't fire for that one,
 // which is why the buttons act on the press too).
-export function TouchControls({ hud, overlay, client }: Props): JSX.Element {
+export const TouchControls = memo(function TouchControls({
+    inventory,
+    overlay,
+    client,
+}: Props): JSX.Element {
     const base = useRef<HTMLDivElement>(null);
     const knob = useRef<HTMLDivElement>(null);
     const stick = client.input.stick;
@@ -175,7 +183,7 @@ export function TouchControls({ hud, overlay, client }: Props): JSX.Element {
                 }}
             />
             <div className="ui-touch-items">
-                {hud.inventory.map((slot, i) => (
+                {inventory.map((slot, i) => (
                     <div key={i} className="ui-touch-item-place">
                         {slot && (
                             <button
@@ -196,7 +204,7 @@ export function TouchControls({ hud, overlay, client }: Props): JSX.Element {
             </div>
         </div>
     );
-}
+});
 
 // Shown by Mobile.css while a phone's held upright: the screens are laid out for
 // a wide window, and a run shows too little to either side to be played

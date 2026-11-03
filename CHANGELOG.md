@@ -5,8 +5,22 @@ the version in the corner).
 
 ## Unreleased
 
+### Changed
+
+- Most evolutions gain less damage over their maxed base weapons, while keeping an upgrade at every level.
+- Endless runs: from about round 4, levels come about a dozen a round rather than thirty, so a
+  weapon you pour everything into keeps up with the rounds rather than outgrowing them, and a long
+  run gets harder instead of its numbers running away. The first rounds level as before.
+
 ### Fixed
 
+- Weapon cards and tooltips include fixed damage adjustments, including venom.
+- Weaker poison and burning ground no longer take ownership of a stronger lingering effect.
+- Co-op: a guest who misses some of the host's updates gets them again, rather than freezing.
+  With a relay that supports it, a dropped connection reconnects within a few seconds and the run
+  carries on.
+- Huge numbers stay short: the damage panel, stats and hitsplats go on past trillions to Qa,
+  Qi, Sx and on, then powers of ten, rather than growing digit by digit.
 - In very long endless runs, bones no longer stop dropping once coins and food have built up
   around the map.
 

@@ -120,12 +120,8 @@ export function createWorkerState(
         cache.xteas,
     );
 
-    const mapImageRenderer = new MapImageRenderer(
-        textureLoader,
-        locTypeLoader,
-        loaderFactory.getMapScenes(),
-        loaderFactory.getMapFunctions(),
-    );
+    // Only for minimap images, and its sprites are loaded with it
+    let mapImageRenderer: MapImageRenderer | undefined;
 
     return {
         cache,
@@ -151,7 +147,17 @@ export function createWorkerState(
 
         varManager,
 
-        mapImageRenderer,
+        get mapImageRenderer(): MapImageRenderer {
+            if (!mapImageRenderer) {
+                mapImageRenderer = new MapImageRenderer(
+                    textureLoader,
+                    locTypeLoader,
+                    loaderFactory.getMapScenes(),
+                    loaderFactory.getMapFunctions(),
+                );
+            }
+            return mapImageRenderer;
+        },
         mapImageCache,
 
         objSpawns,

@@ -5,7 +5,7 @@ import {
     type RegionData,
 } from "../../../mapviewer/worker/RegionData";
 import { CollisionFlag } from "../../../rs/pathfinder/flag/CollisionFlag";
-import { canStep } from "./FlowField";
+import { Steps, canStep } from "./FlowField";
 
 // Tiles nothing can stand on: objects (trees, rocks, furniture), blocked floor
 // (water, the edge of the world) and blocking floor decorations.
@@ -54,6 +54,8 @@ export class ArenaGrid {
     // What blocks on each solid tile: a box, x0, y0, x1, y1 in tiles from the
     // tile's south-west corner
     private readonly boxes: Float32Array;
+    // Which steps out of each tile are allowed, for finding the way
+    readonly steps: Steps;
 
     constructor(readonly data: RegionData) {
         this.baseX = data.baseX;
@@ -97,6 +99,7 @@ export class ArenaGrid {
                 }
             }
         }
+        this.steps = new Steps(this, this.baseX, this.baseY, this.sizeX, this.sizeY);
     }
 
     // The whole tile, but for objects a little less on each side that has open

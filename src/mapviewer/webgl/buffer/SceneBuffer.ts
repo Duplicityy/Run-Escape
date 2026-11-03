@@ -82,6 +82,10 @@ export class SceneBuffer {
 
     usedTextureIds = new Set<number>();
 
+    // Square-local model units (x0, z0, x1, z1): geometry placed in the scene
+    // that's wholly outside isn't added (SdMapLoaderInput.keepArea)
+    keepBox?: number[];
+
     constructor(
         readonly textureLoader: TextureLoader,
         readonly textureIdIndexMap: Map<number, number>,
@@ -91,6 +95,16 @@ export class SceneBuffer {
         readonly grid?: CullGrid,
     ) {
         this.vertexBuf = new VertexBuffer(initVertexCount);
+    }
+
+    // Whether anything in this stretch of the square (model units) is kept
+    keeps(minX: number, minZ: number, maxX: number, maxZ: number): boolean {
+        const box = this.keepBox;
+        return !box || (maxX >= box[0] && minX <= box[2] && maxZ >= box[1] && minZ <= box[3]);
+    }
+
+    private keepsTile(tileX: number, tileY: number): boolean {
+        return this.keeps(tileX * 128, tileY * 128, tileX * 128 + 128, tileY * 128 + 128);
     }
 
     vertexCount(): number {
@@ -153,7 +167,8 @@ export class SceneBuffer {
                             const tile = scene.tiles[level][x][y];
                             if (
                                 !tile ||
-                                !isTileDrawn(scene, tile.minLevel, level, x, y, maxLevel)
+                                !isTileDrawn(scene, tile.minLevel, level, x, y, maxLevel) ||
+                                !this.keepsTile(x - borderSize, y - borderSize)
                             ) {
                                 continue;
                             }
@@ -212,7 +227,11 @@ export class SceneBuffer {
             for (let x = startX; x < endX; x++) {
                 for (let y = startY; y < endY; y++) {
                     const tile = scene.tiles[level][x][y];
-                    if (!tile || !isTileDrawn(scene, tile.minLevel, level, x, y, maxLevel)) {
+                    if (
+                        !tile ||
+                        !isTileDrawn(scene, tile.minLevel, level, x, y, maxLevel) ||
+                        !this.keepsTile(x - borderSize, y - borderSize)
+                    ) {
                         continue;
                     }
                     this.addTerrainTile(tile, vertexOffset, vertexOffset);
@@ -265,7 +284,19 @@ export class SceneBuffer {
         const locsAnimated: LocAnimatedData[] = [];
 
         for (const group of groups) {
+            const bounds = group.anim.bounds;
             for (const loc of group.locs) {
+                if (
+                    bounds &&
+                    !this.keeps(
+                        loc.sceneX + bounds.minX,
+                        loc.sceneZ + bounds.minZ,
+                        loc.sceneX + bounds.maxX,
+                        loc.sceneZ + bounds.maxZ,
+                    )
+                ) {
+                    continue;
+                }
                 locsAnimated.push(this.addLocAnimated(group, loc));
             }
         }
@@ -646,6 +677,20 @@ export class SceneBuffer {
             const vza = sceneZ + verticesZ[fa];
             const vzb = sceneZ + verticesZ[fb];
             const vzc = sceneZ + verticesZ[fc];
+
+            // Placed in the scene, a triangle can be wholly outside what's kept
+            if (
+                offset &&
+                this.keepBox &&
+                !this.keeps(
+                    Math.min(vxa, vxb, vxc),
+                    Math.min(vza, vzb, vzc),
+                    Math.max(vxa, vxb, vxc),
+                    Math.max(vza, vzb, vzc),
+                )
+            ) {
+                continue;
+            }
 
             if (textureIndex !== -1) {
                 this.usedTextureIds.add(textureId);

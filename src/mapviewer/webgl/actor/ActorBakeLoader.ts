@@ -14,6 +14,7 @@ import { RenderDataLoader, RenderDataResult } from "../../worker/RenderDataLoade
 import { WorkerState } from "../../worker/RenderDataWorker";
 import { SceneBuffer } from "../buffer/SceneBuffer";
 import { createTextureIdIndexMap, getSdTextureIds } from "../loader/TextureIndex";
+import { Segments } from "./ActorBakeSegments";
 import {
     ActorBakeInput,
     ActorBakeResult,
@@ -30,6 +31,16 @@ type ModelSource = (seqId: number, frame: number) => Model | undefined;
 // big for a phone: Sol Heredit alone was over 100MB. One pose in every three
 // (60ms) is as smooth as the keyframed animations, and a third of the memory.
 const SKELETAL_TICK_STEP = 3;
+
+// A buffer's first `length` bytes, in a buffer of their own: the vertex buffer
+// grows by doubling, and the rest of it shouldn't go to the main thread
+function exactBytes(bytes: Uint8Array, length: number): Uint8Array {
+    const buffer = bytes.buffer as ArrayBuffer & { transfer?: (length: number) => ArrayBuffer };
+    if (buffer.transfer) {
+        return new Uint8Array(buffer.transfer(length));
+    }
+    return bytes.slice(0, length);
+}
 
 function getModelBounds(model: Model): { height: number; radius: number } {
     let height = 0;
@@ -65,7 +76,7 @@ function getModelReach(model: Model): number {
 
 function bakeAnim(
     state: WorkerState,
-    sceneBuf: SceneBuffer,
+    segments: Segments,
     getModel: ModelSource,
     seqId: number,
 ): { anim: BakedAnim; firstFrame: Model | undefined; reach: number } {
@@ -85,6 +96,7 @@ function bakeAnim(
     frameCount = Math.max(frameCount, 1);
 
     const ranges = new Int32Array(frameCount * 4);
+    const frameSegments = new Uint16Array(frameCount);
     const frameLengths = new Uint16Array(frameCount);
     let firstFrame: Model | undefined;
     let reach = 0;
@@ -97,15 +109,8 @@ function bakeAnim(
                 firstFrame = model;
             }
             reach = Math.max(reach, getModelReach(model));
-            // Posed vertices are rarely shared between frames, so don't let the
-            // dedupe map grow over the whole bake.
-            sceneBuf.vertexBuf.vertexIndices.clear();
-            const opaque = sceneBuf.addModelAnimFrame(model, false);
-            const alpha = sceneBuf.addModelAnimFrame(model, true);
-            ranges[i * 4] = opaque[0];
-            ranges[i * 4 + 1] = opaque[1];
-            ranges[i * 4 + 2] = alpha[0];
-            ranges[i * 4 + 3] = alpha[1];
+            ranges.set(segments.addFrame(model, frameCount - i), i * 4);
+            frameSegments[i] = segments.current;
         }
         let length = 1;
         if (skeletalTicks > 0) {
@@ -120,6 +125,7 @@ function bakeAnim(
         anim: {
             seqId,
             ranges,
+            segments: frameSegments,
             frameLengths,
             looping: seqType ? seqType.looping || seqType.frameStep !== -1 : true,
         },
@@ -130,7 +136,7 @@ function bakeAnim(
 
 function bakeSet(
     state: WorkerState,
-    sceneBuf: SceneBuffer,
+    segments: Segments,
     key: string,
     getModel: ModelSource,
     seqIds: number[],
@@ -139,7 +145,7 @@ function bakeSet(
     let bounds = { height: 0, radius: 0 };
     let setReach = 0;
     for (const seqId of seqIds.length > 0 ? seqIds : [-1]) {
-        const { anim, firstFrame, reach } = bakeAnim(state, sceneBuf, getModel, seqId);
+        const { anim, firstFrame, reach } = bakeAnim(state, segments, getModel, seqId);
         if (anims.length === 0 && firstFrame) {
             bounds = getModelBounds(firstFrame);
         }
@@ -203,6 +209,7 @@ export class ActorBakeLoader implements RenderDataLoader<ActorBakeInput, ActorBa
         const textureIdIndexMap = createTextureIdIndexMap(getSdTextureIds(textureLoader));
 
         const sceneBuf = new SceneBuffer(textureLoader, textureIdIndexMap, 50000);
+        const segments = new Segments(sceneBuf);
 
         const extra = this.getExtraLoaders(state);
 
@@ -219,7 +226,7 @@ export class ActorBakeLoader implements RenderDataLoader<ActorBakeInput, ActorBa
                               ? npcType.walkSeqId
                               : id,
                     );
-                    const set = bakeSet(state, sceneBuf, request.key, getModel, seqIds);
+                    const set = bakeSet(state, segments, request.key, getModel, seqIds);
                     // Found under the ids they were asked for
                     set.anims.forEach((anim, i) => (anim.seqId = request.seqIds[i] ?? anim.seqId));
                     sets.push(set);
@@ -229,7 +236,7 @@ export class ActorBakeLoader implements RenderDataLoader<ActorBakeInput, ActorBa
                     const appearance = request.appearance;
                     const getModel: ModelSource = (seqId, frame) =>
                         extra.playerModelLoader.getModel(appearance, seqId, frame);
-                    sets.push(bakeSet(state, sceneBuf, request.key, getModel, request.seqIds));
+                    sets.push(bakeSet(state, segments, request.key, getModel, request.seqIds));
                     break;
                 }
                 case "spotanim": {
@@ -237,14 +244,14 @@ export class ActorBakeLoader implements RenderDataLoader<ActorBakeInput, ActorBa
                     const getModel: ModelSource = (_seqId, frame) =>
                         extra.spotAnimModelLoader.getModel(spotAnim, frame);
                     sets.push(
-                        bakeSet(state, sceneBuf, request.key, getModel, [spotAnim.sequenceId]),
+                        bakeSet(state, segments, request.key, getModel, [spotAnim.sequenceId]),
                     );
                     break;
                 }
                 case "obj": {
                     const { objId, count } = request;
                     const getModel: ModelSource = () => state.objModelLoader.getModel(objId, count);
-                    sets.push(bakeSet(state, sceneBuf, request.key, getModel, []));
+                    sets.push(bakeSet(state, segments, request.key, getModel, []));
                     break;
                 }
                 case "loc": {
@@ -277,7 +284,7 @@ export class ActorBakeLoader implements RenderDataLoader<ActorBakeInput, ActorBa
                         return model;
                     };
                     const seqIds = request.animated ? [locType.seqId] : [];
-                    sets.push(bakeSet(state, sceneBuf, request.key, getModel, seqIds));
+                    sets.push(bakeSet(state, segments, request.key, getModel, seqIds));
                     break;
                 }
             }
@@ -285,8 +292,9 @@ export class ActorBakeLoader implements RenderDataLoader<ActorBakeInput, ActorBa
         extra.playerModelLoader.clearCache();
         extra.spotAnimModelLoader.clearCache();
 
-        const vertices = sceneBuf.vertexBuf.byteArray();
-        const indices = new Int32Array(sceneBuf.indices);
+        const vertexBuf = sceneBuf.vertexBuf;
+        const vertices = exactBytes(vertexBuf.bytes, vertexBuf.byteOffset());
+        const { indices, segmentStarts } = segments.finish(sets);
 
         const loadedTextures = new Map<number, Int32Array>();
         for (const textureId of sceneBuf.usedTextureIds) {
@@ -303,16 +311,21 @@ export class ActorBakeLoader implements RenderDataLoader<ActorBakeInput, ActorBa
         const transferables: Transferable[] = [
             vertices.buffer,
             indices.buffer,
+            segmentStarts.buffer,
             ...Array.from(loadedTextures.values()).map((pixels) => pixels.buffer),
         ];
         for (const set of sets) {
             for (const anim of set.anims) {
-                transferables.push(anim.ranges.buffer, anim.frameLengths.buffer);
+                transferables.push(
+                    anim.ranges.buffer,
+                    anim.segments.buffer,
+                    anim.frameLengths.buffer,
+                );
             }
         }
 
         return {
-            data: { vertices, indices, sets, loadedTextures },
+            data: { vertices, indices, segmentStarts, sets, loadedTextures },
             transferables,
         };
     }
