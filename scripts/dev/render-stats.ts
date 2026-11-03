@@ -13,16 +13,21 @@
 // Run it through a memory cap on a small machine: a big map is a few hundred MB.
 import { mat4, vec3 } from "gl-matrix";
 
-import { GameAssets } from "../../src/game/client/GameAssets";
+import { GameAssets, PLAYER_SEQS, getCharacterAppearance } from "../../src/game/client/GameAssets";
+import { CHARACTERS } from "../../src/game/content/characters";
 import { ENEMIES } from "../../src/game/content/enemies";
 import { getMapEnemies } from "../../src/game/content/mapEnemies";
 import { ALL_MAPS, getArenaRegion } from "../../src/game/content/maps";
+import { getPlayerStance } from "../../src/game/content/stances";
+import { getWeapon } from "../../src/game/content/weapons";
 import { Frustum } from "../../src/mapviewer/Frustum";
 import { ActorBakeLoader } from "../../src/mapviewer/webgl/actor/ActorBakeLoader";
+import { BakeRequest } from "../../src/mapviewer/webgl/actor/ActorBakeTypes";
 import { SdMapData } from "../../src/mapviewer/webgl/loader/SdMapData";
 import { SdMapDataLoader } from "../../src/mapviewer/webgl/loader/SdMapDataLoader";
 import { clearWorkerStateCaches, createWorkerState } from "../../src/mapviewer/worker/WorkerState";
 import { DEGREES_TO_RADIANS, RS_TO_RADIANS } from "../../src/rs/MathConstants";
+import { EquipSlot } from "../../src/rs/model/player/PlayerModelLoader";
 import { Scene } from "../../src/rs/scene/Scene";
 import { loadCache, loadCacheInfos } from "../cache/load-util";
 
@@ -676,23 +681,33 @@ async function reportMap(mapId: string, state: ReturnType<typeof createWorkerSta
 
 async function reportBake(state: ReturnType<typeof createWorkerState>): Promise<void> {
     const loader = new ActorBakeLoader();
-    const rows: { key: string; bytes: number; kind: string }[] = [];
-    const requests = [...GameAssets.getBaseRequests(), ...GameAssets.getEnemyRequests(ENEMIES)];
+    const rows: { key: string; bytes: number; indexBytes: number; kind: string }[] = [];
+    // Each enemy model once, as the game bakes them (merged), and the player
+    // with one weapon's swing (a run bakes the hero's weapons')
+    const enemies = GameAssets.mergeRequests(GameAssets.getEnemyRequests(ENEMIES));
+    const requests = [
+        ...GameAssets.getBaseRequests(),
+        ...enemies.requests,
+        ...getPlayerBakeRequests(),
+    ];
     for (const request of requests) {
         const result = await loader.load(state, {
             requests: [request],
             loadedTextureIds: new Set<number>(),
         });
         clearWorkerStateCaches(state);
+        const indexBytes = result.data.indices.byteLength;
         rows.push({
             key: request.key,
             kind: request.kind,
-            bytes: result.data.vertices.byteLength + result.data.indices.byteLength,
+            bytes: result.data.vertices.byteLength + indexBytes,
+            indexBytes,
         });
     }
     rows.sort((a, b) => b.bytes - a.bytes);
     const total = rows.reduce((n, r) => n + r.bytes, 0);
-    console.log(`\nbase bake: ${rows.length} requests, ${mb(total)}`);
+    const indexBytes = rows.reduce((n, r) => n + r.indexBytes, 0);
+    console.log(`\nevery bake: ${rows.length} requests, ${mb(total)} (indices ${mb(indexBytes)})`);
     const kinds = new Map<string, number>();
     for (const row of rows) {
         kinds.set(row.kind, (kinds.get(row.kind) ?? 0) + row.bytes);
@@ -702,18 +717,25 @@ async function reportBake(state: ReturnType<typeof createWorkerState>): Promise<
         console.log(`  ${mb(row.bytes).padStart(10)}  ${row.key}`);
     }
     const bytesByKey = new Map(rows.map((row) => [row.key, row.bytes]));
-    const common = rows
-        .filter((row) => !row.key.startsWith("npc:"))
-        .reduce((n, r) => n + r.bytes, 0);
-    console.log(`\nnot enemies: ${mb(common)}; each map's enemies:`);
+    const sum = (keys: string[]) => keys.reduce((n, key) => n + (bytesByKey.get(key) ?? 0), 0);
+    const base = sum(GameAssets.getBaseRequests().map((r) => r.key));
+    console.log(`\nbase bake: ${mb(base)}; a player: ${mb(sum(["player"]))}; each map's enemies:`);
     for (const map of ALL_MAPS) {
-        const enemies = getMapEnemies(map);
-        let bytes = 0;
-        for (const { key } of GameAssets.getEnemyRequests(enemies)) {
-            bytes += bytesByKey.get(key) ?? 0;
-        }
-        console.log(`  ${mb(bytes).padStart(10)}  ${map.id} (${enemies.length} enemies)`);
+        const mapEnemies = getMapEnemies(map);
+        const { requests } = GameAssets.mergeRequests(GameAssets.getEnemyRequests(mapEnemies));
+        const bytes = sum(requests.map((r) => r.key));
+        console.log(`  ${mb(bytes).padStart(10)}  ${map.id} (${mapEnemies.length} enemies)`);
     }
+}
+
+// The first adventurer, with their starting weapon, as a run starts
+function getPlayerBakeRequests(): BakeRequest[] {
+    const character = CHARACTERS[0];
+    const appearance = getCharacterAppearance(character.id);
+    const weapon = getWeapon(character.startingWeapon);
+    const stance = getPlayerStance(appearance.equipment[EquipSlot.WEAPON]) ?? PLAYER_SEQS;
+    const seqIds = [PLAYER_SEQS.walk, stance.idle, stance.run, PLAYER_SEQS.death, weapon.playerSeq];
+    return [{ kind: "player", key: "player", appearance, seqIds }];
 }
 
 async function main(): Promise<void> {

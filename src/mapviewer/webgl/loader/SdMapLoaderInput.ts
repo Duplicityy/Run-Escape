@@ -22,5 +22,10 @@ export type SdMapLoaderInput = {
     // Leaves out the minimap image of the square, which only the viewer shows
     skipMinimap?: boolean;
 
+    // World tiles (x0, z0, x1, z1): geometry wholly outside is left out of the
+    // square. The game's play area grown past its fade (GameWebGLRenderer), as
+    // nothing out there can be seen. Unset keeps everything, as the viewer does.
+    keepArea?: number[];
+
     loadedTextureIds: Set<number>;
 };

@@ -287,6 +287,8 @@ export type Enemy = {
     dead: boolean;
     // Tick it died, for the death animation and fade
     deathTick: number;
+    // Which death of the run's it was (Sim.enemyDeaths), 0 while alive
+    deathSeq: number;
     xp: number;
     // Takes no damage until this tick (EnemyDef.shield); 0 once it's down
     shieldEnd: number;

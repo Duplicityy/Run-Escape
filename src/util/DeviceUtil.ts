@@ -39,7 +39,11 @@ export const isCoarsePointer = !!window.matchMedia?.("(pointer: coarse)").matche
 // Phones report 3 or so, and filling that many pixels costs far more than it
 // shows on a screen this small
 const MAX_TOUCH_PIXEL_RATIO = 1.5;
+// A desktop at 250% (a 4K laptop) would fill 9 million pixels a frame, often on
+// a laptop's own GPU, for little that shows over twice a CSS pixel
+const MAX_PIXEL_RATIO = 2;
 
-export const pixelRatio = isCoarsePointer
-    ? Math.min(window.devicePixelRatio || 1, MAX_TOUCH_PIXEL_RATIO)
-    : window.devicePixelRatio || 1;
+export const pixelRatio = Math.min(
+    window.devicePixelRatio || 1,
+    isCoarsePointer ? MAX_TOUCH_PIXEL_RATIO : MAX_PIXEL_RATIO,
+);

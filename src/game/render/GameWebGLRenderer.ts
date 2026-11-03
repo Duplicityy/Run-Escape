@@ -1,3 +1,4 @@
+import { vec4 } from "gl-matrix";
 import { Program, Texture } from "picogl";
 
 import { Camera } from "../../mapviewer/Camera";
@@ -26,6 +27,20 @@ export interface GameFrameHandler {
 const CULL_CELL_SIZE = 8;
 const CULL_CELL_SIZE_NO_MULTI_DRAW = 32;
 
+// Tiles past the play area over which the world fades into the sky
+// (PLAY_AREA_FADE in fog.glsl)
+const PLAY_AREA_FADE = 6;
+// Map squares keep this much more of the world than they need, to be safe
+const KEEP_MARGIN = 2;
+
+// How far past the play area the camera can get (tiles): behind the player,
+// which is south (a run's camera faces north), and any way round (the title
+// screen's spins)
+export type CameraReach = {
+    behind: number;
+    around: number;
+};
+
 // The map viewer's WebGL renderer with the viewer's own controls, hover menus
 // and map square NPCs taken out, and the game's actors drawn in the NPC passes.
 export class GameWebGLRenderer extends WebGLMapViewerRenderer {
@@ -39,6 +54,8 @@ export class GameWebGLRenderer extends WebGLMapViewerRenderer {
     actorProgram?: Program;
     actorSilhouetteProgram?: Program;
     actorRenderer?: ActorRenderer;
+
+    private readonly nextKeepArea = vec4.create();
 
     private readonly actorRendererReady: Promise<ActorRenderer>;
     private resolveActorRenderer!: (renderer: ActorRenderer) => void;
@@ -72,6 +89,27 @@ export class GameWebGLRenderer extends WebGLMapViewerRenderer {
             this.maxLevel = plane;
             this.clearMaps();
         }
+    }
+
+    // Where the world fades out (world tiles), and with it how much of the world
+    // the map squares keep. A ray from the camera only gets further from the play
+    // area once it's past it, so past the fade, and past where the camera can be,
+    // nothing's in front of anything but the sky: that's left out of the squares,
+    // and a square that's all out there isn't loaded.
+    setPlayArea(x0: number, y0: number, x1: number, y1: number, reach: CameraReach): void {
+        const playArea = this.playArea;
+        playArea[0] = x0;
+        playArea[1] = y0;
+        playArea[2] = x1;
+        playArea[3] = y1;
+        const side = Math.ceil(Math.max(PLAY_AREA_FADE, reach.around) + KEEP_MARGIN);
+        const behind = Math.max(side, Math.ceil(reach.behind + KEEP_MARGIN));
+        const keep = this.nextKeepArea;
+        keep[0] = Math.floor(x0) - side;
+        keep[1] = Math.floor(y0) - behind;
+        keep[2] = Math.ceil(x1) + side;
+        keep[3] = Math.ceil(y1) + side;
+        this.setKeepArea(keep);
     }
 
     // 1 is as the game is; lower is darker. The shader's a power, so the sum's upside
@@ -120,6 +158,19 @@ export class GameWebGLRenderer extends WebGLMapViewerRenderer {
         );
         this.resolveActorRenderer(this.actorRenderer);
         return [...programs, actorProgram, actorSilhouetteProgram];
+    }
+
+    // The browser took the WebGL context away (GameApp). Everything made on it is
+    // gone, so frames only move the game on (a co-op run carries on for the
+    // others) and draw nothing.
+    contextLost = false;
+
+    override render(time: number, deltaTime: number, resized: boolean): void {
+        if (this.contextLost) {
+            this.game?.update(deltaTime, this.mapViewer.camera);
+            return;
+        }
+        super.render(time, deltaTime, resized);
     }
 
     override handleInput(deltaTime: number): void {

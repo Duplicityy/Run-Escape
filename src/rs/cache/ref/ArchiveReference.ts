@@ -1,21 +1,28 @@
 import { ArchiveFileReference } from "./ArchiveFileReference";
 
 export class ArchiveReference {
+    // File id to its index, made the first time a file's looked up
+    private fileIdIndexMap?: Map<number, number>;
+
     constructor(
         readonly id: number,
         readonly nameHash: number,
-        readonly whirlpool: Int8Array,
         readonly crc: number,
         readonly revision: number,
         readonly fileCount: number,
         readonly lastFileId: number,
-        private readonly _fileIdIndexMap: Map<number, number>,
         readonly fileIds: Int32Array,
         readonly fileNameHashes: Int32Array,
     ) {}
 
     getFileReference(id: number): ArchiveFileReference | undefined {
-        const i = this._fileIdIndexMap.get(id);
+        if (!this.fileIdIndexMap) {
+            this.fileIdIndexMap = new Map();
+            for (let i = 0; i < this.fileCount; i++) {
+                this.fileIdIndexMap.set(this.fileIds[i], i);
+            }
+        }
+        const i = this.fileIdIndexMap.get(id);
         if (i === undefined) {
             return undefined;
         }
