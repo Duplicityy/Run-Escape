@@ -59,7 +59,7 @@ the version in the corner).
   and Lil' Zik's looks.
 - Each class's skill page can spend the full gold budget without taking gold from the other pages.
 - Separate Melee, Ranged and Magic skill pages, kept in exported saves, with refunds limited to the selected class.
-- Refund a skill rank with its U-turn button, or right-click on desktop, without resetting the rest.
+- Refund a skill rank with its arrow button, or right-click on desktop, without resetting the rest.
 
 ### Changed
 

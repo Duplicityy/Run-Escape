@@ -1,4 +1,3 @@
-import { Undo2 } from "lucide-react";
 import {
     CSSProperties,
     ReactNode,
@@ -43,7 +42,7 @@ import {
 } from "../content/maps";
 import { RARITIES } from "../content/rarity";
 import { SHOP_UPGRADES } from "../content/shop";
-import { COLLECTION_LOG_OBJ, TITLE_TAB_SPRITES } from "../content/titleIcons";
+import { COLLECTION_LOG_OBJ, REFUND_SPRITE, TITLE_TAB_SPRITES } from "../content/titleIcons";
 import { TROPHY_BY_ID } from "../content/trophies";
 import { CharacterDef, CombatStyle, MapDef } from "../content/types";
 import { MapReward, describeUnlockTask, getMapRewards } from "../content/unlocks";
@@ -1389,12 +1388,18 @@ function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
                                 </button>
                                 {rank > 0 && (
                                     <button
-                                        className="ui-button ui-shop-refund"
+                                        className="ui-shop-refund"
                                         aria-label={`Refund one ${upgrade.name} rank`}
                                         title={`Refund one ${upgrade.name} rank`}
                                         onClick={() => client.refundUpgrade(upgrade.id, style)}
                                     >
-                                        <Undo2 size={18} aria-hidden="true" />
+                                        <span className="ui-shop-refund-icon" aria-hidden="true">
+                                            <ItemIcon
+                                                objId={-1}
+                                                spriteId={REFUND_SPRITE}
+                                                size={21}
+                                            />
+                                        </span>
                                     </button>
                                 )}
                             </div>

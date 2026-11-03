@@ -936,6 +936,21 @@
     width: 28px;
     height: 28px;
     padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+}
+
+/* The sprite is the client's own framed button, so it fills the whole hit area */
+.ui-shop-refund-icon,
+.ui-shop-refund-icon .ui-icon {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.ui-shop-refund:hover .ui-shop-refund-icon {
+    filter: brightness(1.2);
 }
 
 .ui-shop-refund:focus-visible {

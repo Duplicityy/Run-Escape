@@ -1046,7 +1046,8 @@ Save format 10 moves the old shared allocation and its investment into Melee wit
 Ranged and Magic start empty. Export and import preserve all three pages and their refund records.
 Solo and co-op loadouts use the actual adventurer's style, including maps with a forced adventurer;
 changing a co-op adventurer or room map refreshes the transmitted loadout.
-The U-turn button on bought cards refunds the last price in that page's skill list, through
+The arrow button on bought cards (the client's back-arrow sprite,
+`REFUND_SPRITE`) refunds the last price in that page's skill list, through
 `GameClient.persist()`. It is separate from the purchase button and has a larger hit area on coarse
 pointers. Desktop right-clicking does the same; coarse-pointer context menus never refund.
 Unavailable purchases use `aria-disabled` and keep their disabled appearance on hover, without

@@ -510,7 +510,7 @@ version and how to run it.
   the selected class can still spend. Refunding one page never creates extra gold or changes the others.
   A run uses its adventurer's class page, including in co-op. Existing shared skills move to Melee;
   the other pages start empty. All three pages are kept when exporting and importing a save.
-  Click or tap a bought skill's U-turn button to refund one rank, even when maxed, for its purchase
+  Click or tap a bought skill's arrow button to refund one rank, even when maxed, for its purchase
   price. On desktop, right-clicking its card does the same; touch long presses do not refund.
   Older saves without purchase prices split their tracked spending across ranks by base price.
   **Refund all** returns the selected page's remaining investment and resets only that class's skills.
