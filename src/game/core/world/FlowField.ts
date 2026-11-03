@@ -67,11 +67,36 @@ export class Steps {
         private readonly sizeY: number,
     ) {
         this.allowed = new Uint8Array(sizeX * sizeY);
+        // The straight steps, then the diagonals from them: canStep's are the
+        // four straight ones round the corner, and the corner tile not solid
         for (let y = 0; y < sizeY; y++) {
             for (let x = 0; x < sizeX; x++) {
                 let bits = 0;
-                for (let d = 0; d < 8; d++) {
+                for (let d = 0; d < 4; d++) {
                     if (canStep(grid, baseX + x, baseY + y, DIR_X[d], DIR_Y[d])) {
+                        bits |= 1 << d;
+                    }
+                }
+                this.allowed[x + y * sizeX] = bits;
+            }
+        }
+        for (let y = 0; y < sizeY; y++) {
+            for (let x = 0; x < sizeX; x++) {
+                const tileX = baseX + x;
+                const tileY = baseY + y;
+                let bits = this.allowed[x + y * sizeX];
+                for (let d = 4; d < 8; d++) {
+                    const dx = DIR_X[d];
+                    const dy = DIR_Y[d];
+                    const alongX = DIR_INDEX[(dx + 1) * 3 + 1];
+                    const alongY = DIR_INDEX[4 + dy];
+                    if (
+                        !grid.isSolid(tileX + dx, tileY + dy) &&
+                        this.can(tileX, tileY, alongX) &&
+                        this.can(tileX, tileY, alongY) &&
+                        this.can(tileX + dx, tileY, alongY) &&
+                        this.can(tileX, tileY + dy, alongX)
+                    ) {
                         bits |= 1 << d;
                     }
                 }
