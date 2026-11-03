@@ -67,6 +67,9 @@ the version in the corner).
 - Controller support: move with the stick or d-pad, use items with the shoulder buttons and
   triggers, and pick level ups, caskets and menus with the d-pad and A. The hints show your
   controller's buttons, Xbox, PlayStation or Switch.
+- Firemaking, a new skill: up to 3 banishes a run. Banish a weapon or passive on a level up (pick
+  another instead), or a casket's item (it's alched), and it won't be offered again that run.
+  Banishing a set's piece banishes the whole set.
 
 ### Changed
 

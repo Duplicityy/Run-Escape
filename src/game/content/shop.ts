@@ -139,6 +139,18 @@ export const SHOP_UPGRADES: ShopUpgradeDef[] = [
         baseCost: 500,
     },
     {
+        // Burning what you don't want: a level up's weapon or passive, or a
+        // casket's item, never offered again this run
+        id: "firemaking",
+        name: "Firemaking",
+        description: "Banish one weapon, passive or item a run",
+        stat: "banish",
+        perRank: 1,
+        maxRank: 3,
+        // A little dearer than Hunter's reroll
+        baseCost: 600,
+    },
+    {
         id: "ring_of_life",
         name: "Ring of life",
         description: "Get back up once when you die",

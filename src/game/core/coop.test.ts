@@ -9,7 +9,7 @@ import { getWeapon } from "../content/weapons";
 import { Hero, HeroOptions, Sim, SimOptions, TICKS_PER_SECOND } from "./Sim";
 import { Enemy } from "./entities";
 import { fm, usePortableMath } from "./fmath";
-import { applyFrameEvent, syncHash } from "./lockstep";
+import { applyFrameEvent, cleanAction, syncHash } from "./lockstep";
 import { makeGrid } from "./world/testGrid";
 
 function openField(): string[] {
@@ -529,6 +529,25 @@ describe("co-op", () => {
         expect(sim.as(0, () => sim.skip())).toBe(true);
         expect(a.skips).toBe(1);
         expect(sim.coins).toBeLessThan(1000);
+    });
+
+    it("keeps each player's banishes and what they banished their own, over the network too", () => {
+        const sim = createParty(["warrior", "wizard"]);
+        const [a, b] = sim.heroes;
+        a.banishesLeft = 1;
+        b.banishesLeft = 1;
+        sim.xp = 1e4;
+        sim.step();
+        expect(sim.state).toBe("levelUp");
+        b.choices = [{ kind: "newPassive", passiveId: "piety", quality: "common" }, ...b.choices];
+        expect(cleanAction({ kind: "banish", index: 0 })).toEqual({ kind: "banish", index: 0 });
+        expect(cleanAction({ kind: "banish", index: -1 })).toBeUndefined();
+        expect(cleanAction({ kind: "banishChest" })).toEqual({ kind: "banishChest" });
+        applyFrameEvent(sim, { frame: sim.tick, hero: 1, action: { kind: "banish", index: 0 } });
+        expect([...b.banished]).toEqual(["piety"]);
+        expect(b.banishesLeft).toBe(0);
+        expect(a.banished.size).toBe(0);
+        expect(a.banishesLeft).toBe(1);
     });
 
     it("doesn't wait on a player who left", () => {
