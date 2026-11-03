@@ -482,9 +482,9 @@ Enemies are baked when a run starts, for that map (`getMapEnemies`, `GameAssets.
 place of the last map's: they're most of the actors' memory, and a map uses few of them. It goes by
 the enemy ids it finds in the map's waves, events and bosses, and in those enemies, so a new way for
 an enemy to bring on another needs nothing added. An enemy that isn't baked anyway (the console's
-`spawnBoss`) gets baked when it's first drawn, and shows up a moment later. On a touch screen the
-enemies are dropped when a run ends and the menus come back (a big map's are a lot of memory to
-keep on a menu), so playing the map again bakes them again.
+`spawnBoss`) gets baked when it's first drawn, and shows up a moment later. The last map's enemies
+stay on the menus, so playing it again starts at once; a run on another map drops them before
+its own bake starts, so the two lots are never in memory together.
 
 Enemies that would bake the same model are baked once (`GameAssets.mergeRequests`): the same NPC
 with the same first animation (Nex's four phases), the same outfit, the same scenery. The merged

@@ -1385,11 +1385,6 @@ export class GameClient implements GameFrameHandler {
         if (!show) {
             return;
         }
-        // A phone frees the map's enemies on the menus, a lot of memory on a
-        // big map. Playing it again bakes them again.
-        if (isCoarsePointer) {
-            this.assets.dropEnemies();
-        }
         this.store.set({
             screen: wasCoop && this.coop.room ? "coop" : "title",
             overlay: "none",
