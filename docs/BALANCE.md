@@ -6,21 +6,26 @@ weapon levels remain in [`weapons.ts`](../src/game/content/weapons.ts).
 
 ## Current evolution curves
 
-The controlled nerf edits 21 evolutions' authored damage at each level. Its target is half of the
-positive sustained-DPS gain above the strongest maxed parent:
-`target = base DPS + 0.5 × (original evolution DPS − base DPS)`.
+The controlled nerf edits 21 evolutions' authored damage at each level. It targets a 60% reduction
+of the positive sustained-DPS gain above the strongest maxed parent:
+`target = base DPS + 0.4 × (original evolution DPS − base DPS)`.
+
+The target uses the original, unnerfed evolution. Changing the percentage replaces the previous
+target; it doesn't stack another reduction. For example, a 100-DPS parent and 200-DPS original
+evolution give a 140-DPS target, before rounding and the upgrade guards below.
 
 `scripts/game/measure-weapon-dps.ts` measures actual attacks for 60 seconds on seeds 1–3, against
 stationary normal and boss targets at an ideal distance. It includes projectiles, specials,
 follow-ups, venom and burns, with no gear or Might. The selected integer damage meets the target
 in both cases, keeps the primary hit and damage/cooldown above the maxed base, and rises at each
-evolution level. Rounding and those guards can retain more than half of the original bonus.
+evolution level. Rounding and those guards can retain more than 40% of the original bonus.
 Attack patterns, cooldowns, venom values and utility are unchanged.
 
 Flames of Zamorak and Ancient godsword keep their original damage. They already trade sustained
 single-target damage for area, extra boss hits or healing, so this comparison doesn't establish
-safe nerf headroom for them. These are controlled damage curves, not a promise to halve observed
-DPS or every secondary effect. Full-run sweeps are still needed alongside this stationary check.
+safe nerf headroom for them. The 60% target applies to extra DPS above the parent. Rounding,
+upgrade guards and secondary effects mean observed DPS can change by a different percentage.
+Full-run sweeps are still needed alongside this stationary check.
 
 See [the before/after validation](EVOLUTION_BALANCE_RESULTS.md) for the authored curves and full
 progression runs across every shipped map, difficulty and tested party size.
