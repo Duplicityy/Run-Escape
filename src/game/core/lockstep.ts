@@ -12,6 +12,9 @@ export type CoopAction =
     | { kind: "choose"; index: number }
     | { kind: "reroll" }
     | { kind: "skip" }
+    // Banishing a level up's reward (by its place), or the open casket's item
+    | { kind: "banish"; index: number }
+    | { kind: "banishChest" }
     | { kind: "chest"; action: ChestAction }
     | { kind: "item"; index: number }
     // A random event's offer: take one of its options, or walk away
@@ -49,9 +52,11 @@ export function cleanAction(value: unknown): CoopAction | undefined {
         case "choose":
         case "item":
         case "event":
+        case "banish":
             return isIndex && index < MAX_INDEX ? { kind, index } : undefined;
         case "reroll":
         case "skip":
+        case "banishChest":
         case "leaveEvent":
             return { kind };
         case "chest":
@@ -148,7 +153,11 @@ export function applyFrameEvent(sim: Sim, event: FrameEvent): void {
 export function applyAction(sim: Sim, action: CoopAction): boolean {
     switch (action.kind) {
         case "choose":
-            if (!sim.isChoosing() || !sim.choices[action.index]) {
+            if (
+                !sim.isChoosing() ||
+                !sim.choices[action.index] ||
+                sim.isBanishedChoice(action.index)
+            ) {
                 return false;
             }
             sim.choose(action.index);
@@ -157,6 +166,10 @@ export function applyAction(sim: Sim, action: CoopAction): boolean {
             return sim.reroll();
         case "skip":
             return sim.skip();
+        case "banish":
+            return sim.banishChoice(action.index);
+        case "banishChest":
+            return sim.banishChest();
         case "chest":
             if (sim.state !== "chest" || !sim.chest) {
                 return false;

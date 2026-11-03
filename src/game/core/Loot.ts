@@ -207,6 +207,18 @@ function missingSetPieces(
     });
 }
 
+// Items banished this run (by the id a casket gives, before the Armoury's
+// upgrades), and sets: banishing a set's piece banishes all of it
+export type BanishedItems = { items: ReadonlySet<string>; sets: ReadonlySet<string> };
+
+export function isBanished(item: ItemDef, banished: BanishedItems | undefined): boolean {
+    return (
+        !!banished &&
+        (banished.items.has(item.id) ||
+            (item.kind === "gear" && item.set !== undefined && banished.sets.has(item.set)))
+    );
+}
+
 // How likely an item is to be in a casket for this player: never the piece
 // they're already wearing (unless it would come more upgraded), gear that
 // would be an upgrade (or another piece of a set they've started) over a
@@ -265,7 +277,9 @@ function itemWeight(
 // armoury: the pieces upgraded in the Armoury (none when unset).
 // declinedSets: sets the player has turned a piece of down this run (see
 // getStartedSet), which stop being brought (none when unset).
-// party: a co-op run, the only place an extra revive turns up. Returns the item
+// party: a co-op run, the only place an extra revive turns up.
+// banished: items, and sets, banished this run, which never come (none when unset).
+// Returns the item
 // as it's found, before the Armoury's upgrades (see getUpgradedGear).
 export function rollCasketItem(
     rng: Rng,
@@ -279,6 +293,7 @@ export function rollCasketItem(
     armoury?: ArmouryUpgrades,
     declinedSets?: ReadonlySet<string>,
     party = false,
+    banished?: BanishedItems,
 ): string {
     const rarity = rollRarityFrom(CASKETS[tier].rarityWeights, () => rng.next(), luck);
     const index = RARITY_ORDER.indexOf(rarity);
@@ -303,7 +318,9 @@ export function rollCasketItem(
         const pool = CASKET_ITEMS.filter((item) => item.rarity === r);
         const pick = rng.weightedIndex(
             pool.map((item) =>
-                itemWeight(item, gear, poison, exclude, unlocked, upgrades, armoury, party),
+                isBanished(item, banished)
+                    ? 0
+                    : itemWeight(item, gear, poison, exclude, unlocked, upgrades, armoury, party),
             ),
         );
         if (pick !== -1) {

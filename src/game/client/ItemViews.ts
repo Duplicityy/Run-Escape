@@ -131,6 +131,9 @@ export function getChestView(sim: Sim): ChestView | undefined {
         alchCoins: sim.alchValue(item.id, chest.upgrades),
         recommended,
         queued: sim.chests.length - 1,
+        banish: sim.canBanishChest
+            ? { set: getItemSet(getItem(chest.upgradedFrom ?? chest.itemId))?.name }
+            : undefined,
     };
 }
 

@@ -3,6 +3,7 @@ import { CSSProperties, Fragment, useEffect, useRef, useState } from "react";
 import { GameClient } from "../client/GameClient";
 import { ChestView } from "../client/GameStore";
 import { ChestAction } from "../core/Loot";
+import { BanishButton } from "./BanishButton";
 import "./ChestModal.css";
 import { Coins } from "./Coins";
 import { ItemIcon } from "./ItemIcon";
@@ -77,10 +78,10 @@ function getActions(chest: ChestView): ActionButton[] {
     ];
 }
 
-type Props = { chest: ChestView; rerolls: number; client: GameClient };
+type Props = { chest: ChestView; rerolls: number; banishes: number; client: GameClient };
 
 // Mount with key={chest.uid} so every casket gets its own animation
-export function ChestModal({ chest, rerolls, client }: Props): JSX.Element {
+export function ChestModal({ chest, rerolls, banishes, client }: Props): JSX.Element {
     const [phase, setPhase] = useState<Phase>("drop");
     // Bumped by each reroll, so the new item bursts out like the first
     const [rolls, setRolls] = useState(0);
@@ -133,6 +134,12 @@ export function ChestModal({ chest, rerolls, client }: Props): JSX.Element {
     const act = (action: ChestAction) => {
         clearTimers();
         client.resolveChest(action);
+    };
+
+    // A banished item is alched, which is the casket done
+    const banish = () => {
+        clearTimers();
+        client.banish();
     };
 
     // Another item from the same casket (the client plays the burst's sound)
@@ -243,6 +250,8 @@ export function ChestModal({ chest, rerolls, client }: Props): JSX.Element {
                     onAction={act}
                     rerolls={rerolls}
                     onReroll={reroll}
+                    banishes={banishes}
+                    onBanish={banish}
                 />
             )}
             {!opening && <div className="ui-chest-hint">Space or click to open</div>}
@@ -256,12 +265,16 @@ function ChestCard({
     onAction,
     rerolls,
     onReroll,
+    banishes,
+    onBanish,
 }: {
     chest: ChestView;
     actions: ActionButton[];
     onAction: (action: ChestAction) => void;
     rerolls: number;
     onReroll: () => void;
+    banishes: number;
+    onBanish: () => void;
 }): JSX.Element {
     const item = chest.item;
     return (
@@ -350,7 +363,20 @@ function ChestCard({
                     </button>
                 ))}
             </div>
-            <RerollButton rerolls={rerolls} onReroll={onReroll} />
+            <div className="ui-chest-rolls">
+                <RerollButton rerolls={rerolls} onReroll={onReroll} />
+                {chest.banish && (
+                    <BanishButton
+                        label={`Banish (${banishes} left)`}
+                        title={
+                            chest.banish.set
+                                ? `Alch it, and no ${chest.banish.set} pieces in a casket again this run`
+                                : `Alch it, and never see it in a casket again this run`
+                        }
+                        onBanish={onBanish}
+                    />
+                )}
+            </div>
             {chest.queued > 0 && (
                 <div className="ui-subtle ui-chest-queued">
                     {chest.queued} more {chest.queued === 1 ? "casket" : "caskets"} to open

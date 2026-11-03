@@ -99,6 +99,9 @@ export type ChestView = {
     recommended: ChestAction;
     // Caskets waiting after this one
     queued: number;
+    // Whether its item can be banished now (one's left, and it's not worn or
+    // carried), and the set that goes with it, for a set's piece
+    banish?: { set?: string };
 };
 
 // A random event's visitor with something on offer, the run waiting meanwhile
@@ -152,6 +155,8 @@ export type HudView = {
     buffs: BuffView[];
     // Left this run, for a level up's rewards or a casket's item
     rerolls: number;
+    // Banishes left (Firemaking)
+    banishes: number;
     // What skipping the level up's rewards costs, while they can be skipped
     skip?: { cost: number; affordable: boolean };
     // enraged: below half its hitpoints, faster and with its enraged attacks
@@ -239,6 +244,11 @@ export type ChoiceView = {
     stats?: WeaponStatLine[];
     // What it evolves or evolves with; held when the other half's owned
     evolves?: { text: string; held: boolean };
+    // Whether it can be banished now: a new weapon or passive, with a banish
+    // left, and not the last reward left to pick
+    banishable: boolean;
+    // Banished: greyed out, and can't be picked
+    banished: boolean;
 };
 
 // Co-op: a player in the run besides you, for the party frames

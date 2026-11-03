@@ -21,6 +21,7 @@ export type StatKey =
     | "greed" // coin multiplier bonus
     | "revival" // extra lives
     | "reroll" // extra rerolls of a level up's rewards or a casket's item
+    | "banish" // weapons, passives or items that can be kept out of the run
     | "thorns" // damage dealt back to whatever hits you
     | "healChance" // chance a hit heals the player (blood fury)
     // Damage multiplier bonuses for one combat style's weapons only (see
@@ -62,6 +63,7 @@ export function emptyStats(): Stats {
         greed: 0,
         revival: 0,
         reroll: 0,
+        banish: 0,
         thorns: 0,
         healChance: 0,
         meleeMight: 0,

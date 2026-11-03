@@ -5,6 +5,12 @@ the version in the corner).
 
 ## Unreleased
 
+### Added
+
+- Firemaking, a new skill: up to 3 banishes a run. Banish a weapon or passive on a level up (pick
+  another instead), or a casket's item (it's alched), and it won't be offered again that run.
+  Banishing a set's piece banishes the whole set.
+
 ## 0.23.0 - 2026-11-02
 
 ### Added

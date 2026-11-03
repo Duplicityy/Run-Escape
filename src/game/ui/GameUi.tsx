@@ -45,6 +45,7 @@ import {
 } from "../core/save";
 import { MapGeneratorButton } from "../scaperune/MapGeneratorScreen";
 import { ArmouryScreen } from "./ArmouryScreen";
+import { BanishButton } from "./BanishButton";
 import { ChangelogPanel } from "./ChangelogPanel";
 import { ChestModal } from "./ChestModal";
 import { Coins } from "./Coins";
@@ -1171,6 +1172,7 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
                     key={ui.chest.uid}
                     chest={ui.chest}
                     rerolls={hud?.rerolls ?? 0}
+                    banishes={hud?.banishes ?? 0}
                     client={client}
                 />
             )}
@@ -1504,6 +1506,7 @@ function LevelUpModal({ ui, client }: ScreenProps): JSX.Element {
     // to its hilt level
     const hilt = ui.choices.some((choice) => choice.isHilt);
     const spell = ui.choices.some((choice) => choice.isSpell);
+    const banishes = ui.hud?.banishes ?? 0;
     return (
         <div className="ui-modal">
             <div className="ui-panel rs-border rs-background ui-levelup">
@@ -1523,57 +1526,84 @@ function LevelUpModal({ ui, client }: ScreenProps): JSX.Element {
                 </p>
                 <div className="ui-choices">
                     {ui.choices.map((choice, i) => (
-                        <button
+                        <div
                             key={i}
-                            className={
-                                "ui-card ui-choice" +
-                                (choice.isEvolution ? " ui-choice-evolve" : "")
-                            }
-                            style={choice.rarity ? { borderColor: choice.rarity.color } : undefined}
-                            onClick={() => client.choose(i)}
+                            className={"ui-choice-row" + (banishes > 0 ? " ui-has-banish" : "")}
                         >
-                            <span className="ui-choice-key">{i + 1}</span>
-                            <ItemIcon
-                                objId={choice.iconObjId}
-                                spriteId={choice.iconSpriteId}
-                                size={44}
-                            />
-                            <div className="ui-card-body">
-                                <div className="ui-card-title">
-                                    {choice.title}
-                                    {choice.isNew && <span className="ui-tag">New!</span>}
-                                    {choice.isEvolution && (
-                                        <span className="ui-tag ui-tag-evolve">Evolution!</span>
+                            <button
+                                className={
+                                    "ui-card ui-choice" +
+                                    (choice.isEvolution ? " ui-choice-evolve" : "") +
+                                    (choice.banished ? " ui-choice-banished" : "")
+                                }
+                                disabled={choice.banished}
+                                style={
+                                    choice.rarity ? { borderColor: choice.rarity.color } : undefined
+                                }
+                                onClick={() => client.choose(i)}
+                            >
+                                <span className="ui-choice-key">{i + 1}</span>
+                                <ItemIcon
+                                    objId={choice.iconObjId}
+                                    spriteId={choice.iconSpriteId}
+                                    size={44}
+                                />
+                                <div className="ui-card-body">
+                                    <div className="ui-card-title">
+                                        {choice.title}
+                                        {choice.banished ? (
+                                            <span className="ui-tag ui-tag-banished">Banished</span>
+                                        ) : (
+                                            choice.isNew && <span className="ui-tag">New!</span>
+                                        )}
+                                        {choice.isEvolution && (
+                                            <span className="ui-tag ui-tag-evolve">Evolution!</span>
+                                        )}
+                                        {choice.isHilt && (
+                                            <span className="ui-tag ui-tag-evolve">
+                                                {choice.isSpell ? "Spell" : "Hilt"}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="ui-card-text">{choice.text}</div>
+                                    {choice.evolves && (
+                                        <div
+                                            className={
+                                                "ui-card-evolves" +
+                                                (choice.evolves.held ? " ui-card-evolves-held" : "")
+                                            }
+                                        >
+                                            {choice.evolves.text}
+                                        </div>
                                     )}
-                                    {choice.isHilt && (
-                                        <span className="ui-tag ui-tag-evolve">
-                                            {choice.isSpell ? "Spell" : "Hilt"}
-                                        </span>
+                                    {choice.stats && choice.stats.length > 0 && (
+                                        <ChoiceStats stats={choice.stats} />
                                     )}
                                 </div>
-                                <div className="ui-card-text">{choice.text}</div>
-                                {choice.evolves && (
-                                    <div
-                                        className={
-                                            "ui-card-evolves" +
-                                            (choice.evolves.held ? " ui-card-evolves-held" : "")
-                                        }
+                                {choice.rarity && (
+                                    <span
+                                        className="ui-rarity"
+                                        style={{ color: choice.rarity.color }}
                                     >
-                                        {choice.evolves.text}
-                                    </div>
+                                        {choice.rarity.name}
+                                    </span>
                                 )}
-                                {choice.stats && choice.stats.length > 0 && (
-                                    <ChoiceStats stats={choice.stats} />
-                                )}
-                            </div>
-                            {choice.rarity && (
-                                <span className="ui-rarity" style={{ color: choice.rarity.color }}>
-                                    {choice.rarity.name}
-                                </span>
+                            </button>
+                            {/* Over the card's corner, under its rarity: a button can't go in a button */}
+                            {choice.banishable && (
+                                <BanishButton
+                                    title={`Never offered ${choice.title} again this run`}
+                                    onBanish={() => client.banish(i)}
+                                />
                             )}
-                        </button>
+                        </div>
                     ))}
                 </div>
+                {banishes > 0 && (
+                    <div className="ui-subtle ui-banishes">
+                        {banishes} {banishes === 1 ? "banish" : "banishes"} left
+                    </div>
+                )}
                 {!hilt && (
                     <div className="ui-levelup-actions">
                         <RerollButton
