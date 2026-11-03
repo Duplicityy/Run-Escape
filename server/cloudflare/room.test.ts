@@ -4,6 +4,8 @@ import { Room } from "./src/room.mjs";
 let log: string[];
 let saved: any;
 let writes: number;
+// What the room's told the lobby, newest last
+let listings: any[];
 
 class Socket {
     sent: any[] = [];
@@ -22,7 +24,12 @@ const env = {
     MULTIPLAYER_ANY_MAP: "on",
     LOBBY: {
         idFromName: (name: string) => name,
-        get: () => ({ roomUpdate: async () => {}, roomGone: async () => {} }),
+        get: () => ({
+            roomUpdate: async (listing: any) => {
+                listings.push(listing);
+            },
+            roomGone: async () => {},
+        }),
     },
 };
 
@@ -76,6 +83,7 @@ describe("Cloudflare co-op room", () => {
         log = [];
         saved = undefined;
         writes = 0;
+        listings = [];
     });
     afterEach(() => vi.useRealTimers());
 
@@ -120,5 +128,34 @@ describe("Cloudflare co-op room", () => {
         expect(writes - before).toBeLessThanOrEqual(1);
         vi.advanceTimersByTime(2000);
         expect(saved.members[1].ready).toBe(true);
+    });
+
+    it("hides a hidden flag, but not an open room's host's", async () => {
+        const room = await loadRoom();
+        room.code = "ABCDEFGH";
+        const host = enter(room, "host", "create");
+        host.country = "FI";
+        say(room, host, { t: "create", me: { ...me, hideCountry: true } });
+        const guest = enter(room, "guest", "join");
+        guest.country = "SE";
+        say(room, guest, { t: "join", me: { ...me, hideCountry: true } });
+        vi.advanceTimersByTime(2000);
+        const shown = () => {
+            const view = guest.socket.sent.filter((m: any) => m.t === "room").at(-1).room;
+            return view.members.map((m: any) => m.country);
+        };
+        expect(shown()).toEqual([undefined, undefined]);
+        expect(listings.at(-1).country).toBeUndefined();
+
+        say(room, host, { t: "settings", open: true });
+        vi.advanceTimersByTime(2000);
+        expect(shown()).toEqual(["FI", undefined]);
+        expect(listings.at(-1).country).toBe("FI");
+        // Kept after a restart
+        expect(saved.members[0].hideCountry).toBe(true);
+
+        say(room, host, { t: "settings", open: false });
+        vi.advanceTimersByTime(2000);
+        expect(shown()).toEqual([undefined, undefined]);
     });
 });
