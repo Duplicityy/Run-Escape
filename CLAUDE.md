@@ -207,6 +207,7 @@ desktop build.
 - **Determinism**: the sim only uses its seeded `Rng`, never `Math.random`. Co-op runs the same sim
   on every player's browser, so in `src/game/core/` trigonometry goes through `fm` (`fm.sin`,
   `fm.cos`, `fm.atan2`, `fm.hypot`, `fm.acos`, `fm.pow`) from `core/fmath.ts`, never `Math`'s.
+  `core/runHash.test.ts` pins seeded runs: a speed-up or tidy must leave them as they are.
 - **Heroes**: `sim.player`, `sim.stats`, `sim.weapons` and the like are the current hero's (one for
   each co-op player). Anything a hero leaves behind (a projectile, a thrall) keeps a `hero` index.
   A solo run must play exactly as before; co-op's tests are in `core/coop.test.ts`.

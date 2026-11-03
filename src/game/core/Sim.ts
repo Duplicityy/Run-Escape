@@ -38,7 +38,7 @@ import {
     getHardScale,
 } from "../content/hard";
 import { CASKETS, getGear, getItem } from "../content/items";
-import { getMap, hasPoison } from "../content/maps";
+import { getMap, hasFliers, hasPoison } from "../content/maps";
 import { canLevelPassive, getPassive, getPassiveGain } from "../content/passives";
 import {
     POWER_UPS,
@@ -569,7 +569,7 @@ export type Hero = {
     appearanceVersion: number;
     // Enemies after this hero find their way to them with it
     flowField: FlowField;
-    // And flying ones, once there are any
+    // And flying ones, on maps they're on or once there are any
     flightField?: FlowField;
     regenAccumulator: number;
     // When a hit next gets the Amulet of blood fury's roll to heal
@@ -717,9 +717,11 @@ export class Sim {
     private flightGrid: FlightGrid | undefined;
     // Enemy id -> the tick the next of its kind can go (EnemyBlinksDef.gap)
     private readonly blinkGapEnd = new Map<string, number>();
-    private readonly enemyHash = new SpatialHash<Enemy>(2);
-    private readonly pileHash = new SpatialHash<Pickup>(PILE_RADIUS);
+    private readonly enemyHash: SpatialHash<Enemy>;
+    private readonly pileHash: SpatialHash<Pickup>;
     private nextUid = 1;
+    // Enemies that have died or vanished so far, for Enemy.deathSeq
+    private enemyDeaths = 0;
     private spawnAccumulator = 0;
     private eventIndex = 0;
     // When the last power-up dropped; the longer ago, the likelier the next
@@ -969,8 +971,15 @@ export class Sim {
 
     constructor(options: SimOptions) {
         this.grid = options.grid;
+        this.enemyHash = new SpatialHash(2, this.grid);
+        this.pileHash = new SpatialHash(PILE_RADIUS, this.grid);
         this.map = getMap(options.mapId ?? "lumbridge");
         this.rng = new Rng(options.seed);
+        // Building it takes a while, so it's done here, with the map, rather
+        // than on the tick the first flier turns up (getFlight still can)
+        if (hasFliers(this.map)) {
+            this.flightGrid = new FlightGrid(this.grid);
+        }
         // Fun maps are endless from the start
         this.endless = (options.endless ?? false) || this.map.fun !== undefined;
         this.hard = options.hard ?? false;
@@ -1024,6 +1033,9 @@ export class Sim {
         );
         const flowField = new FlowField(FLOW_FIELD_SIZE);
         flowField.ditchY = this.map.ditch?.y;
+        // Updated with the ground one from the start (getFlight's would be at
+        // the same target by the time it's needed)
+        const flightField = this.flightGrid && new FlowField(FLOW_FIELD_SIZE);
         return {
             index,
             name: options.name,
@@ -1083,6 +1095,7 @@ export class Sim {
             weaponSince: {},
             appearanceVersion: 0,
             flowField,
+            flightField,
             regenAccumulator: 0,
             bloodFuryRollTick: 0,
             sledEndTick: 0,
@@ -2584,6 +2597,7 @@ export class Sim {
             flash: 0,
             dead: false,
             deathTick: 0,
+            deathSeq: 0,
             xp,
             shieldEnd: 0,
             risingEnd: 0,
@@ -3789,8 +3803,15 @@ export class Sim {
         }
     }
 
+    private countDeath(enemy: Enemy): void {
+        if (!enemy.dead) {
+            enemy.deathSeq = ++this.enemyDeaths;
+        }
+    }
+
     // Gone with no death, no drop and nothing counted
     private vanish(enemy: Enemy): void {
+        this.countDeath(enemy);
         enemy.dead = true;
         enemy.deathTick = -Infinity;
     }
@@ -5476,6 +5497,7 @@ export class Sim {
     // nothing and isn't the player's kill, so luring armies into each other
     // isn't free experience, and the ground doesn't fill with bones far away)
     private killEnemy(enemy: Enemy, cause: "player" | "nuke" | "enemy" = "player"): void {
+        this.countDeath(enemy);
         enemy.dead = true;
         enemy.hp = 0;
         enemy.deathTick = this.tick;
@@ -6850,12 +6872,11 @@ export class Sim {
     }
 
     private stepProjectiles(): void {
-        const enemiesByUid = new Map<number, Enemy>();
-        for (const enemy of this.enemies) {
-            if (!enemy.dead) {
-                enemiesByUid.set(enemy.uid, enemy);
-            }
-        }
+        // Shots steer at who was up when this started: still at one an
+        // earlier shot has just killed, never at one that's come since
+        const enemies = this.enemies;
+        const enemyCount = enemies.length;
+        const deaths = this.enemyDeaths;
         for (const projectile of this.projectiles) {
             projectile.prevX = projectile.x;
             projectile.prevY = projectile.y;
@@ -6866,9 +6887,11 @@ export class Sim {
                 continue;
             }
             // Spells, axes and cannonballs steer towards their target
-            const target = projectile.targetUid
-                ? enemiesByUid.get(projectile.targetUid)
+            const aimedAt = projectile.targetUid
+                ? findByUid(enemies, projectile.targetUid, enemyCount)
                 : undefined;
+            const target =
+                aimedAt && (!aimedAt.dead || aimedAt.deathSeq > deaths) ? aimedAt : undefined;
             if (target) {
                 const dx = target.x - projectile.x;
                 const dy = target.y - projectile.y;
@@ -7545,11 +7568,11 @@ export class Sim {
     }
 
     private stepPickups(): void {
-        // For bones and coins on their way to a bigger pile
-        const pilesByUid = this.pickups.some((p) => p.pileUid !== 0)
-            ? new Map(this.pickups.map((p) => [p.uid, p]))
-            : undefined;
-        for (const pickup of this.pickups) {
+        // Bones and coins on their way to a bigger pile go to one that was
+        // there when this started
+        const pickups = this.pickups;
+        const pickupCount = pickups.length;
+        for (const pickup of pickups) {
             pickup.prevX = pickup.x;
             pickup.prevY = pickup.y;
             if (pickup.disguise) {
@@ -7586,7 +7609,7 @@ export class Sim {
                     pickup.y += (dy / distance) * move;
                 }
             } else if (pickup.pileUid !== 0) {
-                this.slideIntoPile(pickup, pilesByUid?.get(pickup.pileUid));
+                this.slideIntoPile(pickup, findByUid(pickups, pickup.pileUid, pickupCount));
                 if (pickup.value < 0) {
                     continue;
                 }
@@ -7599,7 +7622,7 @@ export class Sim {
         if (this.tick % PILE_INTERVAL === 0) {
             this.gatherPiles();
         }
-        this.pickups = this.pickups.filter((p) => p.value >= 0);
+        keepIf(this.pickups, (p) => p.value >= 0);
     }
 
     // Bones lying near a bigger pile go over to join it, so a crowd's bones
@@ -8507,27 +8530,22 @@ export class Sim {
 
     private cleanUp(): void {
         const tick = this.tick;
-        this.enemies = this.enemies.filter((e) => !e.dead || tick - e.deathTick < CORPSE_TICKS);
-        this.projectiles = this.projectiles.filter((p) => p.life > 0);
-        this.enemyProjectiles = this.enemyProjectiles.filter((p) => p.life > 0);
-        this.effects = this.effects.filter((e) => tick < e.endTick);
-        if (this.effects.some((e) => e.enemyUid !== 0)) {
-            const enemiesByUid = new Map<number, Enemy>();
-            for (const enemy of this.enemies) {
-                enemiesByUid.set(enemy.uid, enemy);
+        keepIf(this.enemies, (e) => !e.dead || tick - e.deathTick < CORPSE_TICKS);
+        keepIf(this.projectiles, (p) => p.life > 0);
+        keepIf(this.enemyProjectiles, (p) => p.life > 0);
+        keepIf(this.effects, (e) => tick < e.endTick);
+        const enemies = this.enemies;
+        for (const effect of this.effects) {
+            if (effect.enemyUid === 0) {
+                continue;
             }
-            for (const effect of this.effects) {
-                if (effect.enemyUid === 0) {
-                    continue;
-                }
-                const enemy = enemiesByUid.get(effect.enemyUid);
-                if (enemy) {
-                    effect.x = enemy.x;
-                    effect.y = enemy.y;
-                }
-                if (!enemy || enemy.dead) {
-                    effect.enemyUid = 0;
-                }
+            const enemy = findByUid(enemies, effect.enemyUid, enemies.length);
+            if (enemy) {
+                effect.x = enemy.x;
+                effect.y = enemy.y;
+            }
+            if (!enemy || enemy.dead) {
+                effect.enemyUid = 0;
             }
         }
     }
@@ -8599,6 +8617,43 @@ function getAbilities(def: EnemyDef, tick: number, rng: Rng): EnemyAbilities | u
         nextBlink: def.blinks ? tick + secondsToTicks(def.blinks.interval * rng.range(0.5, 1)) : 0,
         blinkLand: -1,
     };
+}
+
+// The one with this uid among the first count of a list in uid order, as the
+// enemies and pickups are: they're only ever added at the end, each with the
+// next uid, and keepIf keeps their order
+function findByUid<T extends { uid: number }>(
+    list: readonly T[],
+    uid: number,
+    count: number,
+): T | undefined {
+    let low = 0;
+    let high = count - 1;
+    while (low <= high) {
+        const mid = (low + high) >> 1;
+        const at = list[mid].uid;
+        if (at < uid) {
+            low = mid + 1;
+        } else if (at > uid) {
+            high = mid - 1;
+        } else {
+            return list[mid];
+        }
+    }
+    return undefined;
+}
+
+// Takes out what doesn't pass, keeping the order, in place: a new array each
+// tick for each list is garbage for a phone to collect
+function keepIf<T>(list: T[], keep: (item: T) => boolean): void {
+    let kept = 0;
+    for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        if (keep(item)) {
+            list[kept++] = item;
+        }
+    }
+    list.length = kept;
 }
 
 // Back and forth between -half and half at a steady speed, from 0 heading
