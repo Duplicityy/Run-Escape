@@ -5,6 +5,12 @@ the version in the corner).
 
 ## Unreleased
 
+### Added
+
+- Controller support: move with the stick or d-pad, use items with the shoulder buttons and
+  triggers, and pick level ups, caskets and menus with the d-pad and A. The hints show your
+  controller's buttons, Xbox, PlayStation or Switch.
+
 ## 0.23.0 - 2026-11-02
 
 ### Added

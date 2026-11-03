@@ -42,6 +42,7 @@ go stale. Add anything that cost you time to work out.
 | The damage panel: each weapon's DPS during a run      | `src/game/client/DamageMeter.ts`         |
 | 3D actors, swooshes, hitsplats                        | `src/game/client/GameView.ts`            |
 | Touch screens: the stick, its buttons, phone layouts  | `docs/DEVELOPMENT.md`, Touch screens     |
+| Controllers: which pad, its buttons, menus' highlight | `docs/DEVELOPMENT.md`, Controllers       |
 | The game on a phone's home screen (PWA)               | `docs/DEVELOPMENT.md`, Touch screens     |
 | React screens and the HUD                             | `src/game/ui/GameUi.tsx`                 |
 | Weapon stat lines on cards, pause and tooltips        | `src/game/content/weaponStats.ts`        |

@@ -418,6 +418,7 @@ src/game/
             offer), ItemIcon, CoopScreen (the rooms, the lobby, the party in a run),
             formatCompact (short numbers like 9.5K and 1.2B, for the damage panel)
   client/GameTouch.ts, ui/TouchControls.tsx, ui/Mobile.css   touch screens (see Touch screens)
+  client/GamePad.ts, ui/PadHint.tsx                          controllers (see Controllers)
 server/     coop-relay.mjs: co-op's rooms, and passes each run's frames between its players
 src/mapviewer/webgl/actor/   actor renderer: baked animation frames drawn anywhere in the world,
                              any number of them, one multi-draw per pass
@@ -734,6 +735,40 @@ Everything touch only hangs off `pointer: coarse`, so a mouse and keyboard never
 
 To test it, Playwright's `isMobile` and `hasTouch` turn on `pointer: coarse`, and CDP's
 `Input.dispatchTouchEvent` sends real multi-touch. Mouse clicks don't test any of this.
+
+### Controllers
+
+`client/GamePad.ts` reads the browser's Gamepad API once a frame (`GameInput.pollPads`, from
+`GameClient.update`). It's a web standard, so the desktop app (Electron) gets it too, with nothing
+of its own.
+
+- **Which pad.** One at a time: whichever was pressed last. A pad's only noticed once something on it
+  is pressed (browsers hide pads until then), so "connected" shows on the first press.
+- **Its buttons** are only trusted when the browser reports `mapping: "standard"`, where button 0 is
+  the bottom face button whoever made it. Any other pad gets the left stick and nothing else, rather
+  than buttons that might be anything. `identifyPad` reads the maker from the id (Chrome's
+  `Vendor: 054c`, Firefox's `054c-0ce6-` prefix, or a name like `Xbox`) for the labels only: Xbox,
+  PlayStation, Switch, and Xbox's for anything else. A Switch pad confirms with the button in A's
+  place on an Xbox pad, which it calls B.
+- **Buttons are keys.** Each is sent to the window as the `KeyboardEvent` the game already answers
+  (`RUN_KEYS` during play, `MENU_KEYS` otherwise), so every screen's own keys work with no changes and
+  a pad can't do anything the keyboard can't. Synthetic events have `isTrusted` false, which is how a
+  real key or click tells it the player's off the pad.
+- **Menus** use the focus: the d-pad or stick moves it to the nearest button that way in the top
+  `.ui-modal` (or the screen), and the bottom button clicks it. With nothing focused it sends Enter
+  and focuses the `.ui-button-go` or first button, so a press as a level up appears can't pick one. Start
+  clicks the `.ui-button-go` (Enter the map, Resume, a casket's best choice) wherever the focus is,
+  so starting a run doesn't mean walking the highlight across the screen.
+- **Hints.** `ui/PadHint.tsx`'s `KeyHint` shows a key, or the pad's button while one's in use. The
+  numbered choices have none (the d-pad picks them). `:root[data-input="pad"]` shows the highlight.
+  The icons are Kenney's [Input Prompts](https://kenney.nl/assets/input-prompts) (CC0, its licence
+  alongside), in `public/input-prompts/<make>/<button>.svg`, named by `PadButton`. Only the buttons
+  for the three makes are copied in, not the whole pack.
+- **What each button does** is listed by `PadControls` (`ui/PadHint.tsx`) in the pause menu and
+  Settings while a pad's in use, and the title's hint shows its buttons. Change it with `RUN_KEYS`
+  or `MENU_KEYS`.
+
+The tests fake `navigator.getGamepads`. In a browser, an init script that replaces it does the same.
 
 ### Saves
 

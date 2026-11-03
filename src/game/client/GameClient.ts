@@ -388,6 +388,20 @@ export class GameClient implements GameFrameHandler {
         this.input = new GameInput(renderer.canvas);
         this.input.onPress = this.onKeyPress;
         this.input.takesKey = (code) => code === "Tab" && this.isPlaying();
+        this.input.pads.onConnect = (pad) =>
+            this.store.toast(
+                pad.standard
+                    ? `${pad.name} connected.`
+                    : `${pad.name} connected. Its buttons aren't on a layout the browser knows, so only its stick works.`,
+                pad.standard ? 3000 : 7000,
+            );
+        // A controller going flat mid-run pauses it, as leaving the window does
+        this.input.pads.onDisconnect = (pad) => {
+            this.store.toast(`${pad.name} disconnected.`, 4000);
+            if (this.sim && !this.coopRun && this.store.getSnapshot().overlay === "none") {
+                this.pause();
+            }
+        };
         this.input.onBlur = () => {
             this.accumulator = 0;
             // With auto-pause off the run carries on (though a hidden tab
@@ -1558,6 +1572,7 @@ export class GameClient implements GameFrameHandler {
 
     update(deltaTimeMs: number, camera: Camera): void {
         this.fps = this.fps * 0.95 + (deltaTimeMs > 0 ? 1000 / deltaTimeMs : 0) * 0.05;
+        this.input.pollPads(performance.now(), this.isPlaying() ? "run" : "menu");
         const wheel = this.input.takeWheel();
         if (wheel !== 0 && this.sim) {
             this.cameraRig.zoom(wheel);

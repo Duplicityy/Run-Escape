@@ -1,3 +1,5 @@
+import { KeyHint } from "./PadHint";
+
 // Takes none of a level up's rewards (X), for coins from the run: dearer each
 // time
 export function SkipButton({
@@ -23,7 +25,7 @@ export function SkipButton({
                     e.currentTarget.blur();
                 }}
             >
-                <span className="ui-choice-key">X</span> Skip ({cost.toLocaleString()} coins)
+                <KeyHint keyLabel="X" pad="north" /> Skip ({cost.toLocaleString()} coins)
             </button>
         </div>
     );
