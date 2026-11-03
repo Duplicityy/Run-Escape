@@ -387,7 +387,8 @@ version and how to run it.
   power-ups in their colours. Bosses, caskets and power-ups out of range sit on the rim.
 - **Hitsplats** are the client's own sprites: red for damage (on you too), green for poison.
 - **Coins** are banked when a run ends. Spend them on **Skills** (permanent bonuses, refundable).
-  Right-click a bought skill to refund one rank, even when maxed, for its purchase price.
+  Click or tap a bought skill's U-turn button to refund one rank, even when maxed, for its purchase
+  price. On desktop, right-clicking its card does the same; touch long presses do not refund.
   Older saves without purchase prices split their tracked spending across ranks by base price.
   **Refund all** returns the remaining investment and resets every skill.
   **Woodcutting** adds melee knockback, and every other level of a melee weapon raises it too.

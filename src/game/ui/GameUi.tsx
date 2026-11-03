@@ -1,3 +1,4 @@
+import { Undo2 } from "lucide-react";
 import {
     CSSProperties,
     ReactNode,
@@ -1093,37 +1094,56 @@ function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
                         const cost = getNextUpgradeCost(save, upgrade.id);
                         const affordable = cost !== undefined && save.coins >= cost;
                         return (
-                            <button
-                                key={upgrade.id}
-                                className={
-                                    "ui-card ui-shop-card" + (affordable ? "" : " ui-card-dim")
-                                }
-                                onClick={() => {
-                                    if (cost !== undefined) {
-                                        client.buyUpgrade(upgrade.id);
+                            <div key={upgrade.id} className="ui-shop-entry">
+                                <button
+                                    className={
+                                        "ui-card ui-shop-card" + (affordable ? "" : " ui-card-dim")
                                     }
-                                }}
-                                onContextMenu={(event) => {
-                                    if (rank > 0) {
-                                        event.preventDefault();
-                                        client.refundUpgrade(upgrade.id);
+                                    aria-disabled={!affordable}
+                                    title={
+                                        rank > 0 && !isCoarsePointer
+                                            ? "Right-click to refund one rank"
+                                            : undefined
                                     }
-                                }}
-                            >
-                                <div className="ui-card-title">{upgrade.name}</div>
-                                <div className="ui-card-text">{upgrade.description}</div>
-                                <div className="ui-pips">
-                                    {Array.from({ length: upgrade.maxRank }, (_, i) => (
-                                        <span
-                                            key={i}
-                                            className={i < rank ? "ui-pip ui-pip-on" : "ui-pip"}
-                                        />
-                                    ))}
-                                </div>
-                                <div className="ui-card-cost">
-                                    {cost === undefined ? "Maxed" : <Coins amount={cost} />}
-                                </div>
-                            </button>
+                                    onClick={() => {
+                                        if (affordable) {
+                                            client.buyUpgrade(upgrade.id);
+                                        }
+                                    }}
+                                    onContextMenu={(event) => {
+                                        if (rank > 0) {
+                                            event.preventDefault();
+                                            if (!isCoarsePointer) {
+                                                client.refundUpgrade(upgrade.id);
+                                            }
+                                        }
+                                    }}
+                                >
+                                    <div className="ui-card-title">{upgrade.name}</div>
+                                    <div className="ui-card-text">{upgrade.description}</div>
+                                    <div className="ui-pips">
+                                        {Array.from({ length: upgrade.maxRank }, (_, i) => (
+                                            <span
+                                                key={i}
+                                                className={i < rank ? "ui-pip ui-pip-on" : "ui-pip"}
+                                            />
+                                        ))}
+                                    </div>
+                                    <div className="ui-card-cost">
+                                        {cost === undefined ? "Maxed" : <Coins amount={cost} />}
+                                    </div>
+                                </button>
+                                {rank > 0 && (
+                                    <button
+                                        className="ui-button ui-shop-refund"
+                                        aria-label={`Refund one ${upgrade.name} rank`}
+                                        title={`Refund one ${upgrade.name} rank`}
+                                        onClick={() => client.refundUpgrade(upgrade.id)}
+                                    >
+                                        <Undo2 size={18} aria-hidden="true" />
+                                    </button>
+                                )}
+                            </div>
                         );
                     })}
                 </div>

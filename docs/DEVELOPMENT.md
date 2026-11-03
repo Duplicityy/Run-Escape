@@ -772,7 +772,11 @@ The desktop app has one window and plays the newest game it has, so neither tabs
 game come up there; an export from a newer version is turned away on import, as anywhere.
 
 Skill purchases keep an optional `upgradeRefunds` list of paid prices for each skill's ranks.
-Right-clicking refunds the last price in that skill's list, through `GameClient.persist()`.
+The U-turn button on bought cards refunds the last price in that skill's list, through
+`GameClient.persist()`. It is separate from the purchase button and has a larger hit area on coarse
+pointers. Desktop right-clicking does the same; coarse-pointer context menus never refund.
+Unavailable purchases use `aria-disabled` and keep their disabled appearance on hover, without
+blocking the desktop right-click shortcut or the refund button.
 Older saves have only `upgradesSpent`: their first purchase or partial refund allocates that
 balance across the existing ranks in proportion to base prices, preserving the total exactly.
 Migration checks the lists against the ranks and total spent; invalid lists use the same fallback.

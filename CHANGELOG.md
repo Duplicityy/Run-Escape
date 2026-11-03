@@ -7,11 +7,12 @@ the version in the corner).
 
 ### Added
 
-- Right-click a bought skill to refund one rank, including maxed skills, without resetting the rest.
+- Refund a skill rank with its U-turn button, or right-click on desktop, without resetting the rest.
 
 ### Fixed
 
 - Coin icons stay visible while a changed stack size loads after buying or refunding skills.
+- Maxed skills no longer look buyable, and touch long presses no longer refund ranks by accident.
 
 ## 0.23.0 - 2026-11-02
 

@@ -842,13 +842,63 @@
     gap: 8px;
 }
 
+.ui-shop-entry {
+    position: relative;
+    display: grid;
+    min-width: 0;
+}
+
 .ui-shop-card {
     flex-direction: column;
     align-items: flex-start;
+    width: 100%;
+    min-width: 0;
 }
 
-.ui-shop-card:disabled {
+.ui-shop-card[aria-disabled="true"],
+.ui-shop-card[aria-disabled="true"]:hover {
     cursor: default;
+    background: var(--ui-card);
+}
+
+.ui-shop-card .ui-card-cost {
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+    padding-right: 36px;
+    margin-top: auto;
+}
+
+.ui-shop-refund {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+}
+
+.ui-shop-refund:focus-visible {
+    outline: 2px solid var(--ui-yellow);
+    outline-offset: 2px;
+}
+
+.ui-shop-refund:active {
+    transform: scale(0.96);
+}
+
+@media (pointer: coarse) {
+    .ui-shop-card .ui-card-cost {
+        min-height: 44px;
+        padding-right: 52px;
+    }
+
+    .ui-shop-refund {
+        width: 44px;
+        height: 44px;
+    }
 }
 
 .ui-pips {
