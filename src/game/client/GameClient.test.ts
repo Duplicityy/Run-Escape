@@ -90,6 +90,73 @@ function displayOf(client: GameClient): DisplaySettings {
     return (client as unknown as { display: DisplaySettings }).display;
 }
 
+describe("the HUD", () => {
+    const updateHud = (client: GameClient, force = false) =>
+        (client as unknown as { updateHud(force: boolean): void }).updateHud.call(client, force);
+
+    test("keeps what hasn't changed the same object, so its parts don't draw again", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const sim = createSim();
+        const { client, store } = createClient(sim, false);
+        updateHud(client, true);
+        const hud = store.getSnapshot().hud!;
+        const numbers = store.getNumbers()!;
+        sim.tick += 50;
+        updateHud(client);
+        // A second on: the clock's changed, nothing the hero has
+        expect(store.getSnapshot().hud).toBe(hud);
+        expect(store.getNumbers()!.seconds).toBe(numbers.seconds + 1);
+        expect(store.getNumbers()!.quests).toBe(numbers.quests);
+        expect(store.getNumbers()!.buffs).toBe(numbers.buffs);
+        // A new weapon: the weapons change, the passives and gear don't
+        sim.addWeapon("fire_spells");
+        updateHud(client);
+        const after = store.getSnapshot().hud!;
+        expect(after).not.toBe(hud);
+        expect(after.weapons).not.toBe(hud.weapons);
+        expect(after.weapons.map((w) => w.id)).toContain("fire_spells");
+        expect(after.passives).toBe(hud.passives);
+        expect(after.gear).toBe(hud.gear);
+        vi.unstubAllGlobals();
+    });
+
+    test("with nothing changed, tells nothing that it has", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const sim = createSim();
+        const { client, store } = createClient(sim, false);
+        updateHud(client, true);
+        const ui = vi.fn();
+        const numbers = vi.fn();
+        store.subscribe(ui);
+        store.subscribeNumbers(numbers);
+        // Within the same second
+        sim.tick += 10;
+        updateHud(client);
+        updateHud(client);
+        expect(ui).not.toHaveBeenCalled();
+        expect(numbers).not.toHaveBeenCalled();
+        vi.unstubAllGlobals();
+    });
+});
+
+describe("the frame cap", () => {
+    const stopped = (client: GameClient) =>
+        (client as unknown as { isStoppedBehindMenu(): boolean }).isStoppedBehindMenu.call(client);
+
+    test("drops behind a solo run's menus, and not in co-op, whose run carries on", () => {
+        const sim = createSim();
+        const { client } = createClient(sim, false);
+        expect(stopped(client)).toBe(false);
+        Object.assign(client, { paused: true });
+        expect(stopped(client)).toBe(true);
+        Object.assign(client, { coopRun: {} });
+        expect(stopped(client)).toBe(false);
+        // The title screen
+        Object.assign(client, { sim: undefined, coopRun: undefined });
+        expect(stopped(client)).toBe(true);
+    });
+});
+
 describe("the damage panel", () => {
     test("is shut unless it's been opened, and is remembered", () => {
         const stored = new Map<string, string>();
@@ -125,9 +192,9 @@ describe("the damage panel", () => {
         }
         sim.damageBySource[source] = 400;
         updateHud.call(client, true);
-        const hud = store.getSnapshot().hud!;
-        expect(hud.weapons[0]).toMatchObject({ dps: 100, damage: 400 });
-        expect(hud.otherDps).toBe(0);
+        const numbers = store.getNumbers()!;
+        expect(numbers.weaponDamage[sim.weapons[0].def.id]).toEqual({ dps: 100, damage: 400 });
+        expect(numbers.otherDps).toBe(0);
         vi.unstubAllGlobals();
     });
 
@@ -142,7 +209,7 @@ describe("the damage panel", () => {
         sim.damageBySource["weapon:evolved_away"] = 600;
         sim.damageBySource.recoil = 40;
         updateHud.call(client, true);
-        expect(store.getSnapshot().hud!.otherDps).toBe(10);
+        expect(store.getNumbers()!.otherDps).toBe(10);
         vi.unstubAllGlobals();
     });
 

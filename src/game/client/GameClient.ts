@@ -74,12 +74,14 @@ import { ChestCue, GameSounds, getGameSoundIds } from "./GameSounds";
 import {
     ChoiceView,
     GameStore,
+    HudNumbers,
     HudView,
     QuestTrackView,
     ReviveView,
     SaveBlock,
     Screen,
     SlotView,
+    shareUnchanged,
 } from "./GameStore";
 import { GameView } from "./GameView";
 import {
@@ -1404,6 +1406,7 @@ export class GameClient implements GameFrameHandler {
         if (!show) {
             return;
         }
+        this.store.setNumbers(undefined);
         this.store.set({
             screen: wasCoop && this.coop.room ? "coop" : "title",
             overlay: "none",
@@ -2013,7 +2016,7 @@ export class GameClient implements GameFrameHandler {
         this.lastHudUpdate = performance.now();
         const thisLevel = sim.xpForThisLevel;
         const nextLevel = sim.xpForNextLevel;
-        let boss: HudView["boss"];
+        let boss: HudNumbers["boss"];
         const shownBoss = sim.shownBoss;
         if (shownBoss) {
             const phase = shownBoss.bossState?.phase;
@@ -2045,23 +2048,44 @@ export class GameClient implements GameFrameHandler {
         }
         this.damageMeter.sample(sim.tick, sim.damageBySource);
         const meter = this.damageMeter.read();
-        const hud: HudView = {
-            mapId: sim.map.id,
-            round: sim.endless ? sim.round : undefined,
-            bossIn: sim.timeLeftForBoss,
+        const weaponDamage: HudNumbers["weaponDamage"] = {};
+        for (const w of sim.weapons) {
+            weaponDamage[w.def.id] = {
+                dps: meter.perSecond[`weapon:${w.def.id}`] ?? 0,
+                damage: meter.totals[`weapon:${w.def.id}`] ?? 0,
+            };
+        }
+        const numbers: HudNumbers = {
+            // Whole seconds, as they're shown, so standing still changes nothing
+            bossIn: Math.ceil(sim.timeLeftForBoss),
             hp: Math.max(0, Math.round(sim.player.hp)),
             maxHp: sim.player.maxHp,
             poisoned: sim.player.poisonEnd !== -1,
-            level: sim.level,
             xpFraction: Math.min(
                 1,
                 Math.max(0, (sim.xp - thisLevel) / Math.max(1, nextLevel - thisLevel)),
             ),
-            seconds: sim.seconds,
+            seconds: Math.floor(sim.seconds),
             kills: sim.kills,
             coins: sim.coins,
             dps: this.shownDps,
+            weaponDamage,
             otherDps: meter.otherPerSecond,
+            buffs: getBuffViews(sim),
+            boss,
+            quests: getQuestTrackViews(this.save, sim),
+        };
+        // What hasn't changed stays the same object, so a part of the HUD that shows
+        // only that doesn't draw again
+        const shownNumbers = this.store.getNumbers();
+        const sharedNumbers = shareUnchanged(shownNumbers, numbers);
+        if (force || sharedNumbers !== shownNumbers) {
+            this.store.setNumbers(sharedNumbers);
+        }
+        const hud: HudView = {
+            mapId: sim.map.id,
+            round: sim.endless ? sim.round : undefined,
+            level: sim.level,
             maxWeapons: sim.maxWeapons,
             maxPassives: sim.maxPassives,
             weapons: sim.weapons.map((w) => {
@@ -2077,8 +2101,6 @@ export class GameClient implements GameFrameHandler {
                     stats: weaponStats(w.def, level).map(formatWeaponStat),
                     evolution: getEvolutionView(sim, w),
                     rarityColor: RARITIES[w.def.rarity].color,
-                    dps: meter.perSecond[`weapon:${w.def.id}`] ?? 0,
-                    damage: meter.totals[`weapon:${w.def.id}`] ?? 0,
                 };
             }),
             passives: sim.passives.map((p) => {
@@ -2097,17 +2119,15 @@ export class GameClient implements GameFrameHandler {
             stats: formatStats(sim.stats),
             gear: getGearViews(sim),
             inventory: getInventoryViews(sim),
-            buffs: getBuffViews(sim),
             rerolls: sim.rerollsLeft,
             skip: sim.canSkip
                 ? { cost: sim.skipCost, affordable: sim.coins >= sim.skipCost }
                 : undefined,
-            boss,
-            quests: getQuestTrackViews(this.save, sim),
         };
         const previous = this.store.getSnapshot().hud;
-        if (force || !previous || JSON.stringify(previous) !== JSON.stringify(hud)) {
-            this.store.set({ hud });
+        const shared = shareUnchanged(previous, hud);
+        if (force || shared !== previous) {
+            this.store.set({ hud: shared });
         }
         if (sim.heroes.length > 1) {
             const party = sim.heroes
