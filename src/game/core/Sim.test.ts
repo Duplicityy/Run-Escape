@@ -236,6 +236,36 @@ describe("Sim", () => {
         expect(sim.pickups.reduce((total, p) => total + p.value, 0)).toBe(xp + 10);
     });
 
+    test("coins and food lying around don't keep new bones off the ground", () => {
+        const sim = createSim();
+        const { x, y } = sim.player;
+        // Left behind over a long run, far from the player
+        for (let i = 0; i < 400; i++) {
+            const kind = i % 4 === 0 ? "food" : "coins";
+            sim.dropPickup(kind, x - 30 + (i % 20), y - 30 + Math.floor(i / 20), 1);
+        }
+        for (let i = 0; i < 10; i++) {
+            sim.dropPickup("bones", x + 6 + i, y + 6, 10);
+        }
+        const bones = sim.pickups.filter((p) => p.kind === "bones");
+        expect(bones.map((p) => p.x)).toEqual([...Array(10).keys()].map((i) => x + 6 + i));
+    });
+
+    test("with too many coins lying around, the furthest pile comes to the new ones", () => {
+        const sim = createSim();
+        const { x, y } = sim.player;
+        for (let i = 0; i < 100; i++) {
+            sim.dropPickup("coins", x + 5 + (i % 10), y + 5 + Math.floor(i / 10), 2);
+        }
+        const furthest = sim.pickups[sim.pickups.length - 1];
+        sim.dropPickup("coins", x + 2, y, 3);
+        expect(sim.pickups.length).toBe(100);
+        expect(furthest).toMatchObject({ x: x + 2, y, value: 5, kind: "coins" });
+        // Bones aren't held back by them
+        sim.dropPickup("bones", x - 2, y, 10);
+        expect(sim.pickups.length).toBe(101);
+    });
+
     test("bones lying close together gather into the biggest pile, and coins into coins", () => {
         const sim = createSim();
         sim.weapons = [];

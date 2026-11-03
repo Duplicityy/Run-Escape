@@ -262,7 +262,10 @@ const JUMP_TICKS = 75;
 const ENEMY_ATTACK_COOLDOWN = 50;
 const DEATH_SINK_TICKS = 25;
 const MAX_DEATH_ANIM_TICKS = 60;
-const MAX_PICKUPS = 400;
+// The most piles of bones, and of coins, lying around at once. Each kind
+// counts its own, so coins and food left behind don't keep new bones off the
+// ground.
+const MAX_PILES: Partial<Record<PickupKind, number>> = { bones: 400, coins: 100 };
 // Every so often bones lying this close to a bigger pile slide over and join
 // it, and coins do the same
 const PILE_INTERVAL = 25;
@@ -7561,17 +7564,24 @@ export class Sim {
         value: number,
         extra: Pick<Pickup, "tier" | "powerUp" | "disguise"> = {},
     ): void {
-        if (kind === "bones" && this.pickups.length >= MAX_PICKUPS) {
+        const limit = MAX_PILES[kind];
+        // (only counted when there could be that many)
+        if (limit !== undefined && this.pickups.length >= limit) {
             // Too many lying around: the pile furthest from the player comes
             // here and takes these on too. Piles left behind as the player
             // moves on would otherwise keep what they're worth for good.
             const player = this.player;
+            let count = 0;
             let pile: Pickup | undefined;
             let furthest = -1;
             for (const pickup of this.pickups) {
+                if (pickup.kind !== kind) {
+                    continue;
+                }
+                count++;
                 // (one already flying to the player, or to another pile, stays
                 // where it is)
-                if (pickup.kind !== "bones" || pickup.attracted || pickup.pileUid !== 0) {
+                if (pickup.attracted || pickup.pileUid !== 0) {
                     continue;
                 }
                 const d = Math.abs(pickup.x - player.x) + Math.abs(pickup.y - player.y);
@@ -7580,7 +7590,7 @@ export class Sim {
                     pile = pickup;
                 }
             }
-            if (pile) {
+            if (pile && count >= limit) {
                 pile.x = pile.prevX = x;
                 pile.y = pile.prevY = y;
                 pile.value += value;

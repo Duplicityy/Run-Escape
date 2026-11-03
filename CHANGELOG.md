@@ -21,6 +21,8 @@ the version in the corner).
   carries on.
 - Huge numbers stay short: the damage panel, stats and hitsplats go on past trillions to Qa,
   Qi, Sx and on, then powers of ten, rather than growing digit by digit.
+- In very long endless runs, bones no longer stop dropping once coins and food have built up
+  around the map.
 
 ## 0.23.0 - 2026-11-02
 
