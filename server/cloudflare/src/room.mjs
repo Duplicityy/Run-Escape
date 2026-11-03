@@ -342,6 +342,7 @@ export class Room extends DurableObject {
             hostId: room.hostId,
             mapId: room.mapId,
             endless: room.endless,
+            hard: room.hard === true,
             started: room.started,
             members: room.members.map((client) => ({
                 id: client.id,
@@ -396,6 +397,7 @@ export class Room extends DurableObject {
                 players: room.members.length,
                 mapId: room.mapId,
                 endless: room.endless,
+                hard: room.hard === true,
                 host: host?.name ?? "",
                 hostAddress: host?.address ?? "",
                 order: room.order,
@@ -535,11 +537,14 @@ export class Room extends DurableObject {
                             : room.mapId;
                     const endless =
                         message.endless !== undefined ? message.endless === true : room.endless;
+                    const hard =
+                        message.hard !== undefined ? message.hard === true : room.hard === true;
                     const missing = missingMap(
                         this.anyMap,
                         room.members.map((member) => ({ client: member })),
                         mapId,
                         endless,
+                        hard,
                         client,
                     );
                     if (missing) {
@@ -547,11 +552,15 @@ export class Room extends DurableObject {
                     }
                     const changed =
                         open !== room.open ||
-                        (!missing && (mapId !== room.mapId || endless !== room.endless));
+                        (!missing &&
+                            (mapId !== room.mapId ||
+                                endless !== room.endless ||
+                                hard !== (room.hard === true)));
                     room.open = open;
                     if (!missing) {
                         room.mapId = mapId;
                         room.endless = endless;
+                        room.hard = hard;
                     }
                     // Nothing to save or send for a setting as it was, and
                     // as "me", only the latest of a burst every
@@ -585,6 +594,7 @@ export class Room extends DurableObject {
                         room.members.map((member) => ({ client: member })),
                         room.mapId,
                         room.endless,
+                        room.hard === true,
                         client,
                     );
                     if (missing) {
@@ -657,6 +667,7 @@ export class Room extends DurableObject {
             hostId: client.id,
             mapId: cleanId(message.mapId) || "lumbridge",
             endless: message.endless === true,
+            hard: message.hard === true,
             started: false,
             members: [client],
             order: now,
@@ -708,6 +719,7 @@ export class Room extends DurableObject {
             [{ client, unlocks: cleanUnlocks(message.me?.unlocks) }],
             room.mapId,
             room.endless,
+            room.hard === true,
             client,
         );
         if (missing) {

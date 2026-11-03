@@ -94,11 +94,19 @@ export function cleanId(id) {
 export function cleanUnlocks(unlocks) {
     const list = (ids) =>
         Array.isArray(ids) ? ids.slice(0, MAX_UNLOCKED_MAPS).map(cleanId).filter(Boolean) : [];
-    return { maps: list(unlocks?.maps), endless: list(unlocks?.endless) };
+    return {
+        maps: list(unlocks?.maps),
+        endless: list(unlocks?.endless),
+        hard: list(unlocks?.hard),
+    };
 }
 
-function hasUnlocked(unlocks, mapId, endless) {
-    return unlocks.maps.includes(mapId) && (!endless || unlocks.endless.includes(mapId));
+function hasUnlocked(unlocks, mapId, endless, hard) {
+    return (
+        unlocks.maps.includes(mapId) &&
+        (!endless || unlocks.endless.includes(mapId)) &&
+        (!hard || unlocks.hard.includes(mapId))
+    );
 }
 
 export function clampInt(value, min, max, fallback) {
@@ -108,14 +116,19 @@ export function clampInt(value, min, max, fallback) {
 
 // The first of these players without the map, as an error for whoever's
 // asking, or nothing
-export function missingMap(anyMap, players, mapId, endless, asking) {
+export function missingMap(anyMap, players, mapId, endless, hard, asking) {
     if (anyMap) {
         return undefined;
     }
     for (const { client, unlocks = client.unlocks } of players) {
-        if (!hasUnlocked(unlocks, mapId, endless)) {
-            const need = { mapId, endless, ...(client !== asking && { who: client.name }) };
-            const what = `${mapId}${endless ? " (endless)" : ""}`;
+        if (!hasUnlocked(unlocks, mapId, endless, hard)) {
+            const need = {
+                mapId,
+                endless,
+                hard,
+                ...(client !== asking && { who: client.name }),
+            };
+            const what = `${mapId}${hard ? " (hard)" : ""}${endless ? " (endless)" : ""}`;
             return {
                 t: "error",
                 message:

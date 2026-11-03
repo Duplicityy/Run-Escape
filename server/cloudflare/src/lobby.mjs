@@ -136,6 +136,7 @@ export class Lobby extends DurableObject {
                     [{ client: player, unlocks: cleanUnlocks(message.me?.unlocks) }],
                     cleanId(message.mapId) || "lumbridge",
                     message.endless === true,
+                    message.hard === true,
                     player,
                 );
                 if (hostMissing) {
@@ -223,7 +224,7 @@ export class Lobby extends DurableObject {
         const changed =
             !previous ||
             previous.pending ||
-            ["name", "open", "started", "players", "mapId", "endless", "host"].some(
+            ["name", "open", "started", "players", "mapId", "endless", "hard", "host"].some(
                 (key) => previous[key] !== entry[key],
             );
         if (changed) {
@@ -287,6 +288,7 @@ export class Lobby extends DurableObject {
                 max: MAX_PARTY,
                 mapId: room.mapId,
                 endless: room.endless,
+                hard: room.hard === true,
             }));
         const all = this.openRooms;
         const size = clampInt(message.size, 1, MAX_LIST_PAGE_SIZE, LIST_PAGE_SIZE);
