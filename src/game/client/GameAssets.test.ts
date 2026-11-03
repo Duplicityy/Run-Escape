@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest";
 
+import { BakeRequest } from "../../mapviewer/webgl/actor/ActorBakeTypes";
 import { EquipSlot, createAppearance } from "../../rs/model/player/PlayerModelLoader";
-import { ENEMIES } from "../content/enemies";
+import { ENEMIES, getEnemy } from "../content/enemies";
+import { getMapEnemies } from "../content/mapEnemies";
+import { ALL_MAPS, getMap } from "../content/maps";
 import { POWER_UPS, getPowerUp } from "../content/powerups";
 import { RANDOM_EVENTS, VISITOR_SPOTANIM } from "../content/randomEvents";
 import { getWeapon } from "../content/weapons";
@@ -47,6 +50,78 @@ describe("enemy bakes", () => {
     test("aren't in the base bake", () => {
         const keys = GameAssets.getBaseRequests().map((r) => r.key);
         expect(keys).not.toContain("npc:goblin");
+    });
+});
+
+// A request without its key and animations
+function getBody(request: BakeRequest): Partial<BakeRequest> {
+    const { key: _key, ...body } = request;
+    return "seqIds" in body ? { ...body, seqIds: body.seqIds.slice(0, 1) } : body;
+}
+
+describe("merged enemy bakes", () => {
+    const maps = ALL_MAPS.map((map) => ({
+        map,
+        requests: GameAssets.getEnemyRequests(getMapEnemies(map)),
+    }));
+
+    test("still have every model GameView asks for, on every map", () => {
+        for (const { requests } of maps) {
+            const merged = GameAssets.mergeRequests(requests);
+            const keys = new Set(merged.requests.map((r) => r.key));
+            for (const { key } of requests) {
+                expect(keys.has(key) || keys.has(merged.aliases.get(key)!)).toBe(true);
+            }
+        }
+    });
+
+    test("merge only requests that bake the same model, with all their animations", () => {
+        for (const { requests } of maps) {
+            const merged = GameAssets.mergeRequests(requests);
+            const byKey = new Map(merged.requests.map((r) => [r.key, r]));
+            for (const request of requests) {
+                const into = byKey.get(merged.aliases.get(request.key) ?? request.key)!;
+                expect(getBody(into)).toEqual(getBody(request));
+                if ("seqIds" in request && "seqIds" in into) {
+                    expect(into.seqIds[0]).toBe(request.seqIds[0]);
+                    for (const seqId of request.seqIds) {
+                        expect(into.seqIds).toContain(seqId);
+                    }
+                }
+            }
+        }
+    });
+
+    test("don't change the requests they're made from", () => {
+        const requests = GameAssets.getEnemyRequests(getMapEnemies(getMap("god_wars")));
+        const copy = structuredClone(requests);
+        GameAssets.mergeRequests(requests);
+        expect(requests).toEqual(copy);
+    });
+
+    test("bake Nex once for her four phases", () => {
+        const { requests, aliases } = GameAssets.mergeRequests(
+            GameAssets.getEnemyRequests(getMapEnemies(getMap("god_wars"))),
+        );
+        const nex = getEnemy("nex");
+        expect(requests.filter((r) => r.kind === "npc" && r.npcId === nex.npcId)).toHaveLength(1);
+        for (const id of ["nex_shadow", "nex_blood", "nex_ice"]) {
+            expect(aliases.get("npc:" + id)).toBe("npc:nex");
+        }
+    });
+
+    test("never have one key for two different models", () => {
+        const lots = [GameAssets.getBaseRequests(), ...maps.map((m) => m.requests)];
+        for (const requests of lots) {
+            const bodies = new Map<string, Partial<BakeRequest>>();
+            for (const request of requests) {
+                const body = bodies.get(request.key);
+                if (body) {
+                    expect(getBody(request)).toEqual(body);
+                }
+                bodies.set(request.key, getBody(request));
+            }
+        }
     });
 });
 

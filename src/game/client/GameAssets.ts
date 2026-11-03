@@ -278,6 +278,23 @@ export function getCharacterAppearance(characterId: string): PlayerAppearance {
 // hundreds of them in the base bake
 const SMALL_BAKE_BATCH = 64;
 
+// Everything a request's bake depends on but its key and animations: requests
+// with the same body and first animation bake the same model
+function getRequestBody(request: BakeRequest): string {
+    switch (request.kind) {
+        case "npc":
+            return `npc:${request.npcId}:${request.seqIds[0]}`;
+        case "player":
+            return `player:${getAppearanceKey(request.appearance)}:${request.seqIds[0]}`;
+        case "spotanim":
+            return `spotanim:${request.spotAnimId}`;
+        case "obj":
+            return `obj:${request.objId}:${request.count}`;
+        case "loc":
+            return `loc:${request.locId}:${request.animated ? 1 : 0}`;
+    }
+}
+
 // A player's model, with the stance and power-up looks baked along with it
 type PlayerBake = {
     key?: string;
@@ -365,6 +382,41 @@ export class GameAssets {
 
     static getEnemyRequests(enemies: EnemyDef[]): BakeRequest[] {
         return enemies.flatMap((enemy) => GameAssets.getEnemyBakes(enemy));
+    }
+
+    // Requests that would bake the same model, as one: several enemies can be
+    // one NPC (Nex's four phases), the same outfit, or grow the same scenery.
+    // The merged request has all of their animations, under the first one's
+    // key, and the others' keys point to it. Only requests whose first
+    // animation is the same merge, since that's where a model's height is from.
+    static mergeRequests(requests: BakeRequest[]): {
+        requests: BakeRequest[];
+        aliases: Map<string, string>;
+    } {
+        const merged = new Map<string, BakeRequest>();
+        const aliases = new Map<string, string>();
+        for (const request of requests) {
+            const body = getRequestBody(request);
+            const into = merged.get(body);
+            if (!into) {
+                merged.set(
+                    body,
+                    "seqIds" in request ? { ...request, seqIds: request.seqIds.slice() } : request,
+                );
+                continue;
+            }
+            if ("seqIds" in into && "seqIds" in request) {
+                for (const seqId of request.seqIds) {
+                    if (!into.seqIds.includes(seqId)) {
+                        into.seqIds.push(seqId);
+                    }
+                }
+            }
+            if (request.key !== into.key) {
+                aliases.set(request.key, into.key);
+            }
+        }
+        return { requests: [...merged.values()], aliases };
     }
 
     // What every run needs. Enemies are baked for the map (loadEnemies): they
@@ -522,6 +574,7 @@ export class GameAssets {
         requests: BakeRequest[],
         onProgress?: (done: number, total: number) => void,
     ): Promise<void> {
+        const { requests: merged, aliases } = GameAssets.mergeRequests(requests);
         const bakes = this.enemyBakes;
         const onBake = (bake: ActorBakeResult) => {
             if (bakes === this.enemyBakes) {
@@ -529,7 +582,16 @@ export class GameAssets {
                 this.enemyPages.push(model.page);
             }
         };
-        await this.bakeInTasks(requests, onBake, onProgress);
+        await this.bakeInTasks(merged, onBake, onProgress);
+        if (bakes !== this.enemyBakes) {
+            return;
+        }
+        for (const [alias, key] of aliases) {
+            const model = this.models.get(key);
+            if (model) {
+                this.models.set(alias, model);
+            }
+        }
     }
 
     private loadBake = (bake: ActorBakeResult): void => {
