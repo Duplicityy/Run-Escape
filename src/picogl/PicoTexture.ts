@@ -5,7 +5,7 @@ import { Texture } from "picogl/build/module/texture.js";
 
 export function createTextureArray(
     app: App,
-    image: ArrayBufferView,
+    image: ArrayBufferView | null,
     width: number,
     height: number,
     depth: number,
@@ -29,7 +29,7 @@ export class PicoTexture extends Texture {
         gl: WebGLRenderingContext,
         appState: any,
         binding: number,
-        image: ArrayBufferView,
+        image: ArrayBufferView | null,
         width: number,
         height: number,
         depth: number,

@@ -733,8 +733,8 @@ Everything touch only hangs off `pointer: coarse`, so a mouse and keyboard never
 - `ui/Mobile.css` lays the screens out again for a phone held sideways (`max-height: 520px`). The
   UI's zoom never goes below 1, as the pixel fonts don't survive it, so a new screen needs rules
   there too. Check it at 844x390 and 667x375. It's imported last, so it wins over the other CSS.
-- A touch screen also gets a pixel ratio capped at 1.5, 2 workers instead of 4, and a closer camera
-  on a phone.
+- A touch screen also gets a pixel ratio capped at 1.5, 2 workers instead of 4, textures at half
+  size (64 a side, a quarter of the memory), and a closer camera on a phone.
 - `public/manifest.webmanifest` lets a browser install the game to the home screen (HTTPS only,
   apart from localhost), opening full screen and sideways. `enterFullscreen` leaves an installed
   game alone. iOS ignores `orientation`, so an iPhone still gets the rotate notice, and it can give

@@ -259,7 +259,11 @@ export class FrameProbe {
             actorPages: 0,
             actorBytes: 0,
             textureArrayBytes: renderer.textureArray
-                ? 128 * 128 * 4 * (renderer.textureIds.length + 1) * 1.33
+                ? renderer.textureArray.width *
+                  renderer.textureArray.height *
+                  4 *
+                  (renderer.textureIds.length + 1) *
+                  1.33
                 : 0,
         };
         for (const map of renderer.mapManager.mapSquares.values()) {

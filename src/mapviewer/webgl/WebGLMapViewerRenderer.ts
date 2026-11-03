@@ -20,7 +20,12 @@ import { OsrsMenuEntry } from "../../components/rs/menu/OsrsMenu";
 import { createTextureArray } from "../../picogl/PicoTexture";
 import { MenuTargetType } from "../../rs/MenuEntry";
 import { Scene } from "../../rs/scene/Scene";
-import { isTouchDevice, isWebGL2Supported, pixelRatio } from "../../util/DeviceUtil";
+import {
+    isCoarsePointer,
+    isTouchDevice,
+    isWebGL2Supported,
+    pixelRatio,
+} from "../../util/DeviceUtil";
 import { MapViewer } from "../MapViewer";
 import { MapViewerRenderer } from "../MapViewerRenderer";
 import { MapViewerRendererType, WEBGL } from "../MapViewerRenderers";
@@ -40,7 +45,29 @@ import {
 } from "./shaders/Shaders";
 
 const MAX_TEXTURES = 2048;
-const TEXTURE_SIZE = 128;
+// The cache's textures are 128 a side. A phone gets them at half that: from the
+// game's camera a tile is a few dozen pixels on its screen, so the full size is
+// barely sampled, and it's a quarter of the memory.
+const TEXTURE_SIZE = isCoarsePointer ? 64 : 128;
+const CACHE_TEXTURE_SIZE = 128;
+
+// Halves a texture (RGBA bytes, size a side) into out, averaging each 2x2 as a
+// mipmap would
+function halveTexture(pixels: Uint8Array, size: number, out: Uint8Array): void {
+    const half = size >> 1;
+    for (let y = 0; y < half; y++) {
+        for (let x = 0; x < half; x++) {
+            const a = (y * 2 * size + x * 2) * 4;
+            const b = a + size * 4;
+            const o = (y * half + x) * 4;
+            for (let c = 0; c < 4; c++) {
+                out[o + c] =
+                    (pixels[a + c] + pixels[a + 4 + c] + pixels[b + c] + pixels[b + 4 + c] + 2) >>
+                    2;
+            }
+        }
+    }
+}
 
 const INTERACT_BUFFER_COUNT = 2;
 const INTERACTION_RADIUS = 5;
@@ -398,13 +425,21 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
 
         console.time("load textures");
 
-        const pixelCount = TEXTURE_SIZE * TEXTURE_SIZE;
-
         const textureCount = this.textureIds.length;
-        const pixels = new Int32Array((textureCount + 1) * pixelCount);
+        this.textureArray = createTextureArray(
+            this.app,
+            null,
+            TEXTURE_SIZE,
+            TEXTURE_SIZE,
+            textureCount + 1,
+            { minFilter: PicoGL.LINEAR_MIPMAP_LINEAR, magFilter: PicoGL.LINEAR },
+        );
 
+        // Uploaded a layer at a time, rather than through one array of them all
+        const layer = new Uint8Array(TEXTURE_SIZE * TEXTURE_SIZE * 4);
         // White texture
-        pixels.fill(0xffffffff, 0, pixelCount);
+        layer.fill(0xff);
+        this.uploadTextureLayer(0, layer);
 
         const cacheInfo = this.mapViewer.loadedCache.info;
 
@@ -419,25 +454,17 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             try {
                 const texturePixels = this.mapViewer.textureLoader.getPixelsArgb(
                     textureId,
-                    TEXTURE_SIZE,
+                    CACHE_TEXTURE_SIZE,
                     true,
                     1.0,
                 );
-                pixels.set(texturePixels, (i + 1) * pixelCount);
+                this.uploadTextureLayer(i + 1, this.toTextureSize(texturePixels, layer));
             } catch (e) {
                 console.error("Failed loading texture", textureId, e);
             }
             this.loadedTextureIds.add(textureId);
         }
-
-        this.textureArray = createTextureArray(
-            this.app,
-            new Uint8Array(pixels.buffer),
-            TEXTURE_SIZE,
-            TEXTURE_SIZE,
-            textureCount + 1,
-            {},
-        );
+        this.gl.generateMipmap(PicoGL.TEXTURE_2D_ARRAY);
 
         this.updateTextureFiltering();
 
@@ -498,6 +525,34 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
         );
     }
 
+    // A texture as the cache has it (CACHE_TEXTURE_SIZE) as the array has it, in out
+    // if it's to be halved
+    private toTextureSize(pixels: Int32Array, out: Uint8Array): Uint8Array {
+        const bytes = new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength);
+        if (TEXTURE_SIZE === CACHE_TEXTURE_SIZE) {
+            return bytes;
+        }
+        halveTexture(bytes, CACHE_TEXTURE_SIZE, out);
+        return out;
+    }
+
+    private uploadTextureLayer(index: number, pixels: Uint8Array): void {
+        this.textureArray!.bind(0);
+        this.gl.texSubImage3D(
+            PicoGL.TEXTURE_2D_ARRAY,
+            0,
+            0,
+            0,
+            index,
+            TEXTURE_SIZE,
+            TEXTURE_SIZE,
+            1,
+            PicoGL.RGBA,
+            PicoGL.UNSIGNED_BYTE,
+            pixels,
+        );
+    }
+
     updateTextureArray(textures: Map<number, Int32Array>): void {
         if (!this.textureArray) {
             throw new Error("Texture array is not initialized");
@@ -508,21 +563,12 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
                 continue;
             }
             const index = this.textureIds.indexOf(id) + 1;
-
-            this.textureArray.bind(0);
-            this.gl.texSubImage3D(
-                PicoGL.TEXTURE_2D_ARRAY,
-                0,
-                0,
-                0,
-                index,
-                TEXTURE_SIZE,
-                TEXTURE_SIZE,
-                1,
-                PicoGL.RGBA,
-                PicoGL.UNSIGNED_BYTE,
-                new Uint8Array(pixels.buffer),
-            );
+            // Workers load them at the cache's size
+            if (pixels.length !== CACHE_TEXTURE_SIZE * CACHE_TEXTURE_SIZE) {
+                continue;
+            }
+            const layer = new Uint8Array(TEXTURE_SIZE * TEXTURE_SIZE * 4);
+            this.uploadTextureLayer(index, this.toTextureSize(pixels, layer));
             this.loadedTextureIds.add(id);
             updatedCount++;
         }
