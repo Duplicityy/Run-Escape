@@ -5,6 +5,11 @@ the version in the corner).
 
 ## Unreleased
 
+### Fixed
+
+- In very long endless runs, bones no longer stop dropping once coins and food have built up
+  around the map.
+
 ## 0.23.0 - 2026-11-02
 
 ### Added
