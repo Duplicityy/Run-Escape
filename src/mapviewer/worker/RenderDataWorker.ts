@@ -1,4 +1,4 @@
-import JSZip from "jszip";
+import type JSZip from "jszip";
 import { TransferDescriptor } from "threads";
 import { registerSerializer } from "threads";
 import { Transfer, expose } from "threads/worker";
@@ -136,7 +136,7 @@ const worker = {
             throw new Error("Worker not initialized");
         }
 
-        const zip = new JSZip();
+        const zip = await newZip();
 
         const cacheType = workerState.cache.type;
 
@@ -154,7 +154,7 @@ const worker = {
             throw new Error("Worker not initialized");
         }
 
-        const zip = new JSZip();
+        const zip = await newZip();
 
         const textureLoader = workerState.textureLoader;
 
@@ -228,6 +228,13 @@ async function offscreenCanvasToPng(canvas: OffscreenCanvas): Promise<string> {
     reader.readAsDataURL(blob);
 
     return await dataUrlPromise;
+}
+
+// Only the viewer's export buttons make zips, so jszip loads when one's pressed
+// rather than in every worker the game starts
+async function newZip(): Promise<JSZip> {
+    const { default: JSZip } = await import("jszip");
+    return new JSZip();
 }
 
 async function addSpritesToZip(zip: JSZip, id: number, sprites: IndexedSprite[]) {
