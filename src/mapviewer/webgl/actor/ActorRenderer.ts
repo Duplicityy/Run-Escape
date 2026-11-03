@@ -30,6 +30,8 @@ export class ActorAnim {
     constructor(
         readonly seqId: number,
         readonly ranges: Int32Array,
+        // Each frame's segment of its page
+        readonly segments: Uint16Array,
         readonly frameLengths: Uint16Array,
         readonly looping: boolean,
     ) {
@@ -168,24 +170,50 @@ class InstanceList {
     }
 }
 
-// One bake's geometry, with draw calls whose sub-draws are rewritten each frame
-// (one per instance, like the map squares' NPC draw calls).
-export class ActorPage {
+// The part of a page's vertices that its 16-bit indices reach, with a vertex
+// array that starts at its first vertex, and draw calls whose sub-draws are
+// rewritten each frame (one per instance, like the map squares' NPC draw calls)
+export class ActorSegment {
     readonly instances = new InstanceList();
     readonly silhouettes = new InstanceList();
     readonly outlines = new InstanceList();
+    readonly lists = [this.instances, this.silhouettes, this.outlines];
 
     constructor(
-        readonly vertexBuffer: VertexBuffer,
-        readonly indexBuffer: VertexBuffer,
         readonly vertexArray: VertexArray,
         readonly drawCall: DrawCall,
         readonly drawCallSilhouette: DrawCall,
         readonly drawCallOutline: DrawCall,
     ) {}
 
+    setActorData(texture: Texture): void {
+        this.drawCall.texture("u_actorData", texture);
+        this.drawCallSilhouette.texture("u_actorData", texture);
+        this.drawCallOutline.texture("u_actorData", texture);
+    }
+}
+
+// One bake's geometry
+export class ActorPage {
+    constructor(
+        readonly vertexBuffer: VertexBuffer,
+        readonly indexBuffer: VertexBuffer,
+        readonly segments: ActorSegment[],
+    ) {}
+
+    // Actors drawn this frame
+    get instanceCount(): number {
+        let count = 0;
+        for (const segment of this.segments) {
+            count += segment.instances.count;
+        }
+        return count;
+    }
+
     delete(): void {
-        this.vertexArray.delete();
+        for (const segment of this.segments) {
+            segment.vertexArray.delete();
+        }
         this.vertexBuffer.delete();
         this.indexBuffer.delete();
     }
@@ -244,18 +272,13 @@ export class ActorRenderer {
     addBake(bake: ActorBakeResult): Map<string, ActorModel> {
         const app = this.app;
         const vertexBuffer = app.createInterleavedBuffer(12, bake.vertices);
-        const indexBuffer = app.createIndexBuffer(PicoGL.UNSIGNED_INT, bake.indices);
-        const vertexArray = app
-            .createVertexArray()
-            .vertexAttributeBuffer(0, vertexBuffer, {
-                type: PicoGL.UNSIGNED_INT,
-                size: 3,
-                stride: 12,
-                integer: true as any,
-            })
-            .indexBuffer(indexBuffer);
+        const wide = bake.indices instanceof Uint32Array;
+        const indexBuffer = app.createIndexBuffer(
+            wide ? PicoGL.UNSIGNED_INT : PicoGL.UNSIGNED_SHORT,
+            bake.indices,
+        );
 
-        const createDrawCall = (program: Program) =>
+        const createDrawCall = (program: Program, vertexArray: VertexArray) =>
             app
                 .createDrawCall(program, vertexArray)
                 .uniformBlock("SceneUniforms", this.sceneUniformBuffer)
@@ -263,24 +286,44 @@ export class ActorRenderer {
                 .texture("u_textureMaterials", this.textureMaterials)
                 .texture("u_actorData", this.dataTexture);
 
-        const page = new ActorPage(
-            vertexBuffer,
-            indexBuffer,
-            vertexArray,
-            createDrawCall(this.program),
-            createDrawCall(this.silhouetteProgram).uniform(
-                "u_silhouetteColor",
-                this.silhouetteColor,
-            ),
-            createDrawCall(this.silhouetteProgram).uniform("u_silhouetteColor", this.outlineColor),
-        );
+        const segments = Array.from(bake.segmentStarts, (start) => {
+            const vertexArray = app
+                .createVertexArray()
+                .vertexAttributeBuffer(0, vertexBuffer, {
+                    type: PicoGL.UNSIGNED_INT,
+                    size: 3,
+                    stride: 12,
+                    offset: start * 12,
+                    integer: true as any,
+                })
+                .indexBuffer(indexBuffer);
+            return new ActorSegment(
+                vertexArray,
+                createDrawCall(this.program, vertexArray),
+                createDrawCall(this.silhouetteProgram, vertexArray).uniform(
+                    "u_silhouetteColor",
+                    this.silhouetteColor,
+                ),
+                createDrawCall(this.silhouetteProgram, vertexArray).uniform(
+                    "u_silhouetteColor",
+                    this.outlineColor,
+                ),
+            );
+        });
+        const page = new ActorPage(vertexBuffer, indexBuffer, segments);
         this.pages.push(page);
 
         const models = new Map<string, ActorModel>();
         for (const set of bake.sets) {
             const anims = set.anims.map(
                 (anim: BakedAnim) =>
-                    new ActorAnim(anim.seqId, anim.ranges, anim.frameLengths, anim.looping),
+                    new ActorAnim(
+                        anim.seqId,
+                        anim.ranges,
+                        anim.segments,
+                        anim.frameLengths,
+                        anim.looping,
+                    ),
             );
             models.set(
                 set.key,
@@ -303,9 +346,11 @@ export class ActorRenderer {
     beginFrame(frustum?: Frustum): void {
         this.frustum = frustum;
         for (const page of this.pages) {
-            page.instances.reset();
-            page.silhouettes.reset();
-            page.outlines.reset();
+            for (const segment of page.segments) {
+                segment.instances.reset();
+                segment.silhouettes.reset();
+                segment.outlines.reset();
+            }
         }
     }
 
@@ -332,26 +377,26 @@ export class ActorRenderer {
         const flash = options?.flash ?? 0;
         const tint = options?.tint ?? NO_TINT;
         const alpha = options?.alpha ?? 1;
-        const page = model.page;
-        page.instances.push(anim.ranges, frame, x, y, z, yaw, scale, flash, tint, alpha);
+        const segment = model.page.segments[anim.segments[frame]];
+        segment.instances.push(anim.ranges, frame, x, y, z, yaw, scale, flash, tint, alpha);
         if (options?.silhouette) {
-            page.silhouettes.push(anim.ranges, frame, x, y, z, yaw, scale, 0, NO_TINT, 1);
+            segment.silhouettes.push(anim.ranges, frame, x, y, z, yaw, scale, 0, NO_TINT, 1);
         }
         if (options?.outline) {
             const outlineScale = scale * options.outline;
-            page.outlines.push(anim.ranges, frame, x, y, z, yaw, outlineScale, 0, NO_TINT, 1);
+            segment.outlines.push(anim.ranges, frame, x, y, z, yaw, outlineScale, 0, NO_TINT, 1);
         }
     }
 
     upload(): void {
         let total = 0;
         for (const page of this.pages) {
-            page.instances.instanceOffset = total;
-            total += page.instances.count;
-            page.silhouettes.instanceOffset = total;
-            total += page.silhouettes.count;
-            page.outlines.instanceOffset = total;
-            total += page.outlines.count;
+            for (const segment of page.segments) {
+                for (const list of segment.lists) {
+                    list.instanceOffset = total;
+                    total += list.count;
+                }
+            }
         }
 
         const requiredFloats = total * FLOATS_PER_INSTANCE;
@@ -362,9 +407,9 @@ export class ActorRenderer {
             this.dataTexture.delete();
             this.dataTexture = this.createDataTexture(this.dataArray);
             for (const page of this.pages) {
-                page.drawCall.texture("u_actorData", this.dataTexture);
-                page.drawCallSilhouette.texture("u_actorData", this.dataTexture);
-                page.drawCallOutline.texture("u_actorData", this.dataTexture);
+                for (const segment of page.segments) {
+                    segment.setActorData(this.dataTexture);
+                }
             }
         }
 
@@ -373,12 +418,14 @@ export class ActorRenderer {
         }
 
         for (const page of this.pages) {
-            for (const list of [page.instances, page.silhouettes, page.outlines]) {
-                if (list.count > 0) {
-                    this.dataArray.set(
-                        list.data.subarray(0, list.count * FLOATS_PER_INSTANCE),
-                        list.instanceOffset * FLOATS_PER_INSTANCE,
-                    );
+            for (const segment of page.segments) {
+                for (const list of segment.lists) {
+                    if (list.count > 0) {
+                        this.dataArray.set(
+                            list.data.subarray(0, list.count * FLOATS_PER_INSTANCE),
+                            list.instanceOffset * FLOATS_PER_INSTANCE,
+                        );
+                    }
                 }
             }
         }
@@ -419,17 +466,21 @@ export class ActorRenderer {
     // Expects depth test on, blending off.
     renderOpaque(): void {
         for (const page of this.pages) {
-            const list = page.instances;
-            this.drawList(page.drawCall, list, list.opaqueOffsets, list.opaqueCounts);
+            for (const segment of page.segments) {
+                const list = segment.instances;
+                this.drawList(segment.drawCall, list, list.opaqueOffsets, list.opaqueCounts);
+            }
         }
     }
 
     // Expects blending on.
     renderAlpha(): void {
         for (const page of this.pages) {
-            const list = page.instances;
-            if (list.alphaElements > 0) {
-                this.drawList(page.drawCall, list, list.alphaOffsets, list.alphaCounts);
+            for (const segment of page.segments) {
+                const list = segment.instances;
+                if (list.alphaElements > 0) {
+                    this.drawList(segment.drawCall, list, list.alphaOffsets, list.alphaCounts);
+                }
             }
         }
     }
@@ -439,15 +490,17 @@ export class ActorRenderer {
     // the actors drawn over them leave a rim of it showing. Leaves the depth
     // state as LEQUAL with writes on.
     renderOutlines(): void {
-        if (!this.pages.some((page) => page.outlines.count > 0)) {
+        if (!this.pages.some((page) => page.segments.some((s) => s.outlines.count > 0))) {
             return;
         }
         this.app.depthMask(false);
         // Only the solid parts: a see-through cloud or glow outlined would be
         // a flat blob
         for (const page of this.pages) {
-            const list = page.outlines;
-            this.drawList(page.drawCallOutline, list, list.opaqueOffsets, list.opaqueCounts);
+            for (const segment of page.segments) {
+                const list = segment.outlines;
+                this.drawList(segment.drawCallOutline, list, list.opaqueOffsets, list.opaqueCounts);
+            }
         }
         this.app.depthMask(true);
     }
@@ -458,7 +511,9 @@ export class ActorRenderer {
     renderSilhouettes(): void {
         let any = false;
         for (const page of this.pages) {
-            any ||= page.silhouettes.count > 0;
+            for (const segment of page.segments) {
+                any ||= segment.silhouettes.count > 0;
+            }
         }
         if (!any) {
             return;
@@ -467,8 +522,15 @@ export class ActorRenderer {
         this.app.depthFunc(PicoGL.GREATER);
         this.app.depthMask(false);
         for (const page of this.pages) {
-            const list = page.silhouettes;
-            this.drawList(page.drawCallSilhouette, list, list.opaqueOffsets, list.opaqueCounts);
+            for (const segment of page.segments) {
+                const list = segment.silhouettes;
+                this.drawList(
+                    segment.drawCallSilhouette,
+                    list,
+                    list.opaqueOffsets,
+                    list.opaqueCounts,
+                );
+            }
         }
         this.app.depthFunc(PicoGL.LEQUAL);
         this.app.depthMask(true);

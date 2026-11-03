@@ -198,7 +198,7 @@ export class FrameProbe {
             totals.frame += performance.now() - start;
             totals.visibleSquares += renderer.mapManager.visibleMapCount;
             for (const page of renderer.actorRenderer?.pages ?? []) {
-                totals.actors += page.instances.count;
+                totals.actors += page.instanceCount;
             }
             this.frames++;
             this.onFrame?.();
