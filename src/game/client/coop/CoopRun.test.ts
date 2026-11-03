@@ -203,6 +203,32 @@ describe("co-op lockstep", () => {
         expect(sent).toHaveLength(2);
     });
 
+    it("a bad ask doesn't swallow the honest ones made with it", () => {
+        const clock = { now: 0 };
+        const { run, sent } = hostRun(clock);
+        // A message every two frames: they start at 0, 2, 4 ... 18
+        for (let i = 0; i < 20; i++) {
+            run.setMove(i % 2, 0);
+            run.stepFrame();
+            if (i % 2 === 1) {
+                run.flush(true);
+            }
+        }
+        sent.length = 0;
+        // Before anything kept, or not a whole frame, with an honest ask
+        run.receiveUp("guest2", { resend: -1 });
+        run.receiveUp("guest2", { resend: 4.5 as number });
+        run.receiveUp("guest1", { resend: 6 });
+        expect(sent.map((m) => m.from)).toEqual([6]);
+        // Inside a message, with an honest ask from the next one: both get it
+        sent.length = 0;
+        run.receiveUp("guest2", { resend: 9 });
+        run.receiveUp("guest1", { resend: 10 });
+        clock.now += 1000;
+        run.flush(true);
+        expect(sent.map((m) => m.from)).toEqual([10]);
+    });
+
     it("a guest takes only the frames it hasn't had from a resend for someone else", () => {
         const link: CoopLink = { sendUp: () => {}, sendDown: () => {} };
         const heroes = new Map(IDS.map((id, i) => [id, i]));

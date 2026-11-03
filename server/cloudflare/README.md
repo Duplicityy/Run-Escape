@@ -149,8 +149,9 @@ host changes settings, and rooms are capped per address and in all, as on the No
 pointing a paid account at players, also:
 
 - set a billing notification (Manage account, Notifications), and
-- add a rate limiting rule (Security, WAF) on `/coop/room/` for each IP, say 20 requests a minute,
-  so room URLs can't be hammered before they reach a Durable Object.
+- add a rate limiting rule (Security, WAF) on `/coop/room/` for each IP, about 60 requests a
+  minute, so room URLs can't be hammered before they reach a Durable Object. Don't go much lower:
+  reconnecting counts against it, and one dropped connection can take 7 tries in its 10 seconds.
 
 ## Differences from the Node relay
 

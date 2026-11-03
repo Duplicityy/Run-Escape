@@ -183,7 +183,13 @@ export class CoopRun {
             this.loading.delete(from);
         } else if ("resend" in message) {
             const after = message.resend;
-            if (Number.isSafeInteger(after)) {
+            // Nobody honest is further behind than what's kept, and an ask from
+            // before it would only hold back the rest
+            if (
+                Number.isSafeInteger(after) &&
+                this.sent.length > 0 &&
+                (after as number) >= this.sent[0].from!
+            ) {
                 this.resendAsked = Math.min(this.resendAsked ?? Infinity, after as number);
                 this.resendIfDue();
             }
@@ -366,14 +372,16 @@ export class CoopRun {
     // The host's: everything sent after a frame, again, as one message. Every
     // guest gets it; those that had some of it already take only the rest.
     private resend(after: number): void {
-        const start = this.sent.findIndex((m) => m.from === after);
+        // An honest ask is where a message starts. One that isn't still gets the
+        // next one on, so that it can't swallow the honest asks made with it.
+        const start = this.sent.findIndex((m) => m.from! >= after);
         if (start < 0) {
             return;
         }
         const missed = this.sent.slice(start);
         const hash = missed.findLast((m) => m.hash)?.hash;
         this.link.sendDown({
-            from: after,
+            from: missed[0].from,
             upTo: missed[missed.length - 1].upTo,
             events: missed.flatMap((m) => m.events),
             ...(hash && { hash }),
