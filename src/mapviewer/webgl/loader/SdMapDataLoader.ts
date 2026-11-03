@@ -17,7 +17,13 @@ import { WorkerState } from "../../worker/RenderDataWorker";
 import { AnimationFrames } from "../AnimationFrames";
 import { DrawRange, NULL_DRAW_RANGE, newDrawRange } from "../DrawRange";
 import { InteractType } from "../InteractType";
-import { CullGrid, addModelBounds, getModelBounds, newBounds } from "../buffer/CullGrid";
+import {
+    CullGrid,
+    ModelBounds,
+    addModelBounds,
+    getModelBounds,
+    newBounds,
+} from "../buffer/CullGrid";
 import { ModelHashBuffer, getModelHash } from "../buffer/ModelHashBuffer";
 import {
     ContourGroundType,
@@ -39,6 +45,47 @@ import { NpcSpawnGroup } from "../npc/NpcSpawnGroup";
 import { SdMapData } from "./SdMapData";
 import { SdMapLoaderInput } from "./SdMapLoaderInput";
 import { createTextureIdIndexMap, getSdTextureIds } from "./TextureIndex";
+
+// keepArea (world tiles) as a box local to the square (model units), or
+// undefined if the square and its border are all inside it
+function getKeepBox(
+    keepArea: number[] | undefined,
+    mapX: number,
+    mapY: number,
+    borderSize: number,
+): number[] | undefined {
+    if (!keepArea) {
+        return undefined;
+    }
+    const baseX = mapX * Scene.MAP_SQUARE_SIZE;
+    const baseZ = mapY * Scene.MAP_SQUARE_SIZE;
+    const size = Scene.MAP_SQUARE_SIZE;
+    if (
+        keepArea[0] <= baseX - borderSize &&
+        keepArea[1] <= baseZ - borderSize &&
+        keepArea[2] >= baseX + size + borderSize &&
+        keepArea[3] >= baseZ + size + borderSize
+    ) {
+        return undefined;
+    }
+    return [
+        (keepArea[0] - baseX) * 128,
+        (keepArea[1] - baseZ) * 128,
+        (keepArea[2] - baseX) * 128,
+        (keepArea[3] - baseZ) * 128,
+    ];
+}
+
+// The instances of one model the square keeps: the ones not wholly outside
+function keepInstances(sceneBuf: SceneBuffer, model: Model, instances: SceneModel[]): SceneModel[] {
+    if (!sceneBuf.keepBox) {
+        return instances;
+    }
+    const bounds = getModelBounds(model);
+    return instances.filter(({ sceneX: x, sceneZ: z }) =>
+        sceneBuf.keeps(x + bounds.minX, z + bounds.minZ, x + bounds.maxX, z + bounds.maxZ),
+    );
+}
 
 function loadHeightMapTextureData(scene: Scene): Int16Array {
     const heightMapTextureData = new Int16Array(Scene.MAX_LEVELS * scene.sizeX * scene.sizeY);
@@ -260,9 +307,17 @@ function addSceneModels(
         // mergeOpaque = false;
         // mergeTransparent = false;
 
+        // Whether to merge goes by every instance, kept or not, so that what the
+        // square keeps is drawn just as it would be. Merged models are cut by
+        // the triangle (SceneBuffer.keepBox); these by the instance.
+        const keptModels =
+            mergeOpaque && mergeTransparent
+                ? sceneModels
+                : keepInstances(sceneBuf, model, sceneModels);
+
         if (mergeOpaque) {
             createModelGroups(modelGroupMap, instancedModels, false, keepLowDetail);
-        } else if (opaqueFaces.length > 0) {
+        } else if (opaqueFaces.length > 0 && keptModels.length > 0) {
             const indexOffset = sceneBuf.indexByteOffset();
             sceneBuf.addModel(model, opaqueFaces);
             const elementCount = (sceneBuf.indexByteOffset() - indexOffset) / 4;
@@ -274,7 +329,7 @@ function addSceneModels(
                     model,
                     indexOffset,
                     elementCount,
-                    sceneModels,
+                    keptModels,
                 );
             } else {
                 const drawCommand: DrawCommand = {
@@ -299,7 +354,7 @@ function addSceneModels(
 
         if (mergeTransparent && transparentFaces.length > 0) {
             createModelGroups(modelGroupMap, instancedModels, true, keepLowDetail);
-        } else if (transparentFaces.length > 0) {
+        } else if (transparentFaces.length > 0 && keptModels.length > 0) {
             const indexOffset = sceneBuf.indexByteOffset();
             sceneBuf.addModel(model, transparentFaces);
             const elementCount = (sceneBuf.indexByteOffset() - indexOffset) / 4;
@@ -311,7 +366,7 @@ function addSceneModels(
                     model,
                     indexOffset,
                     elementCount,
-                    sceneModels,
+                    keptModels,
                 );
             } else {
                 const drawCommand: DrawCommand = {
@@ -340,22 +395,44 @@ function addSceneModels(
     }
 }
 
+function getLocAnimationFrameCount(locModelLoader: LocModelLoader, entity: LocEntity): number {
+    const seqType = locModelLoader.seqTypeLoader.load(entity.seqId);
+    if (seqType.isSkeletalSeq()) {
+        return seqType.getSkeletalDuration();
+    }
+    return seqType.frameIds?.length ?? 0;
+}
+
+// The extent of every frame of a loc's animation, without adding them
+function getLocAnimationBounds(
+    locModelLoader: LocModelLoader,
+    entity: LocEntity,
+    locType: LocType,
+): ModelBounds {
+    const bounds = newBounds();
+    const frameCount = getLocAnimationFrameCount(locModelLoader, entity);
+    for (let i = 0; i < frameCount; i++) {
+        const model = locModelLoader.getModelAnimated(
+            locType,
+            entity.type,
+            entity.rotation,
+            entity.seqId,
+            i,
+        );
+        if (model) {
+            addModelBounds(bounds, model);
+        }
+    }
+    return bounds;
+}
+
 function addLocAnimationFrames(
     locModelLoader: LocModelLoader,
     sceneBuf: SceneBuffer,
     entity: LocEntity,
     locType: LocType,
 ): AnimationFrames | undefined {
-    const seqType = locModelLoader.seqTypeLoader.load(entity.seqId);
-    let frameCount: number;
-    if (seqType.isSkeletalSeq()) {
-        frameCount = seqType.getSkeletalDuration();
-    } else {
-        if (!seqType.frameIds) {
-            return undefined;
-        }
-        frameCount = seqType.frameIds.length;
-    }
+    const frameCount = getLocAnimationFrameCount(locModelLoader, entity);
     if (frameCount === 0) {
         return undefined;
     }
@@ -400,7 +477,13 @@ function addLocEntities(
     sceneBuf: SceneBuffer,
     locEntities: SceneLocEntity[],
 ): Iterable<LocAnimatedGroup> {
-    const locAnimatedGroupMap = new Map<number, LocAnimatedGroup>();
+    // Each animated loc and its model, rotation and type's group: baked once
+    // they're all in, so a square that keeps only some of the world can leave
+    // out a group none of it keeps
+    const animatedGroups = new Map<
+        number,
+        { entity: LocEntity; locType: LocType; locs: SceneLocEntity[] }
+    >();
 
     for (const sceneLocEntity of locEntities) {
         const entity = sceneLocEntity.entity;
@@ -472,19 +555,11 @@ function addLocEntities(
             };
 
             const key = rotation + (type << 3) + (locType.id << 10);
-            const group = locAnimatedGroupMap.get(key);
+            const group = animatedGroups.get(key);
             if (group) {
                 group.locs.push(loc);
             } else {
-                const anim = addLocAnimationFrames(locModelLoader, sceneBuf, entity, locType);
-                if (!anim) {
-                    continue;
-                }
-
-                locAnimatedGroupMap.set(key, {
-                    anim,
-                    locs: [loc],
-                });
+                animatedGroups.set(key, { entity, locType, locs: [loc] });
             }
         } else {
             const model = locModelLoader.getModelAnimated(
@@ -510,7 +585,28 @@ function addLocEntities(
         }
     }
 
-    return locAnimatedGroupMap.values();
+    const locAnimatedGroups: LocAnimatedGroup[] = [];
+    for (const { entity, locType, locs } of animatedGroups.values()) {
+        if (sceneBuf.keepBox) {
+            const bounds = getLocAnimationBounds(locModelLoader, entity, locType);
+            const kept = locs.some((loc) =>
+                sceneBuf.keeps(
+                    loc.sceneX + bounds.minX,
+                    loc.sceneZ + bounds.minZ,
+                    loc.sceneX + bounds.maxX,
+                    loc.sceneZ + bounds.maxZ,
+                ),
+            );
+            if (!kept) {
+                continue;
+            }
+        }
+        const anim = addLocAnimationFrames(locModelLoader, sceneBuf, entity, locType);
+        if (anim) {
+            locAnimatedGroups.push({ anim, locs });
+        }
+    }
+    return locAnimatedGroups;
 }
 
 function addNpcAnimationFrames(
@@ -630,6 +726,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             minimizeDrawCalls,
             cullCellSize = 0,
             skipMinimap = false,
+            keepArea,
             loadedTextureIds,
         }: SdMapLoaderInput,
     ): Promise<RenderDataResult<SdMapData | undefined>> {
@@ -661,6 +758,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
 
         const grid = cullCellSize > 0 ? new CullGrid(cullCellSize, scene, borderSize) : undefined;
         const sceneBuf = new SceneBuffer(textureLoader, textureIdIndexMap, 100000, grid);
+        sceneBuf.keepBox = getKeepBox(keepArea, mapX, mapY, borderSize);
         sceneBuf.addTerrain(scene, borderSize, minLevel, maxLevel);
 
         const sceneLocs = getSceneLocs(locTypeLoader, scene, borderSize, minLevel, maxLevel);
@@ -861,6 +959,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
 
                 smoothTerrain,
                 cullCellSize,
+                keepArea,
 
                 borderSize,
                 tileRenderFlags: scene.tileRenderFlags,

@@ -16,6 +16,8 @@
 //   DODGE=1 ...     # also keeps off what a phased boss marks on the ground, and sidesteps bullets
 //   FLAT=1 ...      # the map's arena with nothing in it, as the bot walks straight into walls
 //   SAFE_WAVES=1 ... # can't die before the final boss: it gets there with what the run earned
+//   GOD=1 ...        # can't die at all: with ENDLESS=1, how damage keeps up with the rounds
+//   FUNNEL=1 ...     # always takes its best weapon's next level when it's offered
 import { getUpgradeLine } from "../../src/game/content/armoury";
 import { CHARACTERS } from "../../src/game/content/characters";
 import { getEnemy } from "../../src/game/content/enemies";
@@ -378,7 +380,15 @@ function runOnce(characterId: string, seed: number) {
             const ranked = sim.choices
                 .map((choice, index) => ({ choice, index }))
                 .sort((a, b) => choiceScore(a.choice) - choiceScore(b.choice));
-            sim.choose(ranked[0].index);
+            // As a player who's found their weapon: its next level whenever it's offered
+            const best =
+                process.env.FUNNEL === "1"
+                    ? [...sim.weapons].sort((a, b) => b.bonus - a.bonus || b.level - a.level)[0]
+                    : undefined;
+            const funnel = sim.choices.findIndex(
+                (choice) => choice.kind === "weaponLevel" && choice.weaponId === best?.def.id,
+            );
+            sim.choose(funnel >= 0 ? funnel : ranked[0].index);
             continue;
         }
         if (sim.state === "chest") {
@@ -423,6 +433,10 @@ function runOnce(characterId: string, seed: number) {
         if (process.env.SAFE_WAVES === "1" && !sim.bossSpawned) {
             sim.player.hp = sim.player.maxHp;
         }
+        if (process.env.GOD === "1") {
+            // Untouchable, as a late endless round's hits are bigger than any health bar
+            sim.player.invulnerable = 1e9;
+        }
         const pressed = uncursed(sim, move);
         sim.step(pressed.x, pressed.y);
         if (sim.shownBoss?.bossState?.phase) {
@@ -450,6 +464,15 @@ function runOnce(characterId: string, seed: number) {
                     `kills ${String(sim.kills).padStart(5)}  alive ${String(alive).padStart(3)}  ` +
                     `coins ${String(sim.coins).padStart(4)}  ${weapons} | ${passives} | ${gear}`,
             );
+            if (endless) {
+                // How the best weapon's damage keeps up with the round's hitpoints: a
+                // ratio that climbs round on round means the player outgrows the run
+                const best = Math.max(...sim.weapons.map((w) => 1 + w.bonus));
+                console.log(
+                    `    best weapon x${best.toExponential(2)}, enemy hp x${sim.roundHp.toExponential(2)}, ` +
+                        `ratio ${(best / sim.roundHp).toExponential(2)}`,
+                );
+            }
         }
     }
     if (sim.state === "dead") {

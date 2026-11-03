@@ -338,7 +338,7 @@ export const MapViewerControls = memo(
                                 renderer.fpsLimit = v;
                             },
                         },
-                        ...renderer.getControls(),
+                        ...renderer.getControls(folder),
                     },
                     { collapsed: true },
                 ),

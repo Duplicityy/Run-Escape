@@ -56,6 +56,8 @@ export class GameAudio {
 
     private context?: AudioContext;
     private master?: GainNode;
+    // Synthesized, waiting for their first play: each one moves into an
+    // AudioBuffer then, so a sound is only held once
     private readonly sounds = new Map<number, SoundData>();
     private readonly buffers = new Map<number, AudioBuffer>();
     private readonly lastPlayed = new Map<number, number>();
@@ -176,6 +178,7 @@ export class GameAudio {
             buffer = context.createBuffer(1, sound.samples.length, sound.sampleRate);
             buffer.copyToChannel(sound.samples as Float32Array<ArrayBuffer>, 0);
             this.buffers.set(id, buffer);
+            this.sounds.delete(id);
         }
         return buffer;
     }

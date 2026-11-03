@@ -1,3 +1,4 @@
+import type { folder } from "leva";
 import { Schema } from "leva/dist/declarations/src/types";
 
 import { Renderer } from "../components/renderer/Renderer";
@@ -42,7 +43,9 @@ export abstract class MapViewerRenderer<T extends MapSquare = MapSquare> extends
         );
     }
 
-    getControls(): Schema {
+    // leva's folder() is passed in by the viewer's controls, so leva stays out of the
+    // game's bundle (the game's renderer extends the viewer's)
+    getControls(_folder: typeof folder): Schema {
         return {};
     }
 

@@ -1,6 +1,6 @@
 import Denque from "denque";
 import { vec2, vec4 } from "gl-matrix";
-import { folder } from "leva";
+import type { folder as levaFolder } from "leva";
 import { Schema } from "leva/dist/declarations/src/types";
 import {
     DrawCall,
@@ -20,7 +20,12 @@ import { OsrsMenuEntry } from "../../components/rs/menu/OsrsMenu";
 import { createTextureArray } from "../../picogl/PicoTexture";
 import { MenuTargetType } from "../../rs/MenuEntry";
 import { Scene } from "../../rs/scene/Scene";
-import { isTouchDevice, isWebGL2Supported, pixelRatio } from "../../util/DeviceUtil";
+import {
+    isCoarsePointer,
+    isTouchDevice,
+    isWebGL2Supported,
+    pixelRatio,
+} from "../../util/DeviceUtil";
 import { MapViewer } from "../MapViewer";
 import { MapViewerRenderer } from "../MapViewerRenderer";
 import { MapViewerRendererType, WEBGL } from "../MapViewerRenderers";
@@ -40,7 +45,29 @@ import {
 } from "./shaders/Shaders";
 
 const MAX_TEXTURES = 2048;
-const TEXTURE_SIZE = 128;
+// The cache's textures are 128 a side. A phone gets them at half that: from the
+// game's camera a tile is a few dozen pixels on its screen, so the full size is
+// barely sampled, and it's a quarter of the memory.
+const TEXTURE_SIZE = isCoarsePointer ? 64 : 128;
+const CACHE_TEXTURE_SIZE = 128;
+
+// Halves a texture (RGBA bytes, size a side) into out, averaging each 2x2 as a
+// mipmap would
+function halveTexture(pixels: Uint8Array, size: number, out: Uint8Array): void {
+    const half = size >> 1;
+    for (let y = 0; y < half; y++) {
+        for (let x = 0; x < half; x++) {
+            const a = (y * 2 * size + x * 2) * 4;
+            const b = a + size * 4;
+            const o = (y * half + x) * 4;
+            for (let c = 0; c < 4; c++) {
+                out[o + c] =
+                    (pixels[a + c] + pixels[a + 4 + c] + pixels[b + c] + pixels[b + 4 + c] + 2) >>
+                    2;
+            }
+        }
+    }
+}
 
 const INTERACT_BUFFER_COUNT = 2;
 const INTERACTION_RADIUS = 5;
@@ -74,6 +101,13 @@ function getMaxAnisotropy(mode: TextureFilterMode): number {
         default:
             return 1;
     }
+}
+
+function isSameArea(a: ArrayLike<number> | undefined, b: ArrayLike<number> | undefined): boolean {
+    if (!a || !b) {
+        return a === b;
+    }
+    return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
 }
 
 function optimizeAssumingFlatsHaveSameFirstAndLastData(gl: WebGL2RenderingContext) {
@@ -151,6 +185,9 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
     // World tiles (x0, y0, x1, y1) past which the world fades into the sky.
     // Unbounded unless set.
     playArea: vec4 = vec4.fromValues(-1e6, -1e6, 1e6, 1e6);
+    // World tiles (x0, y0, x1, y1) of the world that map squares keep, see
+    // SdMapLoaderInput.keepArea. Unset keeps it all.
+    keepArea?: vec4;
 
     brightness: number = 1.0;
     colorBanding: number = 255;
@@ -173,6 +210,11 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
 
     msaaEnabled: boolean = false;
     fxaaEnabled: boolean = false;
+
+    // With no hover menus, multisampling or FXAA (the game), frames are drawn
+    // straight to the canvas, with no framebuffer of their own to copy from.
+    // Settled when the context's made, so MSAA and FXAA can't be turned on later.
+    drawsToCanvas: boolean = false;
 
     loadObjs: boolean = true;
     loadNpcs: boolean = true;
@@ -206,9 +248,17 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
     async init(): Promise<void> {
         await super.init();
 
-        // Only a full screen quad is drawn to the canvas, from a framebuffer of
-        // its own, so its multisamples and depth buffer would go unused
-        this.app = PicoGL.createApp(this.canvas, { antialias: false, depth: false });
+        this.drawsToCanvas = !this.useInteractTarget && !this.msaaEnabled && !this.fxaaEnabled;
+        // Drawn straight to, the canvas needs a depth buffer. The page behind it is
+        // black, so it needn't be blended with it. Otherwise only a full screen
+        // quad is drawn to it, from a framebuffer of its own, so its multisamples
+        // and depth buffer would go unused.
+        this.app = PicoGL.createApp(
+            this.canvas,
+            this.drawsToCanvas
+                ? { antialias: false, depth: true, alpha: false, stencil: false }
+                : { antialias: false, depth: false },
+        );
         this.gl = this.app.gl as WebGL2RenderingContext;
 
         // https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices#use_webgl_provoking_vertex_when_its_available
@@ -273,8 +323,7 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             createMainProgram(hasMultiDraw, false),
             createMainProgram(hasMultiDraw, true),
             createNpcProgram(hasMultiDraw, true),
-            FRAME_PROGRAM,
-            FRAME_FXAA_PROGRAM,
+            ...(this.drawsToCanvas ? [] : [FRAME_PROGRAM, FRAME_FXAA_PROGRAM]),
         );
 
         const [mainProgram, mainAlphaProgram, npcProgram, frameProgram, frameFxaaProgram] =
@@ -285,13 +334,18 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
         this.frameProgram = frameProgram;
         this.frameFxaaProgram = frameFxaaProgram;
 
-        this.frameDrawCall = this.app.createDrawCall(frameProgram, this.quadArray);
-        this.frameFxaaDrawCall = this.app.createDrawCall(frameFxaaProgram, this.quadArray);
+        if (frameProgram && frameFxaaProgram) {
+            this.frameDrawCall = this.app.createDrawCall(frameProgram, this.quadArray);
+            this.frameFxaaDrawCall = this.app.createDrawCall(frameFxaaProgram, this.quadArray);
+        }
 
         return programs;
     }
 
     initFramebuffers(): void {
+        if (this.drawsToCanvas) {
+            return;
+        }
         this.textureColorTarget = this.app.createTexture2D(this.app.width, this.app.height, {
             minFilter: PicoGL.LINEAR,
             magFilter: PicoGL.LINEAR,
@@ -317,6 +371,10 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
     }
 
     initFramebuffer(): void {
+        if (this.drawsToCanvas) {
+            this.needsFramebufferUpdate = false;
+            return;
+        }
         this.framebuffer?.delete();
         this.colorTarget?.delete();
         this.interactTarget?.delete();
@@ -388,13 +446,21 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
 
         console.time("load textures");
 
-        const pixelCount = TEXTURE_SIZE * TEXTURE_SIZE;
-
         const textureCount = this.textureIds.length;
-        const pixels = new Int32Array((textureCount + 1) * pixelCount);
+        this.textureArray = createTextureArray(
+            this.app,
+            null,
+            TEXTURE_SIZE,
+            TEXTURE_SIZE,
+            textureCount + 1,
+            { minFilter: PicoGL.LINEAR_MIPMAP_LINEAR, magFilter: PicoGL.LINEAR },
+        );
 
+        // Uploaded a layer at a time, rather than through one array of them all
+        const layer = new Uint8Array(TEXTURE_SIZE * TEXTURE_SIZE * 4);
         // White texture
-        pixels.fill(0xffffffff, 0, pixelCount);
+        layer.fill(0xff);
+        this.uploadTextureLayer(0, layer);
 
         const cacheInfo = this.mapViewer.loadedCache.info;
 
@@ -409,25 +475,17 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             try {
                 const texturePixels = this.mapViewer.textureLoader.getPixelsArgb(
                     textureId,
-                    TEXTURE_SIZE,
+                    CACHE_TEXTURE_SIZE,
                     true,
                     1.0,
                 );
-                pixels.set(texturePixels, (i + 1) * pixelCount);
+                this.uploadTextureLayer(i + 1, this.toTextureSize(texturePixels, layer));
             } catch (e) {
                 console.error("Failed loading texture", textureId, e);
             }
             this.loadedTextureIds.add(textureId);
         }
-
-        this.textureArray = createTextureArray(
-            this.app,
-            new Uint8Array(pixels.buffer),
-            TEXTURE_SIZE,
-            TEXTURE_SIZE,
-            textureCount + 1,
-            {},
-        );
+        this.gl.generateMipmap(PicoGL.TEXTURE_2D_ARRAY);
 
         this.updateTextureFiltering();
 
@@ -488,6 +546,34 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
         );
     }
 
+    // A texture as the cache has it (CACHE_TEXTURE_SIZE) as the array has it, in out
+    // if it's to be halved
+    private toTextureSize(pixels: Int32Array, out: Uint8Array): Uint8Array {
+        const bytes = new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength);
+        if (TEXTURE_SIZE === CACHE_TEXTURE_SIZE) {
+            return bytes;
+        }
+        halveTexture(bytes, CACHE_TEXTURE_SIZE, out);
+        return out;
+    }
+
+    private uploadTextureLayer(index: number, pixels: Uint8Array): void {
+        this.textureArray!.bind(0);
+        this.gl.texSubImage3D(
+            PicoGL.TEXTURE_2D_ARRAY,
+            0,
+            0,
+            0,
+            index,
+            TEXTURE_SIZE,
+            TEXTURE_SIZE,
+            1,
+            PicoGL.RGBA,
+            PicoGL.UNSIGNED_BYTE,
+            pixels,
+        );
+    }
+
     updateTextureArray(textures: Map<number, Int32Array>): void {
         if (!this.textureArray) {
             throw new Error("Texture array is not initialized");
@@ -498,21 +584,12 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
                 continue;
             }
             const index = this.textureIds.indexOf(id) + 1;
-
-            this.textureArray.bind(0);
-            this.gl.texSubImage3D(
-                PicoGL.TEXTURE_2D_ARRAY,
-                0,
-                0,
-                0,
-                index,
-                TEXTURE_SIZE,
-                TEXTURE_SIZE,
-                1,
-                PicoGL.RGBA,
-                PicoGL.UNSIGNED_BYTE,
-                new Uint8Array(pixels.buffer),
-            );
+            // Workers load them at the cache's size
+            if (pixels.length !== CACHE_TEXTURE_SIZE * CACHE_TEXTURE_SIZE) {
+                continue;
+            }
+            const layer = new Uint8Array(TEXTURE_SIZE * TEXTURE_SIZE * 4);
+            this.uploadTextureLayer(index, this.toTextureSize(pixels, layer));
             this.loadedTextureIds.add(id);
             updatedCount++;
         }
@@ -551,7 +628,7 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
         });
     }
 
-    getControls(): Schema {
+    override getControls(folder: typeof levaFolder): Schema {
         return {
             "Max Level": {
                 value: this.maxLevel,
@@ -682,6 +759,7 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             minimizeDrawCalls: !this.hasMultiDraw,
             cullCellSize: this.cullCellSize,
             skipMinimap: this.skipMinimap,
+            keepArea: this.keepArea && Array.from(this.keepArea),
             loadedTextureIds: this.loadedTextureIds,
         });
 
@@ -724,9 +802,7 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             mapX,
             mapY,
             WebGLMapSquare.load(
-                this.mapViewer.seqTypeLoader,
-                this.mapViewer.npcTypeLoader,
-                this.mapViewer.basTypeLoader,
+                this.mapViewer,
                 this.app,
                 mainProgram,
                 mainAlphaProgram,
@@ -751,8 +827,17 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             mapData.loadObjs === this.loadObjs &&
             mapData.loadNpcs === this.loadNpcs &&
             mapData.smoothTerrain === this.smoothTerrain &&
-            mapData.cullCellSize === this.cullCellSize
+            mapData.cullCellSize === this.cullCellSize &&
+            isSameArea(mapData.keepArea, this.keepArea)
         );
+    }
+
+    setKeepArea(area: vec4 | undefined): void {
+        if (isSameArea(this.keepArea, area)) {
+            return;
+        }
+        this.keepArea = area && vec4.clone(area);
+        this.mapManager.setLoadArea(area);
     }
 
     clearMaps(): void {
@@ -852,9 +937,8 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             !this.mainAlphaProgram ||
             !this.npcProgram ||
             !this.sceneUniformBuffer ||
-            !this.framebuffer ||
-            !this.textureFramebuffer ||
-            !this.frameDrawCall ||
+            (!this.drawsToCanvas &&
+                (!this.framebuffer || !this.textureFramebuffer || !this.frameDrawCall)) ||
             (this.useInteractTarget && !this.interactFramebuffer) ||
             !this.textureArray ||
             !this.textureMaterials
@@ -863,8 +947,8 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
         }
 
         if (this.needsResize) {
-            this.framebuffer.resize();
-            this.textureFramebuffer.resize();
+            this.framebuffer?.resize();
+            this.textureFramebuffer?.resize();
             this.interactFramebuffer?.resize();
 
             this.resolutionUni[0] = this.app.width;
@@ -922,7 +1006,11 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
         this.app.enable(PicoGL.DEPTH_TEST);
         this.app.depthMask(true);
 
-        this.app.drawFramebuffer(this.framebuffer);
+        if (this.framebuffer) {
+            this.app.drawFramebuffer(this.framebuffer);
+        } else {
+            this.app.defaultDrawFramebuffer();
+        }
 
         this.app.clearColor(0.0, 0.0, 0.0, 1.0);
         this.app.clear();
@@ -951,54 +1039,8 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
         this.renderTransparentNpcPass(npcDataTextureIndex, npcDataTexture);
         const transparentNpcPassTime = performance.now() - transparentNpcPassStart;
 
-        // Can't sample from renderbuffer so blit to a texture for sampling.
-        this.app.readFramebuffer(this.framebuffer);
-        if (this.colorTarget) {
-            this.app.drawFramebuffer(this.textureFramebuffer);
-            this.gl.readBuffer(PicoGL.COLOR_ATTACHMENT0);
-            this.app.blitFramebuffer(PicoGL.COLOR_BUFFER_BIT);
-        }
-
-        if (this.interactFramebuffer && !inputManager.isPointerLock()) {
-            const mouseX = inputManager.mouseX;
-            const mouseY = inputManager.mouseY;
-            if (mouseX !== -1 && mouseY !== -1) {
-                if (this.msaaEnabled) {
-                    // TODO: reading from the multisampled framebuffer is not accurate
-                    this.app.drawFramebuffer(this.interactFramebuffer);
-                    this.gl.readBuffer(PicoGL.COLOR_ATTACHMENT1);
-                    this.app.blitFramebuffer(PicoGL.COLOR_BUFFER_BIT);
-
-                    this.app.readFramebuffer(this.interactFramebuffer);
-                    this.gl.readBuffer(PicoGL.COLOR_ATTACHMENT0);
-                } else {
-                    this.gl.readBuffer(PicoGL.COLOR_ATTACHMENT1);
-                }
-
-                currInteractions.read(
-                    this.gl,
-                    (mouseX * pixelRatio) | 0,
-                    (mouseY * pixelRatio) | 0,
-                );
-            }
-        }
-
-        this.app.disable(PicoGL.DEPTH_TEST);
-        this.app.depthMask(false);
-
-        this.app.disable(PicoGL.BLEND);
-
-        this.app.clearMask(PicoGL.COLOR_BUFFER_BIT | PicoGL.DEPTH_BUFFER_BIT);
-        this.app.clearColor(0.0, 0.0, 0.0, 1.0);
-        this.app.defaultDrawFramebuffer().clear();
-
-        if (this.frameFxaaDrawCall && this.fxaaEnabled) {
-            this.frameFxaaDrawCall.uniform("u_resolution", this.resolutionUni);
-            this.frameFxaaDrawCall.texture("u_frame", this.textureFramebuffer.colorAttachments[0]);
-            this.frameFxaaDrawCall.draw();
-        } else {
-            this.frameDrawCall.texture("u_frame", this.textureFramebuffer.colorAttachments[0]);
-            this.frameDrawCall.draw();
+        if (this.framebuffer && this.textureFramebuffer && this.frameDrawCall) {
+            this.drawFrame(this.framebuffer, this.textureFramebuffer, this.frameDrawCall);
         }
 
         // Load new map squares
@@ -1048,6 +1090,66 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             this.mapViewer.debugText = `Frame Time GL: ${this.timer.gpuTime.toFixed(
                 2,
             )}ms\n JS: ${this.timer.cpuTime.toFixed(2)}ms`;
+        }
+    }
+
+    // From the frame's own framebuffer to the canvas
+    drawFrame(
+        framebuffer: Framebuffer,
+        textureFramebuffer: Framebuffer,
+        frameDrawCall: DrawCall,
+    ): void {
+        const inputManager = this.mapViewer.inputManager;
+        const currInteractions =
+            this.interactions[this.stats.frameCount % this.interactions.length];
+        // Can't sample from renderbuffer so blit to a texture for sampling.
+        this.app.readFramebuffer(framebuffer);
+        if (this.colorTarget) {
+            this.app.drawFramebuffer(textureFramebuffer);
+            this.gl.readBuffer(PicoGL.COLOR_ATTACHMENT0);
+            this.app.blitFramebuffer(PicoGL.COLOR_BUFFER_BIT);
+        }
+
+        if (this.interactFramebuffer && !inputManager.isPointerLock()) {
+            const mouseX = inputManager.mouseX;
+            const mouseY = inputManager.mouseY;
+            if (mouseX !== -1 && mouseY !== -1) {
+                if (this.msaaEnabled) {
+                    // TODO: reading from the multisampled framebuffer is not accurate
+                    this.app.drawFramebuffer(this.interactFramebuffer);
+                    this.gl.readBuffer(PicoGL.COLOR_ATTACHMENT1);
+                    this.app.blitFramebuffer(PicoGL.COLOR_BUFFER_BIT);
+
+                    this.app.readFramebuffer(this.interactFramebuffer);
+                    this.gl.readBuffer(PicoGL.COLOR_ATTACHMENT0);
+                } else {
+                    this.gl.readBuffer(PicoGL.COLOR_ATTACHMENT1);
+                }
+
+                currInteractions.read(
+                    this.gl,
+                    (mouseX * pixelRatio) | 0,
+                    (mouseY * pixelRatio) | 0,
+                );
+            }
+        }
+
+        this.app.disable(PicoGL.DEPTH_TEST);
+        this.app.depthMask(false);
+
+        this.app.disable(PicoGL.BLEND);
+
+        this.app.clearMask(PicoGL.COLOR_BUFFER_BIT | PicoGL.DEPTH_BUFFER_BIT);
+        this.app.clearColor(0.0, 0.0, 0.0, 1.0);
+        this.app.defaultDrawFramebuffer().clear();
+
+        if (this.frameFxaaDrawCall && this.fxaaEnabled) {
+            this.frameFxaaDrawCall.uniform("u_resolution", this.resolutionUni);
+            this.frameFxaaDrawCall.texture("u_frame", textureFramebuffer.colorAttachments[0]);
+            this.frameFxaaDrawCall.draw();
+        } else {
+            frameDrawCall.texture("u_frame", textureFramebuffer.colorAttachments[0]);
+            frameDrawCall.draw();
         }
     }
 

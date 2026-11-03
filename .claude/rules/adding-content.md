@@ -28,6 +28,10 @@ content, so add new entries to its tables and lists.
 
 Add it to `WEAPONS` in `weapons.ts`.
 
+Damage tuning by style, evolution, weapon and run mode is in `content/balance.ts`; see
+`docs/BALANCE.md`. It applies at damage time, so don't fold those multipliers into a weapon's
+levels or secondary attacks as well. Keep the originating weapon's damage source on delayed effects.
+
 - `kind` decides how it attacks and what each level's numbers mean: `slash`, `sweep`, `missile`,
   `knives`, `axes`, `aura`, `strike` or `orbit`. The `fire*` methods in `Sim.ts` do the work, and
   `statFields` in `weaponStats.ts` lists the stats each kind shows.
@@ -35,8 +39,9 @@ Add it to `WEAPONS` in `weapons.ts`.
   `damageStyle` only for exceptions (see its comment).
 - `unlock` brings it in through a task on a map. Without one it's there from the start.
 - `evolution` needs a passive, and the weapon it becomes needs `evolved: true`, `evolvedLevels` for
-  its 3 levels, and `style`/`family` kept from what it evolves from. Recipes in `evolutions.ts` and
-  the Collection log come from these fields, so they need no extra entry.
+  its 3 levels, and `style`/`family` kept from what it evolves from. Set `damage` to a three-value
+  array for a tuned curve, or a number for the default progression. Recipes in `evolutions.ts`
+  and the Collection log come from these fields, so they need no extra entry.
 - A `sweep` with `arc: Math.PI` hits all the way round. `special` replaces every so many swings of
   a slash or sweep, and `special.aoe` hits all round.
 - Every other level of a slash or sweep adds knockback automatically, from the loop after

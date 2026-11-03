@@ -101,6 +101,8 @@ export function GameApp(): JSX.Element {
     // Read again once this tab has the save lock
     const store = useMemo(() => new GameStore(saveStore.load().save), [saveStore]);
     const [errorMessage, setErrorMessage] = useState<string>();
+    // What was going on when the graphics went (GameClient.onGraphicsLost)
+    const [graphicsLost, setGraphicsLost] = useState<"none" | "solo" | "coop">();
     const [loaded, setLoaded] = useState<Loaded>();
     const [client, setClient] = useState<GameClient>();
     const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -171,15 +173,31 @@ export function GameApp(): JSX.Element {
         };
     }, [loaded, store, saveStore]);
 
-    // A phone can take the GPU back from a game it's put away. There's no getting
-    // that back without loading everything again.
+    // A phone can take the GPU back from a game it's put away, or when it's short
+    // of memory. preventDefault lets the browser offer the context back, but the
+    // game's textures, map squares and baked actors were all on it, and there's no
+    // making those again short of loading again. So the run stops (solo) and the
+    // player keeps what they found when they reload.
     useEffect(() => {
-        const canvas = loaded?.renderer.canvas;
-        const onLost = () =>
-            setErrorMessage("The game lost its graphics. Reload the page to carry on.");
+        const renderer = loaded?.renderer;
+        const canvas = renderer?.canvas;
+        const onLost = (e: Event) => {
+            e.preventDefault();
+            console.warn("WebGL context lost");
+            renderer!.contextLost = true;
+            setGraphicsLost(client?.onGraphicsLost() ?? "none");
+        };
         canvas?.addEventListener("webglcontextlost", onLost);
         return () => canvas?.removeEventListener("webglcontextlost", onLost);
-    }, [loaded]);
+    }, [loaded, client]);
+
+    const reloadAfterLoss = () => {
+        try {
+            client?.endRunForReload();
+        } finally {
+            window.location.reload();
+        }
+    };
 
     return (
         <div className="game-root">
@@ -187,6 +205,20 @@ export function GameApp(): JSX.Element {
             <canvas className="game-overlay" ref={overlayRef} />
             {errorMessage ? (
                 <div className="game-status content-text">{errorMessage}</div>
+            ) : graphicsLost ? (
+                <div className="game-status game-status-lost content-text">
+                    <p>
+                        Your device took the game's graphics away, as it can when it's short of
+                        memory, and they can't come back without reloading.
+                        {graphicsLost === "solo" && " Your run is paused."}
+                        {graphicsLost === "none"
+                            ? " Reload to carry on."
+                            : " Reload to play again: the coins and quests from this run are kept."}
+                    </p>
+                    <button className="ui-button" onClick={reloadAfterLoss}>
+                        Reload
+                    </button>
+                </div>
             ) : (
                 <GameUi store={store} client={client} />
             )}

@@ -2,10 +2,11 @@ import { SCAPERUNE_DEV_MAPS } from "../scaperune/maps/devMaps";
 import { HALLOWED_BOSS_ARENA, HALLOWED_NIGHT } from "../scaperune/maps/hallowedNight";
 import { SANCTUARY_BOSS_ARENA, SISTERHOOD_SANCTUARY } from "../scaperune/maps/sisterhoodSanctuary";
 import { MapRecipe, getRecipeArena, getRecipeWorldTile } from "../scaperune/recipe";
-import { getEnemy } from "./enemies";
+import { ENEMY_BY_ID, getEnemy } from "./enemies";
 import { FUN_MAPS } from "./fun/maps";
 import { PHOSANI_START_DISTANCE } from "./phosani";
-import { MapDef } from "./types";
+import { RANDOM_EVENTS } from "./randomEvents";
+import { EnemyDef, MapDef } from "./types";
 import {
     BARROWS_EVENTS,
     BARROWS_WAVES,
@@ -479,4 +480,36 @@ export function hasPoison(map: MapDef): boolean {
             effect?.kind === "debuff" ? effect.stacks !== undefined : effect?.kind === "poison",
         ),
     );
+}
+
+// Whether anything that flies can turn up on the map. It goes by every enemy
+// id anywhere in the map's data and the random events', and in theirs in turn
+// (summons, splits, risen forms), so it doesn't need to know where ids are kept.
+// Sim builds the flight grid with the map when this says so, rather than on
+// the tick the first flier turns up.
+export function hasFliers(map: MapDef): boolean {
+    const seen = new Set<object>();
+    const enemies: EnemyDef[] = [];
+    const visit = (value: unknown): void => {
+        if (typeof value === "string") {
+            const enemy = ENEMY_BY_ID.get(value);
+            if (enemy && !seen.has(enemy)) {
+                enemies.push(enemy);
+                visit(enemy);
+            }
+        } else if (
+            typeof value === "object" &&
+            value !== null &&
+            !ArrayBuffer.isView(value) &&
+            !seen.has(value)
+        ) {
+            seen.add(value);
+            for (const item of Object.values(value)) {
+                visit(item);
+            }
+        }
+    };
+    visit(map);
+    visit(RANDOM_EVENTS);
+    return enemies.some((enemy) => enemy.flies);
 }

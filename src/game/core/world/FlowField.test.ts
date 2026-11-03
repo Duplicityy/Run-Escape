@@ -1,4 +1,5 @@
-import { FlowField, canStep, canWalkStraight } from "./FlowField";
+import { FlightGrid } from "./FlightGrid";
+import { FlowField, StepGrid, canStep, canWalkStraight } from "./FlowField";
 import { makeGrid } from "./testGrid";
 
 describe("canWalkStraight", () => {
@@ -151,5 +152,46 @@ describe("FlowField", () => {
         const field = new FlowField(16);
         field.update(grid, 102, 203);
         expect(field.isReachable(102, 200)).toBe(false);
+    });
+});
+
+describe("Steps", () => {
+    // Every step out of every tile, and the ring of tiles round the grid
+    function expectCanStep(grid: StepGrid & { steps: NonNullable<StepGrid["steps"]> }) {
+        const DIRS = [
+            [0, 1],
+            [1, 0],
+            [0, -1],
+            [-1, 0],
+            [1, 1],
+            [1, -1],
+            [-1, -1],
+            [-1, 1],
+        ];
+        for (let y = 199; y <= 207; y++) {
+            for (let x = 99; x <= 108; x++) {
+                DIRS.forEach(([dx, dy], d) => {
+                    expect(grid.steps.can(x, y, d)).toBe(canStep(grid, x, y, dx, dy));
+                });
+            }
+        }
+    }
+
+    const grid = makeGrid([
+        //
+        "..#.....",
+        ".|..~~..",
+        "._.o..#.",
+        "...|.#..",
+        "#..__...",
+        "..o..|.#",
+    ]);
+
+    test("are canStep's answers", () => {
+        expectCanStep(grid);
+    });
+
+    test("are canStep's answers for what flies too", () => {
+        expectCanStep(new FlightGrid(grid));
     });
 });

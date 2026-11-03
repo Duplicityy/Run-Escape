@@ -17,6 +17,11 @@ describe("the damage panel's numbers", () => {
         expect(formatCompact(1_234_000_000)).toBe("1.2B");
         expect(formatCompact(56_700_000_000)).toBe("57B");
         expect(formatCompact(3.2e12)).toBe("3.2T");
+        // An endless run's: the short scale's names, then powers of ten
+        expect(formatCompact(4.6e15)).toBe("4.6Qa");
+        expect(formatCompact(1_230_938_972e15)).toBe("1.2Sp");
+        expect(formatCompact(999.6e33)).toBe("1e36");
+        expect(formatCompact(4.5968e47)).toBe("4.6e47");
         expect(formatCompact(Infinity)).toBe("0");
         expect(formatCompact(NaN)).toBe("0");
     });

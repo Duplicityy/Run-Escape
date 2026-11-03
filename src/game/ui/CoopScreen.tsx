@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 import { GameClient } from "../client/GameClient";
 import { ReviveView, TeammateView, UiSnapshot } from "../client/GameStore";
@@ -513,7 +513,11 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
 
 // The rest of the party in a run: their adventurer and hitpoints, or that
 // they're down or gone
-export function PartyFrames({ party }: { party: TeammateView[] }): JSX.Element {
+export const PartyFrames = memo(function PartyFrames({
+    party,
+}: {
+    party: TeammateView[];
+}): JSX.Element {
     return (
         <div className="ui-party">
             {party.map((member, i) => (
@@ -563,7 +567,7 @@ export function PartyFrames({ party }: { party: TeammateView[] }): JSX.Element {
             ))}
         </div>
     );
-}
+});
 
 // Co-op: you're down and can be revived, someone's reviving you, or you're
 // reviving a teammate

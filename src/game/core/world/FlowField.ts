@@ -14,9 +14,13 @@ const JUMP_SOUTH = 9;
 
 const DIR_X = [0, 1, 0, -1, 1, 1, -1, -1];
 const DIR_Y = [1, 0, -1, 0, 1, -1, -1, 1];
+// The step back the other way, for each of those
+const OPPOSITE = [2, 3, 0, 1, 6, 7, 4, 5];
+// Each step's index in those, by (dx + 1) * 3 + dy + 1; -1 for standing still
+const DIR_INDEX = [6, 3, 7, 2, -1, 0, 5, 1, 4];
 
-// What canStep needs of a grid
-export type StepGrid = Pick<ArenaGrid, "isSolid" | "getFlags">;
+// What canStep needs of a grid, and its table of steps if it has one
+export type StepGrid = Pick<ArenaGrid, "isSolid" | "getFlags"> & { readonly steps?: Steps };
 
 // Whether a one tile step is allowed, with the OSRS rules: walls on either side
 // of the edge block it, and a diagonal step needs both straight routes around
@@ -47,6 +51,77 @@ export function canStep(grid: StepGrid, x: number, y: number, dx: number, dy: nu
     return (from & CollisionFlag.WALL_SOUTH) === 0 && (to & CollisionFlag.WALL_NORTH) === 0;
 }
 
+// canStep's answer for each of the eight steps out of every tile of a grid,
+// worked out once when the grid's made: a grid doesn't change during a run,
+// and each flow field update asks tens of thousands of them. Tiles off the
+// grid ask canStep.
+export class Steps {
+    // One bit per direction in DIR_X/DIR_Y
+    private readonly allowed: Uint8Array;
+
+    constructor(
+        private readonly grid: StepGrid,
+        private readonly baseX: number,
+        private readonly baseY: number,
+        private readonly sizeX: number,
+        private readonly sizeY: number,
+    ) {
+        this.allowed = new Uint8Array(sizeX * sizeY);
+        // The straight steps, then the diagonals from them: canStep's are the
+        // four straight ones round the corner, and the corner tile not solid
+        for (let y = 0; y < sizeY; y++) {
+            for (let x = 0; x < sizeX; x++) {
+                let bits = 0;
+                for (let d = 0; d < 4; d++) {
+                    if (canStep(grid, baseX + x, baseY + y, DIR_X[d], DIR_Y[d])) {
+                        bits |= 1 << d;
+                    }
+                }
+                this.allowed[x + y * sizeX] = bits;
+            }
+        }
+        for (let y = 0; y < sizeY; y++) {
+            for (let x = 0; x < sizeX; x++) {
+                const tileX = baseX + x;
+                const tileY = baseY + y;
+                let bits = this.allowed[x + y * sizeX];
+                for (let d = 4; d < 8; d++) {
+                    const dx = DIR_X[d];
+                    const dy = DIR_Y[d];
+                    const alongX = DIR_INDEX[(dx + 1) * 3 + 1];
+                    const alongY = DIR_INDEX[4 + dy];
+                    if (
+                        !grid.isSolid(tileX + dx, tileY + dy) &&
+                        this.can(tileX, tileY, alongX) &&
+                        this.can(tileX, tileY, alongY) &&
+                        this.can(tileX + dx, tileY, alongY) &&
+                        this.can(tileX, tileY + dy, alongX)
+                    ) {
+                        bits |= 1 << d;
+                    }
+                }
+                this.allowed[x + y * sizeX] = bits;
+            }
+        }
+    }
+
+    // canStep(grid, tileX, tileY, DIR_X[d], DIR_Y[d])
+    can(tileX: number, tileY: number, d: number): boolean {
+        const x = tileX - this.baseX;
+        const y = tileY - this.baseY;
+        if (x < 0 || y < 0 || x >= this.sizeX || y >= this.sizeY) {
+            return canStep(this.grid, tileX, tileY, DIR_X[d], DIR_Y[d]);
+        }
+        return (this.allowed[x + y * this.sizeX] & (1 << d)) !== 0;
+    }
+}
+
+// canStep for the step in direction d, from the grid's table if it has one
+function canStepTo(grid: StepGrid, tileX: number, tileY: number, d: number): boolean {
+    const steps = grid.steps;
+    return steps ? steps.can(tileX, tileY, d) : canStep(grid, tileX, tileY, DIR_X[d], DIR_Y[d]);
+}
+
 // Whether a straight walk from one point to another stays on open ground: each
 // tile the line goes through is a step that's allowed from the one before.
 export function canWalkStraight(
@@ -69,7 +144,8 @@ export function canWalkStraight(
     while (left > 0) {
         const dx = nextX <= nextY ? stepX : 0;
         const dy = nextY <= nextX ? stepY : 0;
-        if (!canStep(grid, tileX, tileY, dx, dy)) {
+        const d = DIR_INDEX[(dx + 1) * 3 + dy + 1];
+        if (d >= 0 ? !canStepTo(grid, tileX, tileY, d) : !canStep(grid, tileX, tileY, dx, dy)) {
             return false;
         }
         if (dx !== 0) {
@@ -171,7 +247,7 @@ export class FlowField {
                 }
                 // Searching outward from the target, so check the step an
                 // enemy on the neighbour would take back towards it.
-                if (!canStep(grid, wx + DIR_X[d], wy + DIR_Y[d], -DIR_X[d], -DIR_Y[d])) {
+                if (!canStepTo(grid, wx + DIR_X[d], wy + DIR_Y[d], OPPOSITE[d])) {
                     continue;
                 }
                 cost[nIndex] = nCost;
@@ -225,7 +301,7 @@ export class FlowField {
             let bestCost = this.cost[index];
             for (let d = 0; d < 8; d++) {
                 const c = this.getCost(tileX + DIR_X[d], tileY + DIR_Y[d]);
-                if (c < bestCost && canStep(grid, tileX, tileY, DIR_X[d], DIR_Y[d])) {
+                if (c < bestCost && canStepTo(grid, tileX, tileY, d)) {
                     best = d;
                     bestCost = c;
                 }

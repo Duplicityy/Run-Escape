@@ -1,6 +1,7 @@
 import {
     CSSProperties,
     ReactNode,
+    memo,
     useCallback,
     useEffect,
     useRef,
@@ -13,11 +14,13 @@ import compass from "../../components/rs/minimap/compass.png";
 import minimapFrame from "../../components/rs/minimap/minimap-frame.png";
 import { EquipSlot } from "../../rs/model/player/PlayerModelLoader";
 import { isCoarsePointer } from "../../util/DeviceUtil";
+import { FRAME_RATES, FrameRate } from "../client/DisplaySettings";
 import { GameClient } from "../client/GameClient";
 import {
     BuffView,
     GameStore,
     GearSlotView,
+    HudNumbers,
     HudView,
     InventorySlotView,
     QuestTrackView,
@@ -312,6 +315,40 @@ function MovePredictionSetting({ ui, client }: ScreenProps): JSX.Element {
     );
 }
 
+const FRAME_RATE_NAMES: Record<FrameRate, string> = {
+    auto: "Auto",
+    "30": "30",
+    "60": "60",
+    unlimited: "Unlimited",
+};
+
+function FrameRateSetting({ ui, client }: ScreenProps): JSX.Element {
+    return (
+        <Setting
+            name="Frame rate"
+            text="Frames a second at most. Auto is 60 on a phone or tablet, as many as the screen shows otherwise"
+        >
+            {FRAME_RATES.map((rate) => (
+                <button
+                    key={rate}
+                    className={
+                        "ui-button ui-button-small ui-frame-rate" +
+                        (ui.display.frameRate === rate ? " ui-frame-rate-on" : "")
+                    }
+                    aria-pressed={ui.display.frameRate === rate}
+                    onClick={(e) => {
+                        client.setFrameRate(rate);
+                        // Give Enter and Space back to the screen
+                        e.currentTarget.blur();
+                    }}
+                >
+                    {FRAME_RATE_NAMES[rate]}
+                </button>
+            ))}
+        </Setting>
+    );
+}
+
 // The community server's invite
 const DISCORD_INVITE = "https://discord.gg/82gBtKz2Xx";
 const GITHUB_REPOSITORY = "https://github.com/Dynrothe/Run-Escape";
@@ -494,6 +531,7 @@ function SettingsPanel({
                     <AutoPauseSetting ui={ui} client={client} />
                     <AutoAlchSetting ui={ui} client={client} />
                     <MovePredictionSetting ui={ui} client={client} />
+                    <FrameRateSetting ui={ui} client={client} />
                 </section>
                 <section className="ui-settings-section">
                     <h3>Save</h3>
@@ -1207,7 +1245,7 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
                 <ReviveNote revive={ui.revive} />
             )}
             {isCoarsePointer && hud && (
-                <TouchControls hud={hud} overlay={ui.overlay} client={client} />
+                <TouchControls inventory={hud.inventory} overlay={ui.overlay} client={client} />
             )}
             <div className="ui-toasts">
                 {ui.toasts.map((toast) => (
@@ -1226,12 +1264,7 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
                 />
             )}
             {ui.overlay === "event" && ui.event && (
-                <EventModal
-                    key={ui.event.uid}
-                    event={ui.event}
-                    coins={hud?.coins ?? 0}
-                    client={client}
-                />
+                <RunEventModal key={ui.event.uid} event={ui.event} client={client} />
             )}
             {ui.overlay === "paused" && hud && <PauseModal ui={ui} hud={hud} client={client} />}
             {(ui.overlay === "dead" || ui.overlay === "victory") && (
@@ -1239,6 +1272,29 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
             )}
         </div>
     );
+}
+
+// One of the HUD's numbers (hitpoints, xp, the clock, damage), which change many
+// times a second. A part of the HUD draws again only when what it picks out does:
+// GameClient keeps what hasn't changed the same object.
+function useHudNumber<T>(client: GameClient, pick: (numbers: HudNumbers) => T): T | undefined {
+    const store = client.store;
+    return useSyncExternalStore(store.subscribeNumbers, () => {
+        const numbers = store.getNumbers();
+        return numbers && pick(numbers);
+    });
+}
+
+// A random event: what's for sale against the coins carried
+function RunEventModal({
+    event,
+    client,
+}: {
+    event: NonNullable<UiSnapshot["event"]>;
+    client: GameClient;
+}): JSX.Element {
+    const coins = useHudNumber(client, (n) => n.coins) ?? 0;
+    return <EventModal event={event} coins={coins} client={client} />;
 }
 
 // "3", "max", and past the last level (endless runs) "+2"
@@ -1251,7 +1307,7 @@ function formatSlotLevel(slot: SlotView): string {
 
 // A weapon or passive in the HUD, with what it does on a card shown while
 // it's pointed at
-function Slots({ slots, max }: { slots: SlotView[]; max: number }): JSX.Element {
+const Slots = memo(function Slots({ slots, max }: { slots: SlotView[]; max: number }): JSX.Element {
     return (
         <div className="ui-slots">
             {Array.from({ length: max }, (_, i) => {
@@ -1290,7 +1346,7 @@ function Slots({ slots, max }: { slots: SlotView[]; max: number }): JSX.Element 
             })}
         </div>
     );
-}
+});
 
 // How far a weapon has got towards its evolution, each half ticked off
 function EvolutionLine({
@@ -1316,7 +1372,7 @@ function EvolutionLine({
 }
 
 // Worn gear, small, under the weapons and passives
-function GearSlots({ gear }: { gear: GearSlotView[] }): JSX.Element {
+const GearSlots = memo(function GearSlots({ gear }: { gear: GearSlotView[] }): JSX.Element {
     return (
         <div className="ui-slots ui-gear-slots">
             {gear.map((slot) => (
@@ -1340,10 +1396,10 @@ function GearSlots({ gear }: { gear: GearSlotView[] }): JSX.Element {
             ))}
         </div>
     );
-}
+});
 
 // Utility items, used with 1-4 or a click
-function Inventory({
+const Inventory = memo(function Inventory({
     inventory,
     client,
 }: {
@@ -1371,7 +1427,7 @@ function Inventory({
             ))}
         </div>
     );
-}
+});
 
 function Buffs({ buffs }: { buffs: BuffView[] }): JSX.Element {
     return (
@@ -1384,14 +1440,19 @@ function Buffs({ buffs }: { buffs: BuffView[] }): JSX.Element {
                 >
                     <ItemIcon objId={buff.objId} size={24} />
                     <span>{buff.secondsLeft}s</span>
-                    <div className="ui-buff-bar" style={{ width: `${buff.fraction * 100}%` }} />
+                    <div
+                        className="ui-buff-bar"
+                        style={{ transform: `scaleX(${buff.fraction})` }}
+                    />
                 </div>
             ))}
         </div>
     );
 }
 
-function Hud({
+// The HUD's slower parts draw again only when what the hero has changes; the
+// numbers are their own components (useHudNumber)
+const Hud = memo(function Hud({
     hud,
     client,
     questTracker,
@@ -1402,117 +1463,159 @@ function Hud({
     questTracker: boolean;
     damagePanel: boolean;
 }): JSX.Element {
-    const bossIn = hud.bossIn;
     return (
         <>
-            <div className="ui-xp">
-                <div className="ui-xp-fill" style={{ width: `${hud.xpFraction * 100}%` }} />
-                <span className="ui-xp-level">Level {hud.level}</span>
-            </div>
+            <XpBar level={hud.level} client={client} />
             <div className="ui-hud-top">
                 <div className="ui-hud-left">
                     <Slots slots={hud.weapons} max={hud.maxWeapons} />
                     <Slots slots={hud.passives} max={hud.maxPassives} />
                     <GearSlots gear={hud.gear} />
                 </div>
-                <div className="ui-timer">{formatTime(hud.seconds)}</div>
+                <RunTimer client={client} />
                 <div className="ui-hud-right">
                     <Minimap client={client} />
-                    <div>
-                        <span className="ui-skull">☠</span> {hud.kills.toLocaleString()}
-                    </div>
-                    <Coins amount={hud.coins} />
+                    <KillsAndCoins client={client} />
                     {hud.round !== undefined && <div className="ui-round">Round {hud.round}</div>}
-                    {hud.quests.length > 0 && (
-                        <QuestTracker quests={hud.quests} open={questTracker} client={client} />
-                    )}
-                    <DamagePanel hud={hud} open={damagePanel} client={client} />
+                    <HudQuests open={questTracker} client={client} />
+                    <DamagePanel weapons={hud.weapons} open={damagePanel} client={client} />
                 </div>
             </div>
-            {hud.boss ? (
-                <div className="ui-boss">
-                    <div className="ui-boss-name">
-                        {hud.boss.name}
-                        {hud.boss.enraged && <span className="ui-boss-enraged"> (enraged)</span>}
-                        {hud.boss.fight && (
-                            <span className="ui-boss-phase">
-                                {" "}
-                                Phase {hud.boss.fight.phase}/{hud.boss.fight.phases}
-                            </span>
-                        )}
-                    </div>
-                    {hud.boss.fight?.stage === "totems" ? (
-                        <div className="ui-boss-totems">
-                            {hud.boss.fight.totems.map((charge, i) => (
-                                <div key={i} className="ui-boss-bar ui-boss-totem">
-                                    <div
-                                        className="ui-boss-fill ui-boss-fill-totem"
-                                        style={{ width: `${charge * 100}%` }}
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="ui-boss-bar">
-                            <div
-                                className={
-                                    hud.boss.fight
-                                        ? "ui-boss-fill ui-boss-fill-shield"
-                                        : "ui-boss-fill"
-                                }
-                                style={{ width: `${hud.boss.fraction * 100}%` }}
-                            />
-                        </div>
-                    )}
-                    {hud.boss.fight && (
-                        <div className="ui-boss-status">
-                            {hud.boss.fight.stage === "totems"
-                                ? "Charge the totems!"
-                                : hud.boss.fight.stage === "finale"
-                                  ? "Stay on your feet!"
-                                  : "Break her shield!"}
-                            {hud.boss.fight.curseAttacks !== undefined && (
-                                <span className="ui-boss-curse">
-                                    {" "}
-                                    Cursed: {hud.boss.fight.curseAttacks}
-                                </span>
-                            )}
-                            {hud.boss.fight.parasiteSeconds !== undefined && (
-                                <span className="ui-boss-curse">
-                                    {" "}
-                                    Parasite: {Math.ceil(hud.boss.fight.parasiteSeconds)}s
-                                </span>
-                            )}
-                        </div>
-                    )}
-                </div>
-            ) : (
-                bossIn <= 60 && (
-                    <div className="ui-boss-warning">
-                        {getMap(hud.mapId).finalBossWarning} {Math.ceil(bossIn)}s
-                    </div>
-                )
-            )}
+            <BossBar mapId={hud.mapId} client={client} />
             <div className="ui-hud-bottom">
-                {hud.buffs.length > 0 && <Buffs buffs={hud.buffs} />}
+                <HudBuffs client={client} />
                 <Inventory inventory={hud.inventory} client={client} />
-                <div className={hud.poisoned ? "ui-hp ui-hp-poisoned" : "ui-hp"}>
-                    <div
-                        className="ui-hp-fill"
-                        style={{ width: `${(hud.hp / hud.maxHp) * 100}%` }}
-                    />
-                    <span>
-                        {hud.hp} / {hud.maxHp}
-                    </span>
-                </div>
+                <HpBar client={client} />
             </div>
         </>
+    );
+});
+
+// Scaled rather than resized, so it doesn't lay the page out again as it fills
+function XpBar({ level, client }: { level: number; client: GameClient }): JSX.Element {
+    const xpFraction = useHudNumber(client, (n) => n.xpFraction) ?? 0;
+    return (
+        <div className="ui-xp">
+            <div className="ui-xp-fill" style={{ transform: `scaleX(${xpFraction})` }} />
+            <span className="ui-xp-level">Level {level}</span>
+        </div>
+    );
+}
+
+function RunTimer({ client }: { client: GameClient }): JSX.Element {
+    const seconds = useHudNumber(client, (n) => n.seconds) ?? 0;
+    return <div className="ui-timer">{formatTime(seconds)}</div>;
+}
+
+function KillsAndCoins({ client }: { client: GameClient }): JSX.Element {
+    const kills = useHudNumber(client, (n) => n.kills) ?? 0;
+    const coins = useHudNumber(client, (n) => n.coins) ?? 0;
+    return (
+        <>
+            <div>
+                <span className="ui-skull">☠</span> {kills.toLocaleString()}
+            </div>
+            <Coins amount={coins} />
+        </>
+    );
+}
+
+function HudQuests({ open, client }: { open: boolean; client: GameClient }): JSX.Element | null {
+    const quests = useHudNumber(client, (n) => n.quests);
+    return quests && quests.length > 0 ? (
+        <QuestTracker quests={quests} open={open} client={client} />
+    ) : null;
+}
+
+function HudBuffs({ client }: { client: GameClient }): JSX.Element | null {
+    const buffs = useHudNumber(client, (n) => n.buffs);
+    return buffs && buffs.length > 0 ? <Buffs buffs={buffs} /> : null;
+}
+
+function HpBar({ client }: { client: GameClient }): JSX.Element | null {
+    const hp = useHudNumber(client, (n) => n.hp);
+    const maxHp = useHudNumber(client, (n) => n.maxHp);
+    const poisoned = useHudNumber(client, (n) => n.poisoned);
+    if (hp === undefined || maxHp === undefined) {
+        return null;
+    }
+    return (
+        <div className={poisoned ? "ui-hp ui-hp-poisoned" : "ui-hp"}>
+            <div className="ui-hp-fill" style={{ transform: `scaleX(${hp / maxHp})` }} />
+            <span>
+                {hp} / {maxHp}
+            </span>
+        </div>
+    );
+}
+
+// The boss's bar while it's out, and a warning in the last minute before it is
+function BossBar({ mapId, client }: { mapId: string; client: GameClient }): JSX.Element | null {
+    const boss = useHudNumber(client, (n) => n.boss);
+    const bossIn = useHudNumber(client, (n) => n.bossIn);
+    if (!boss) {
+        return bossIn !== undefined && bossIn <= 60 ? (
+            <div className="ui-boss-warning">
+                {getMap(mapId).finalBossWarning} {bossIn}s
+            </div>
+        ) : null;
+    }
+    return (
+        <div className="ui-boss">
+            <div className="ui-boss-name">
+                {boss.name}
+                {boss.enraged && <span className="ui-boss-enraged"> (enraged)</span>}
+                {boss.fight && (
+                    <span className="ui-boss-phase">
+                        {" "}
+                        Phase {boss.fight.phase}/{boss.fight.phases}
+                    </span>
+                )}
+            </div>
+            {boss.fight?.stage === "totems" ? (
+                <div className="ui-boss-totems">
+                    {boss.fight.totems.map((charge, i) => (
+                        <div key={i} className="ui-boss-bar ui-boss-totem">
+                            <div
+                                className="ui-boss-fill ui-boss-fill-totem"
+                                style={{ transform: `scaleX(${charge})` }}
+                            />
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="ui-boss-bar">
+                    <div
+                        className={boss.fight ? "ui-boss-fill ui-boss-fill-shield" : "ui-boss-fill"}
+                        style={{ transform: `scaleX(${boss.fraction})` }}
+                    />
+                </div>
+            )}
+            {boss.fight && (
+                <div className="ui-boss-status">
+                    {boss.fight.stage === "totems"
+                        ? "Charge the totems!"
+                        : boss.fight.stage === "finale"
+                          ? "Stay on your feet!"
+                          : "Break her shield!"}
+                    {boss.fight.curseAttacks !== undefined && (
+                        <span className="ui-boss-curse"> Cursed: {boss.fight.curseAttacks}</span>
+                    )}
+                    {boss.fight.parasiteSeconds !== undefined && (
+                        <span className="ui-boss-curse">
+                            {" "}
+                            Parasite: {Math.ceil(boss.fight.parasiteSeconds)}s
+                        </span>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }
 
 // The client's minimap frame and compass around a canvas the game draws on
 // (runs face north, so the compass does too)
-function Minimap({ client }: { client: GameClient }): JSX.Element {
+const Minimap = memo(function Minimap({ client }: { client: GameClient }): JSX.Element {
     const canvasRef = useCallback(
         (canvas: HTMLCanvasElement | null) => client.setMinimapCanvas(canvas),
         [client],
@@ -1524,7 +1627,7 @@ function Minimap({ client }: { client: GameClient }): JSX.Element {
             <img className="ui-minimap-compass" src={compass} />
         </div>
     );
-}
+});
 
 // A weapon's stats on a level up card: "Damage 10 → 13", the new value green
 // when it's better
@@ -1653,17 +1756,21 @@ function LevelUpModal({ ui, client }: ScreenProps): JSX.Element {
 // Numbers are short (9.5K, 1.2B), as endless runs reach billions; pointing
 // at one gives it in full.
 function DamagePanel({
-    hud,
+    weapons,
     open,
     client,
 }: {
-    hud: HudView;
+    weapons: SlotView[];
     open: boolean;
     client: GameClient;
 }): JSX.Element {
-    const total = hud.weapons.reduce((sum, w) => sum + (w.dps ?? 0), hud.otherDps);
+    const totalDps = useHudNumber(client, (n) => n.dps) ?? 0;
+    const otherDps = useHudNumber(client, (n) => n.otherDps) ?? 0;
+    const weaponDamage = useHudNumber(client, (n) => n.weaponDamage);
+    const damageOf = (slot: SlotView) => weaponDamage?.[slot.id];
+    const total = weapons.reduce((sum, w) => sum + (damageOf(w)?.dps ?? 0), otherDps);
     // Most damage a second first; ties (weapons yet to hit) keep the HUD's order
-    const rows = [...hud.weapons].sort((a, b) => (b.dps ?? 0) - (a.dps ?? 0));
+    const rows = [...weapons].sort((a, b) => (damageOf(b)?.dps ?? 0) - (damageOf(a)?.dps ?? 0));
     return (
         <div className="ui-damage">
             <button
@@ -1671,7 +1778,7 @@ function DamagePanel({
                 onClick={() => client.toggleDamagePanel()}
                 title="Show or hide each weapon's damage (Tab)"
             >
-                <span className="ui-dps-label">DPS</span> {formatCompact(hud.dps)}{" "}
+                <span className="ui-dps-label">DPS</span> {formatCompact(totalDps)}{" "}
                 <span className="ui-dps-toggle">{open ? "▾" : "▸"}</span>
             </button>
             {open && (
@@ -1684,7 +1791,8 @@ function DamagePanel({
                         <span>Total</span>
                     </div>
                     {rows.map((slot) => {
-                        const dps = slot.dps ?? 0;
+                        const dps = damageOf(slot)?.dps ?? 0;
+                        const damage = damageOf(slot)?.damage ?? 0;
                         return (
                             <div key={slot.id} className="ui-damage-row">
                                 <ItemIcon
@@ -1711,23 +1819,21 @@ function DamagePanel({
                                 <span className="ui-damage-dps" title={exact(dps)}>
                                     {formatCompact(dps)}
                                 </span>
-                                <span className="ui-damage-total" title={exact(slot.damage ?? 0)}>
-                                    {formatCompact(slot.damage ?? 0)}
+                                <span className="ui-damage-total" title={exact(damage)}>
+                                    {formatCompact(damage)}
                                 </span>
                             </div>
                         );
                     })}
-                    {hud.otherDps >= 0.05 && (
+                    {otherDps >= 0.05 && (
                         <div className="ui-damage-row ui-damage-other">
                             <span />
                             <span className="ui-damage-weapon" title="Items, power-ups and recoil">
                                 Other
                             </span>
-                            <span className="ui-damage-share">
-                                {formatShare(hud.otherDps, total)}
-                            </span>
-                            <span className="ui-damage-dps" title={exact(hud.otherDps)}>
-                                {formatCompact(hud.otherDps)}
+                            <span className="ui-damage-share">{formatShare(otherDps, total)}</span>
+                            <span className="ui-damage-dps" title={exact(otherDps)}>
+                                {formatCompact(otherDps)}
                             </span>
                             <span />
                         </div>
@@ -1762,22 +1868,20 @@ function QuestTracker({
             >
                 Quests {open ? "▾" : "▸"}
             </button>
-            {open &&
-                quests.map((quest) => (
-                    <div
-                        key={quest.id}
-                        className={"ui-quest-track " + questTrackClass(quest)}
-                        title={quest.task}
-                    >
-                        <span className="ui-quest-track-name">{quest.name}</span>
-                        <span className="ui-quest-track-progress">
-                            {formatQuestProgress(quest)}
-                        </span>
-                    </div>
-                ))}
+            {open && quests.map((quest) => <QuestTrack key={quest.id} quest={quest} />)}
         </div>
     );
 }
+
+// Kept from the last update while its progress is the same (shareUnchanged)
+const QuestTrack = memo(function QuestTrack({ quest }: { quest: QuestTrackView }): JSX.Element {
+    return (
+        <div className={"ui-quest-track " + questTrackClass(quest)} title={quest.task}>
+            <span className="ui-quest-track-name">{quest.name}</span>
+            <span className="ui-quest-track-progress">{formatQuestProgress(quest)}</span>
+        </div>
+    );
+});
 
 // Coloured like the quest tab: red until started, yellow while under way,
 // green once done
@@ -1802,6 +1906,7 @@ function PauseModal({
 }): JSX.Element {
     // Co-op's menu doesn't stop the run
     const coop = ui.party.length > 0;
+    const quests = useHudNumber(client, (n) => n.quests) ?? [];
     // The host can remove anyone still in the run (one who's stopped playing)
     const kickable =
         coop && ui.coop.room?.hostId === ui.coop.you
@@ -1895,11 +2000,11 @@ function PauseModal({
                         )}
                     </div>
                     <div className="ui-pause-column">
-                        {hud.quests.length > 0 && (
+                        {quests.length > 0 && (
                             <>
                                 <h3 className="ui-pause-heading">Quests</h3>
                                 <div className="ui-pause-list">
-                                    {hud.quests.map((quest) => (
+                                    {quests.map((quest) => (
                                         <div
                                             key={quest.id}
                                             className={"ui-pause-quest " + questTrackClass(quest)}
@@ -1943,6 +2048,7 @@ function PauseModal({
                         <AutoPauseSetting ui={ui} client={client} />
                         <AutoAlchSetting ui={ui} client={client} />
                         <MovePredictionSetting ui={ui} client={client} />
+                        <FrameRateSetting ui={ui} client={client} />
                     </div>
                 </div>
                 <div className="ui-row">
@@ -1988,7 +2094,8 @@ function formatPerSecond(perSecond: number): string {
 }
 
 // Big numbers the way OSRS shows a stack: in full up to 99,999, then 100K,
-// then 10M, so an endless run's totals still fit
+// then 10M, so an endless run's totals still fit. Past what a stack can hold
+// (10,000M), the damage panel's short form: 12B, 4.6Qa.
 function formatBig(value: number): string {
     const n = Math.round(value);
     if (n < 100_000) {
@@ -1997,7 +2104,10 @@ function formatBig(value: number): string {
     if (n < 10_000_000) {
         return `${Math.floor(n / 1000).toLocaleString()}K`;
     }
-    return `${Math.floor(n / 1_000_000).toLocaleString()}M`;
+    if (n < 10_000_000_000) {
+        return `${Math.floor(n / 1_000_000).toLocaleString()}M`;
+    }
+    return formatCompact(n);
 }
 
 // A stat's number, shortened when it's big, in full when pointed at

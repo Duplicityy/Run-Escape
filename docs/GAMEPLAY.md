@@ -12,7 +12,8 @@ version and how to run it.
 - Enemies drop **bones**; walk near them to collect their experience. Bones lying close together
   gather into one pile worth all of their experience, and it looks the part as it grows: Big
   bones, Dragon bones, Wyvern bones, Lava dragon bones, then Superior dragon bones. Coins gather
-  into bigger stacks the same way. Levels follow the OSRS experience table (stretched for the
+  into bigger stacks the same way. With too many piles of either lying around, the one furthest
+  away comes to the newest drop, so nothing left far behind is lost. Levels follow the OSRS experience table (stretched for the
   later levels), and each one offers a choice of three: a new weapon, a weapon upgrade or a
   passive. **1-4** pick with the keyboard. **R** rerolls the offer (one reroll a run, more from
   the Pirate and the shop), and **X** skips it for coins from the run: 25 the first time, then

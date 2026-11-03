@@ -1,4 +1,5 @@
 import { ArmouryUpgrades, getUpgradedGear } from "../content/armoury";
+import { WeaponDamageBalance } from "../content/balance";
 import { getCharacter } from "../content/characters";
 import {
     EXTRA_REVIVE_PRICE,
@@ -38,7 +39,7 @@ import {
     getHardScale,
 } from "../content/hard";
 import { CASKETS, getGear, getItem } from "../content/items";
-import { getMap, hasPoison } from "../content/maps";
+import { getMap, hasFliers, hasPoison } from "../content/maps";
 import { canLevelPassive, getPassive, getPassiveGain } from "../content/passives";
 import {
     POWER_UPS,
@@ -102,7 +103,8 @@ import {
     emptyStats,
 } from "../content/types";
 import { RUN_LENGTH } from "../content/waves";
-import { getWeapon, getWeaponStyle } from "../content/weapons";
+import { getWeaponDamageMultiplier } from "../content/weaponBalance";
+import { WEAPONS, getWeapon, getWeaponStyle } from "../content/weapons";
 import { BulletPool, BulletTarget } from "./BulletPool";
 import {
     CASKET_DROP_CHANCE,
@@ -268,7 +270,10 @@ const JUMP_TICKS = 75;
 const ENEMY_ATTACK_COOLDOWN = 50;
 const DEATH_SINK_TICKS = 25;
 const MAX_DEATH_ANIM_TICKS = 60;
-const MAX_PICKUPS = 400;
+// The most piles of bones, and of coins, lying around at once. Each kind
+// counts its own, so coins and food left behind don't keep new bones off the
+// ground.
+const MAX_PILES: Partial<Record<PickupKind, number>> = { bones: 400, coins: 100 };
 // Every so often bones lying this close to a bigger pile slide over and join
 // it, and coins do the same
 const PILE_INTERVAL = 25;
@@ -451,6 +456,8 @@ const PERSONAL_EVENTS = new Set<SimEvent["type"]>([
 export type SimState = "playing" | "levelUp" | "chest" | "event" | "dead" | "victory";
 
 export type SimOptions = {
+    // Tests and offline balance comparisons; live runs use the shipped config.
+    balance?: WeaponDamageBalance;
     grid: ArenaGrid;
     // Lumbridge when unset
     mapId?: string;
@@ -585,7 +592,7 @@ export type Hero = {
     appearanceVersion: number;
     // Enemies after this hero find their way to them with it
     flowField: FlowField;
-    // And flying ones, once there are any
+    // And flying ones, on maps they're on or once there are any
     flightField?: FlowField;
     regenAccumulator: number;
     // When a hit next gets the Amulet of blood fury's roll to heal
@@ -716,6 +723,7 @@ export class Sim {
     // What's dealing damage now, for damageBySource: set before each source
     // gets its turn
     private damageSource: DamageSource = "other";
+    private readonly weaponDamageMultipliers: Partial<Record<DamageSource, number>>;
     // The final boss is up
     bossSpawned = false;
     // Endless runs' round, and the tick it started; killing the final boss
@@ -737,9 +745,11 @@ export class Sim {
     private flightGrid: FlightGrid | undefined;
     // Enemy id -> the tick the next of its kind can go (EnemyBlinksDef.gap)
     private readonly blinkGapEnd = new Map<string, number>();
-    private readonly enemyHash = new SpatialHash<Enemy>(2);
-    private readonly pileHash = new SpatialHash<Pickup>(PILE_RADIUS);
+    private readonly enemyHash: SpatialHash<Enemy>;
+    private readonly pileHash: SpatialHash<Pickup>;
     private nextUid = 1;
+    // Enemies that have died or vanished so far, for Enemy.deathSeq
+    private enemyDeaths = 0;
     private spawnAccumulator = 0;
     private eventIndex = 0;
     // When the last power-up dropped; the longer ago, the likelier the next
@@ -992,8 +1002,15 @@ export class Sim {
 
     constructor(options: SimOptions) {
         this.grid = options.grid;
+        this.enemyHash = new SpatialHash(2, this.grid);
+        this.pileHash = new SpatialHash(PILE_RADIUS, this.grid);
         this.map = getMap(options.mapId ?? "lumbridge");
         this.rng = new Rng(options.seed);
+        // Building it takes a while, so it's done here, with the map, rather
+        // than on the tick the first flier turns up (getFlight still can)
+        if (hasFliers(this.map)) {
+            this.flightGrid = new FlightGrid(this.grid);
+        }
         // Fun maps are endless from the start
         this.endless = (options.endless ?? false) || this.map.fun !== undefined;
         this.hard = options.hard ?? false;
@@ -1007,6 +1024,12 @@ export class Sim {
                 armoury: options.armoury,
             },
         ];
+        this.weaponDamageMultipliers = Object.fromEntries(
+            WEAPONS.map((weapon) => [
+                `weapon:${weapon.id}`,
+                getWeaponDamageMultiplier(weapon, party.length, this.hard, options.balance),
+            ]),
+        );
         this.partyScale = getPartyScale(party.length);
         this.partyXp = this.partyScale.xp;
         this.focus = Math.min(options.focus ?? 0, party.length - 1);
@@ -1051,6 +1074,9 @@ export class Sim {
         );
         const flowField = new FlowField(FLOW_FIELD_SIZE);
         flowField.ditchY = this.map.ditch?.y;
+        // Updated with the ground one from the start (getFlight's would be at
+        // the same target by the time it's needed)
+        const flightField = this.flightGrid && new FlowField(FLOW_FIELD_SIZE);
         return {
             index,
             name: options.name,
@@ -1111,6 +1137,7 @@ export class Sim {
             weaponSince: {},
             appearanceVersion: 0,
             flowField,
+            flightField,
             regenAccumulator: 0,
             bloodFuryRollTick: 0,
             sledEndTick: 0,
@@ -2624,6 +2651,7 @@ export class Sim {
             flash: 0,
             dead: false,
             deathTick: 0,
+            deathSeq: 0,
             xp,
             shieldEnd: 0,
             risingEnd: 0,
@@ -3887,8 +3915,15 @@ export class Sim {
         }
     }
 
+    private countDeath(enemy: Enemy): void {
+        if (!enemy.dead) {
+            enemy.deathSeq = ++this.enemyDeaths;
+        }
+    }
+
     // Gone with no death, no drop and nothing counted
     private vanish(enemy: Enemy): void {
+        this.countDeath(enemy);
         enemy.dead = true;
         enemy.deathTick = -Infinity;
     }
@@ -5994,6 +6029,12 @@ export class Sim {
             this.showBlocked(enemy);
             return 0;
         }
+        // Balance each weapon's damage once, including venom, burns and extra
+        // hits. Items, power-ups and recoil keep their own damage rules.
+        const weaponScale = this.weaponDamageMultipliers[this.damageSource] ?? 1;
+        if (weaponScale === 0) {
+            return 0;
+        }
         const drain = enemy.drainEnd > this.tick ? enemy.drain : 0;
         // Damage that ignores the damage bonus (mightScale 0: the nuke's share
         // of a boss's hitpoints, a ruby bolt's) ignores this one too
@@ -6002,6 +6043,7 @@ export class Sim {
             1,
             Math.round(
                 baseDamage *
+                    weaponScale *
                     (1 + this.stats.might * mightScale) *
                     (1 + bossMight) *
                     (1 + drain) *
@@ -6059,6 +6101,7 @@ export class Sim {
     // nothing and isn't the player's kill, so luring armies into each other
     // isn't free experience, and the ground doesn't fill with bones far away)
     private killEnemy(enemy: Enemy, cause: "player" | "nuke" | "enemy" = "player"): void {
+        this.countDeath(enemy);
         enemy.dead = true;
         enemy.hp = 0;
         enemy.deathTick = this.tick;
@@ -6827,6 +6870,18 @@ export class Sim {
         enemy.drainEnd = this.tick + Math.round(ticks);
     }
 
+    // Keep the existing source on ties, for both venom and merged ground fire.
+    private strongerDot(
+        source: DamageSource,
+        damage: number,
+        currentSource: DamageSource,
+        currentDamage: number,
+    ): boolean {
+        const tunedDamage = (from: DamageSource, raw: number) =>
+            raw * (this.weaponDamageMultipliers[from] ?? 1);
+        return tunedDamage(source, damage) > tunedDamage(currentSource, currentDamage);
+    }
+
     // Venom damage every second for this many ticks. Topped up rather than
     // started again, so its next hit still comes on time.
     private envenom(enemy: Enemy, venom: number, ticks: number): void {
@@ -6834,10 +6889,12 @@ export class Sim {
             enemy.venomNext = this.tick + TICKS_PER_SECOND;
             enemy.venom = 0;
         }
-        enemy.venom = Math.max(enemy.venom, venom);
         enemy.venomEnd = Math.max(enemy.venomEnd, this.tick + ticks);
-        enemy.venomSource = this.damageSource;
-        enemy.venomHero = this.hero.index;
+        if (this.strongerDot(this.damageSource, venom, enemy.venomSource ?? "other", enemy.venom)) {
+            enemy.venom = venom;
+            enemy.venomSource = this.damageSource;
+            enemy.venomHero = this.hero.index;
+        }
     }
 
     // A hit's chance of healing the player: the weapon's (the Sanguinesti
@@ -7390,7 +7447,11 @@ export class Sim {
         );
         if (same) {
             same.endTick = Math.max(same.endTick, endTick);
-            same.damage = Math.max(same.damage, damage);
+            if (this.strongerDot(this.damageSource, damage, same.source, same.damage)) {
+                same.damage = damage;
+                same.source = this.damageSource;
+                same.hero = this.hero.index;
+            }
             return;
         }
         if (own.length >= MAX_FIRES) {
@@ -7487,12 +7548,11 @@ export class Sim {
     }
 
     private stepProjectiles(): void {
-        const enemiesByUid = new Map<number, Enemy>();
-        for (const enemy of this.enemies) {
-            if (!enemy.dead) {
-                enemiesByUid.set(enemy.uid, enemy);
-            }
-        }
+        // Shots steer at who was up when this started: still at one an
+        // earlier shot has just killed, never at one that's come since
+        const enemies = this.enemies;
+        const enemyCount = enemies.length;
+        const deaths = this.enemyDeaths;
         for (const projectile of this.projectiles) {
             projectile.prevX = projectile.x;
             projectile.prevY = projectile.y;
@@ -7503,9 +7563,11 @@ export class Sim {
                 continue;
             }
             // Spells, axes and cannonballs steer towards their target
-            const target = projectile.targetUid
-                ? enemiesByUid.get(projectile.targetUid)
+            const aimedAt = projectile.targetUid
+                ? findByUid(enemies, projectile.targetUid, enemyCount)
                 : undefined;
+            const target =
+                aimedAt && (!aimedAt.dead || aimedAt.deathSeq > deaths) ? aimedAt : undefined;
             if (target) {
                 const dx = target.x - projectile.x;
                 const dy = target.y - projectile.y;
@@ -8142,17 +8204,24 @@ export class Sim {
         value: number,
         extra: Pick<Pickup, "tier" | "powerUp" | "disguise"> = {},
     ): void {
-        if (kind === "bones" && this.pickups.length >= MAX_PICKUPS) {
+        const limit = MAX_PILES[kind];
+        // (only counted when there could be that many)
+        if (limit !== undefined && this.pickups.length >= limit) {
             // Too many lying around: the pile furthest from the player comes
             // here and takes these on too. Piles left behind as the player
             // moves on would otherwise keep what they're worth for good.
             const player = this.player;
+            let count = 0;
             let pile: Pickup | undefined;
             let furthest = -1;
             for (const pickup of this.pickups) {
+                if (pickup.kind !== kind) {
+                    continue;
+                }
+                count++;
                 // (one already flying to the player, or to another pile, stays
                 // where it is)
-                if (pickup.kind !== "bones" || pickup.attracted || pickup.pileUid !== 0) {
+                if (pickup.attracted || pickup.pileUid !== 0) {
                     continue;
                 }
                 const d = Math.abs(pickup.x - player.x) + Math.abs(pickup.y - player.y);
@@ -8161,7 +8230,7 @@ export class Sim {
                     pile = pickup;
                 }
             }
-            if (pile) {
+            if (pile && count >= limit) {
                 pile.x = pile.prevX = x;
                 pile.y = pile.prevY = y;
                 pile.value += value;
@@ -8185,11 +8254,11 @@ export class Sim {
     }
 
     private stepPickups(): void {
-        // For bones and coins on their way to a bigger pile
-        const pilesByUid = this.pickups.some((p) => p.pileUid !== 0)
-            ? new Map(this.pickups.map((p) => [p.uid, p]))
-            : undefined;
-        for (const pickup of this.pickups) {
+        // Bones and coins on their way to a bigger pile go to one that was
+        // there when this started
+        const pickups = this.pickups;
+        const pickupCount = pickups.length;
+        for (const pickup of pickups) {
             pickup.prevX = pickup.x;
             pickup.prevY = pickup.y;
             if (pickup.disguise) {
@@ -8226,7 +8295,7 @@ export class Sim {
                     pickup.y += (dy / distance) * move;
                 }
             } else if (pickup.pileUid !== 0) {
-                this.slideIntoPile(pickup, pilesByUid?.get(pickup.pileUid));
+                this.slideIntoPile(pickup, findByUid(pickups, pickup.pileUid, pickupCount));
                 if (pickup.value < 0) {
                     continue;
                 }
@@ -8239,7 +8308,7 @@ export class Sim {
         if (this.tick % PILE_INTERVAL === 0) {
             this.gatherPiles();
         }
-        this.pickups = this.pickups.filter((p) => p.value >= 0);
+        keepIf(this.pickups, (p) => p.value >= 0);
     }
 
     // Bones lying near a bigger pile go over to join it, so a crowd's bones
@@ -9147,27 +9216,22 @@ export class Sim {
 
     private cleanUp(): void {
         const tick = this.tick;
-        this.enemies = this.enemies.filter((e) => !e.dead || tick - e.deathTick < corpseTicks(e));
-        this.projectiles = this.projectiles.filter((p) => p.life > 0);
-        this.enemyProjectiles = this.enemyProjectiles.filter((p) => p.life > 0);
-        this.effects = this.effects.filter((e) => tick < e.endTick);
-        if (this.effects.some((e) => e.enemyUid !== 0)) {
-            const enemiesByUid = new Map<number, Enemy>();
-            for (const enemy of this.enemies) {
-                enemiesByUid.set(enemy.uid, enemy);
+        keepIf(this.enemies, (e) => !e.dead || tick - e.deathTick < corpseTicks(e));
+        keepIf(this.projectiles, (p) => p.life > 0);
+        keepIf(this.enemyProjectiles, (p) => p.life > 0);
+        keepIf(this.effects, (e) => tick < e.endTick);
+        const enemies = this.enemies;
+        for (const effect of this.effects) {
+            if (effect.enemyUid === 0) {
+                continue;
             }
-            for (const effect of this.effects) {
-                if (effect.enemyUid === 0) {
-                    continue;
-                }
-                const enemy = enemiesByUid.get(effect.enemyUid);
-                if (enemy) {
-                    effect.x = enemy.x;
-                    effect.y = enemy.y;
-                }
-                if (!enemy || enemy.dead) {
-                    effect.enemyUid = 0;
-                }
+            const enemy = findByUid(enemies, effect.enemyUid, enemies.length);
+            if (enemy) {
+                effect.x = enemy.x;
+                effect.y = enemy.y;
+            }
+            if (!enemy || enemy.dead) {
+                effect.enemyUid = 0;
             }
         }
     }
@@ -9253,6 +9317,43 @@ function getAbilities(def: EnemyDef, tick: number, rng: Rng): EnemyAbilities | u
         nextBlink: def.blinks ? tick + secondsToTicks(def.blinks.interval * rng.range(0.5, 1)) : 0,
         blinkLand: -1,
     };
+}
+
+// The one with this uid among the first count of a list in uid order, as the
+// enemies and pickups are: they're only ever added at the end, each with the
+// next uid, and keepIf keeps their order
+function findByUid<T extends { uid: number }>(
+    list: readonly T[],
+    uid: number,
+    count: number,
+): T | undefined {
+    let low = 0;
+    let high = count - 1;
+    while (low <= high) {
+        const mid = (low + high) >> 1;
+        const at = list[mid].uid;
+        if (at < uid) {
+            low = mid + 1;
+        } else if (at > uid) {
+            high = mid - 1;
+        } else {
+            return list[mid];
+        }
+    }
+    return undefined;
+}
+
+// Takes out what doesn't pass, keeping the order, in place: a new array each
+// tick for each list is garbage for a phone to collect
+function keepIf<T>(list: T[], keep: (item: T) => boolean): void {
+    let kept = 0;
+    for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        if (keep(item)) {
+            list[kept++] = item;
+        }
+    }
+    list.length = kept;
 }
 
 // Back and forth between -half and half at a steady speed, from 0 heading

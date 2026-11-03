@@ -173,6 +173,12 @@ Or build with `VITE_COOP_URL=wss://relay.example.com/coop npm run build` to poin
 else. `npm start` and `npm run preview` run a relay of their own at `/coop`
 (`npm run start:singleplayer`, or `MULTIPLAYER=off`, without).
 
+**On Cloudflare instead.** [server/cloudflare/](../server/cloudflare/README.md) is the same relay
+as a Cloudflare Worker with Durable Objects: a lobby for the rooms list and names, and each room its
+own object, started near its host, so a run's traffic doesn't cross the world to one server. There's
+no server to run, and it's at a `workers.dev` address with no domain needed. Its README has the
+setup, from `wrangler login` to the build, and what it costs. The game works with either relay.
+
 #### Optional multiplayer metrics
 
 A server that hosts the game (`npm run serve`, or the standalone relay) serves multiplayer metrics
@@ -394,7 +400,13 @@ src/game/
     world/            ArenaGrid (collision + heights), Collision (circle vs tiles and walls),
                       FlowField (Dijkstra from the player, how hundreds of enemies find a way),
                       FlightGrid (the terrain walls that stop what flies: blocked floor that
-                      isn't liquid, and solid clumps too big to be a tree)
+                      isn't liquid, and solid clumps too big to be a tree). A grid works out
+                      once, as it's made, which steps out of each tile are allowed (`Steps`,
+                      for flow fields and straight walks). Sim makes the FlightGrid with the
+                      map when anything on it flies (`hasFliers` in content/maps.ts), since
+                      making it takes a while
+    SpatialHash.ts    enemies (and piles of bones) by cell, for what's near: flat arrays over
+                      the arena, kept from tick to tick
     lockstep.ts       co-op's frame events, applying them, and the check that copies agree
     fmath.ts          trigonometry that every browser works out the same, for co-op
     Upgrades.ts       level up choices
@@ -408,9 +420,9 @@ src/game/
             button on the dev server's title screen. Its CLAUDE.md is the guide to making one
   client/   GameClient (run flow, camera, input), GameView (3D actors + 2D overlay),
             BossFightView (a phased boss's ground marks, bullets and entrance),
-            GameAssets (what gets baked), GameStore (state for the React UI), SaveLock (one
-            tab saves at a time), DamageMeter (each weapon's damage a second for the HUD's
-            damage panel)
+            GameAssets (what gets baked), GameStore (state for the React UI, and the HUD's
+            numbers apart from it), SaveLock (one tab saves at a time), DamageMeter (each
+            weapon's damage a second for the HUD's damage panel), Minimap
     coop/     CoopLobby (the relay connection and the room), CoopRun (a run's lockstep, host or
               guest), protocol (the messages)
   render/   GameWebGLRenderer (the map viewer's renderer with the game's passes), CameraRig
@@ -419,8 +431,10 @@ src/game/
             formatCompact (short numbers like 9.5K and 1.2B, for the damage panel)
   client/GameTouch.ts, ui/TouchControls.tsx, ui/Mobile.css   touch screens (see Touch screens)
 server/     coop-relay.mjs: co-op's rooms, and passes each run's frames between its players
+  cloudflare/  the same relay on Cloudflare Durable Objects, each room near its host (README.md)
 src/mapviewer/webgl/actor/   actor renderer: baked animation frames drawn anywhere in the world,
-                             any number of them, one multi-draw per pass
+                             any number of them, one multi-draw per segment and pass (without
+                             multi draw, one instanced draw per frame of an animation)
 src/mapviewer/worker/        RegionDataLoader (collision and heights for the whole arena in one
                              scene build), ItemIconLoader (inventory icons drawn like the client)
                              SoundLoader (sound effects synthesized off the main thread),
@@ -435,6 +449,13 @@ learned the rev 241 opcodes, the map loader can take extra map squares as plain 
 gives a ScapeRune map a loc a different model or size, and two bugs were fixed (floor collision missing on the edge of every
 map square, and a resize during loading leaving the 3D view in a corner). `?viewer=1` still loads
 map squares its own way (see below).
+
+The main thread and every worker decode the cache's tables for themselves, so they're kept small:
+an index's reference table is decoded the first time something reads the index, into flat arrays
+(`ReferenceTable`); a group's files stay in one array (`Archive`), so a file's data can be part of
+a bigger buffer (mind its `byteOffset`); and `MapViewer`'s loaders are made the first time they're
+used. The game's main thread only needs the textures, the seqs of animated scenery and the map
+index, plus the locs when a ScapeRune recipe runs.
 
 ### Boss fights as data
 
@@ -563,29 +584,121 @@ doesn't. The boxes follow what `main.vert.glsl` does to a vertex (`CullGrid.addI
 to where the shader puts things needs one there too. `render-stats.ts --cull=8` checks it.
 
 Actors are culled as spheres in `ActorRenderer.draw`, by `ActorModel.reach`: the furthest any vertex
-gets from the model's origin in any frame of any animation, so bosses' big swings count.
+gets from the model's origin in any frame of any animation, so bosses' big swings count. Without
+`WEBGL_multi_draw` (Safari, Firefox) every draw is a real draw call, so `InstanceList.sortByFrame`
+puts the actors on the same frame of the same animation together and each run of them is one
+instanced draw: a crowd of one enemy is a few draws, not hundreds. The shader finds an actor's data
+by `DRAW_ID + gl_InstanceID`.
 
-The game has no hover menus, so its frames have no interact buffer, and with no multisampling
-they're drawn straight into the texture the screen quad reads.
+Map squares keep only the world that can be seen. Past the play area the world fades into the sky
+over 6 tiles (`PLAY_AREA_FADE` in `fog.glsl`), and a ray from the camera only gets further from the
+play area once it's left it, so what's past the fade and further out than the camera can get is
+never in front of anything but the sky. `GameWebGLRenderer.setPlayArea` works that keep area out
+from `CAMERA_REACH` in `GameClient` (a run's camera can be 15 tiles south of the player, zoomed all
+the way out; the title screen's circles closer in). The worker leaves out terrain, scenery and
+animated scenery wholly outside it (`SdMapLoaderInput.keepArea`), and `MapManager` doesn't load a
+square that's all outside. Collision doesn't come from these squares (it's `RegionDataLoader`'s),
+so it isn't touched. If the camera's
+pitch or zoom changes, `CAMERA_REACH` has to follow it, or the hole where something was left out
+can show.
+
+The game has no hover menus, multisampling or FXAA, so its frames are drawn straight to the canvas
+(`drawsToCanvas`), with no framebuffer of their own and no screen quad to copy them across. The
+canvas has `alpha: false`: the page behind it is black, so there's nothing to blend it with. The
+map viewer keeps its framebuffer, for its hover menus. A script that reads a frame back reads the
+canvas, in the same task as the frame (there's no `preserveDrawingBuffer`).
 
 Enemies are baked when a run starts, for that map (`getMapEnemies`, `GameAssets.loadEnemies`), in
 place of the last map's: they're most of the actors' memory, and a map uses few of them. It goes by
 the enemy ids it finds in the map's waves, events and bosses, and in those enemies, so a new way for
 an enemy to bring on another needs nothing added. An enemy that isn't baked anyway (the console's
-`spawnBoss`) gets baked when it's first drawn, and shows up a moment later.
+`spawnBoss`) gets baked when it's first drawn, and shows up a moment later. The last map's enemies
+stay on the menus, so playing it again starts at once; a run on another map drops them before
+its own bake starts, so the two lots are never in memory together.
+
+Enemies that would bake the same model are baked once (`GameAssets.mergeRequests`): the same NPC
+with the same first animation (Nex's four phases), the same outfit, the same scenery. The merged
+model has all of their animations, and the other enemies' keys point to it. A request's body is
+everything its bake reads (`getRequestBody`), so a new field on a bake request goes in there too.
+
+A bake is cut into small tasks (`getBakeTasks`: an NPC or player model each, the spot animations,
+items and scenery a batch at a time), and each goes on the GPU as it lands, as a page of its own.
+Baking a map's worth in one go per worker held all of it in the main thread at once, a spike of
+hundreds of MB at the start of a run on the big maps, the likeliest moment for a phone to lose the
+tab. The worker sends buffers cut to their length, not the doubled ones it grew.
+
+A player is baked with the swings of the weapons they hold (`getRunAttackSeqs`) rather than every
+weapon's, so a new weapon re-bakes them (it changes their `appearanceVersion`). Until it lands
+the old model draws, and a swing it hasn't got shows the stance's animation instead. So that a
+weapon picked swings at once, a level-up that offers a weapon re-bakes the look with its swings
+as soon as it's offered (`getOfferedAttackSeqs`), and a look that has the swings asked for and
+more isn't baked again: the ones not picked go at the next re-bake. The menus' look has the
+starting weapon's swings (`setCharacterLook`), so a solo run starts with it baked.
+`getPlayerAttackSeqs` is every weapon's, for the slim cache.
 
 A baked animation is a posed copy of the model per frame, so what an enemy costs is its triangles
 times its frames. A skeletal animation (the Colosseum's bosses, the gryphon, the naguas) has a pose
 for every client tick, and baking each one made Varlamore's enemies several times any other map's,
 too much for a phone. `ActorBakeLoader` samples those every `SKELETAL_TICK_STEP` ticks instead.
+
+Indices are 16-bit, which halves the index buffer, about a quarter of a bake. WebGL2 has no base
+vertex for a draw, so `ActorBakeSegments` cuts a bake's vertices into segments of up to 65,536,
+never splits a frame between two (and an animation only if it doesn't fit in one), and counts each
+frame's indices from its segment's first vertex. Each segment is drawn with a vertex array that
+starts there (`ActorSegment`), so a page is a draw per segment that has something on screen. A
+model with more vertices in one frame than that has its whole bake fall back to 32-bit.
 `render-stats.ts --bake` shows each map's total and the heaviest actors, so a new boss can be
 checked against the other maps before a phone finds it.
+
+The overlay draws each hitsplat (its kind, number and size) once and copies it after, and the
+projectile glows likewise: text and gradients are the slowest things on a 2D canvas, and a big
+fight has a hundred splats. The effects it prunes each frame are pruned in place, and the enemies
+reuse one options object, to keep a phone's garbage collector quiet.
 
 `window.frameProbe` (dev only) counts what a frame sends to the GPU, at the GL calls:
 `await frameProbe.sample(60)` gives triangles, draws and CPU time, split into world and actors.
 
 Combat sounds are picked by the server, not the cache, so the ids in `content/` come from the OSRS
 Wiki's [list of in-game sound IDs](https://oldschool.runescape.wiki/w/List_of_in-game_sound_IDs).
+A sound's samples are let go once it's first played and its `AudioBuffer` holds them
+(`GameAudio.getBuffer`), so each sound is only in memory once.
+
+### Keeping it light on a phone
+
+- **Frame cap**: `GameClient.update` sets `Renderer.fpsLimit` every frame from the Frame rate
+  setting (`DisplaySettings.frameRate`, in Settings and the pause menu), through `frameCap`. Auto,
+  the default and what older saved settings get, is 60 on a touch screen (90 and 120 Hz phones
+  would draw twice as often for a sim that ticks 50 times a second) and no cap on a desktop; 30,
+  60 and Unlimited are what they say. On the title screen and behind a solo run's menus (level up,
+  casket, random event, pause, results), where only the scenery moves, it's 30 at most whatever
+  the setting. Co-op isn't capped behind its menus, as its run goes on. The limiter keeps to a
+  schedule rather than a gap since the last frame, so a 90 Hz screen capped at 60 draws two frames
+  in three (`Renderer.test.ts`).
+- **Lost graphics**: a phone can take the WebGL context away (short of memory, or the game in the
+  background). `GameApp` calls `preventDefault`, pauses a solo run (`GameClient.onGraphicsLost`),
+  stops drawing (`GameWebGLRenderer.contextLost`; a co-op run still steps for the others) and
+  shows a Reload button, which ends the run as the pause menu's quit does, so its coins and quests
+  are kept. There's no restore: everything on the GPU (programs, the texture array, map squares,
+  the actor bakes, which aren't kept in JS) would have to be made again on the new context, which
+  means `WebGLMapViewerRenderer.init` again, `clearMaps`, and baking every actor again. To try it,
+  `game.renderer.app.gl.getExtension("WEBGL_lose_context").loseContext()`.
+- **The HUD** is updated 10 times a second, in two parts. `UiSnapshot.hud` (`HudView`) is what the
+  hero has (slots, gear, inventory), which changes with a level up or a casket. `HudNumbers` is
+  what changes as the run's played (hitpoints, xp, the clock, damage, buffs, the boss bar, quest
+  progress), in a store of its own (`GameStore.subscribeNumbers`): the UI's root doesn't see it,
+  and each part reads only its own number with `useHudNumber`. `shareUnchanged` keeps whatever
+  hasn't changed the same object, so the `memo`'d parts skip drawing, and nothing is told at all
+  when nothing's changed. Something new that changes often goes in `HudNumbers`, and its numbers
+  are rounded as they're shown (whole seconds), so they don't change when nothing on screen does.
+  The bars fill with `transform: scaleX`, not `width`, which would lay the page out again.
+- **The minimap** redraws 30 times a second at most, leaves out enemies off it, and draws its
+  dots a colour at a time.
+- **The casket's rays** have their fade drawn into them (an SVG gradient), not a `mask-image`, which
+  makes the browser draw the turning rays again offscreen every frame. They slow to a stop, and the
+  glow, float and shimmer stop after a few goes. A phone gets one set of rays and no shimmer.
+- **The bundle**: `WebGLMapViewerRenderer` is the game's renderer's base class, so anything it
+  imports is in the game's bundle. leva comes in only through the viewer's controls
+  (`getControls(folder)`), and the render worker loads jszip only for the viewer's exports.
 
 ### Scripts
 
@@ -625,7 +738,10 @@ scripts/game/simulate-run.ts [character] [seeds]        a bot plays full runs, f
                                                         map, FRESH=1 straight at it, SAFE_WAVES=1
                                                         with what a run earned, FLAT=1 with no
                                                         walls, DODGE=1 keeping off its marks,
-                                                        PARTY=4 a co-op party of that adventurer)
+                                                        PARTY=4 a co-op party of that adventurer;
+                                                        GOD=1 untouchable and FUNNEL=1 all into
+                                                        its best weapon, with ENDLESS=1, to see
+                                                        how damage keeps up with the rounds)
 scripts/dev/icon-test.ts 1321            draw an item icon as ASCII
 scripts/dev/render-stats.ts lumbridge    what a map costs to draw, without a browser: triangles,
                                          draw ranges, bytes (--cull=8 checks the culling boxes and
@@ -731,6 +847,18 @@ When adding to the sim:
 - A new event that's about one player goes in `PERSONAL_EVENTS`, so it's tagged with who.
 - Trigonometry goes through `fm`. `core/fmath.test.ts` fails on `Math.sin` and the like in
   `core/`.
+- `core/runHash.test.ts` pins three seeded runs (solo, hard mode, a party of four) to a hash of
+  everything in them, tick by tick. A change that's meant to leave play alone, like a speed-up,
+  has to leave them as they are; one meant to change play changes them, so check it's only the
+  runs it should, then update the numbers.
+- `sim.enemies`, `projectiles`, `enemyProjectiles`, `effects` and `pickups` are the same arrays
+  from tick to tick, tidied in place, so don't keep one and expect it to stay as it was. Enemies
+  and pickups stay in uid order, which finding one by uid relies on: add them only through
+  `spawnEnemy` and `dropPickup`, at the end.
+
+Weapon damage tuning lives in `content/balance.ts`; see [Weapon damage tuning](BALANCE.md) for
+class, evolution and normal/hard mode examples. Weapon damage rules use the starting party size
+throughout the run.
 
 How much bigger the crowd gets for each player is in `content/coop.ts`, worked out again whenever
 one goes down, is revived or leaves, with each of those down or gone still counting as half a
@@ -747,8 +875,8 @@ carries it as an `EventOption` of kind `revive`. Each adds to `Hero.extraRevives
 `player.invulnerable` every tick, the way the sled does, and `nearestHero` and `useSpawnHero`
 skip an immune hero while anyone else is up (pickups go by `nearestUpHero`, which doesn't: a
 revived player can still eat). The reviver's emote (`REVIVE_SEQ`) is baked with
-every player look through `getPlayerAttackSeqs`, and its graphic (`REVIVE_SPOTANIM`) with the
-base bake.
+every player look in co-op through `getRunAttackSeqs`, and its graphic (`REVIVE_SPOTANIM`) with
+the base bake.
 Bosses come as copies (`bossCopies` there), spawned together by `Sim.spawnBosses`: each by a
 different player, clear of the others, sharing one boss's hitpoints, experience and loot through
 their `Encounter`, so the first says so and the last to fall drops the loot. A boss with its own
@@ -790,6 +918,23 @@ from the host to everyone else. The host leaving a run ends it for everyone; in 
 room goes to the next player. The balance bot plays a party with `PARTY=4`, each player on their
 own, so it can't show teamwork.
 
+The Cloudflare relay (`server/cloudflare/`) speaks the same protocol, with one more message: it
+answers `create` and `join` with a `goto` (a room code and a one-time ticket), and `CoopLobby`
+then makes or joins the room on that room's own connection, at `coop/room/<code>`. What's said in
+a room goes over that connection (`ROOM_MESSAGES` in `CoopLobby.ts`); pings, the list and
+making or joining go to the lobby's. The Node relay never sends `goto`, so with it there's only
+the one connection. Change the protocol in both relays.
+
+Cloudflare restarts its objects now and then, dropping their connections, so the Cloudflare relay's
+`room` message carries a `token`. `CoopLobby` reconnects to `coop/room/<code>?resume=<token>` for
+`RESUME_WINDOW_MS` when the room's connection drops, holding what's said meanwhile, and the room
+(kept in storage) holds the player's place a little longer. A guest that misses some of the host's
+frames sees it from `from` on the next `down` and asks for them with a `resend` up message; the
+host keeps 20 seconds of what it's sent (longer than the room holds a dropped player) and answers
+once a second at most, from the earliest frame asked for, to every guest; each takes only frames
+after the ones it has. That part works on either relay. The Node relay sends no
+token, so with it a dropped connection still ends a guest's run.
+
 The open rooms list comes a page at a time (8 rooms, the fullest first, then the ones waiting
 longest), worked out once after each change rather than for every request; the menu asks for its
 page every 5 seconds, and again when joining fails (a room that filled up or started meanwhile).
@@ -811,8 +956,10 @@ Everything touch only hangs off `pointer: coarse`, so a mouse and keyboard never
 - `ui/Mobile.css` lays the screens out again for a phone held sideways (`max-height: 520px`). The
   UI's zoom never goes below 1, as the pixel fonts don't survive it, so a new screen needs rules
   there too. Check it at 844x390 and 667x375. It's imported last, so it wins over the other CSS.
-- A touch screen also gets a pixel ratio capped at 1.5, 2 workers instead of 4, and a closer camera
-  on a phone.
+- A touch screen also gets a pixel ratio capped at 1.5 (2 elsewhere, `DeviceUtil.pixelRatio`), 2
+  workers instead of 4, textures at half size (64 a side, a quarter of the memory), 60 frames a
+  second at most unless the Frame rate setting says otherwise (see Keeping it light on a phone),
+  and a closer camera on a phone.
 - `public/manifest.webmanifest` lets a browser install the game to the home screen (HTTPS only,
   apart from localhost), opening full screen and sideways. `enterFullscreen` leaves an installed
   game alone. iOS ignores `orientation`, so an iPhone still gets the rotate notice, and it can give
