@@ -128,6 +128,14 @@ export type BossState = {
     leap?: { toX: number; toY: number; switchTick: number; endTick: number };
     // It stands still until this tick, as its volleys go out
     channelEnd: number;
+    // BossDef.naps: down until this tick (-1 when it's up), and when it next goes down
+    napEnd?: number;
+    nextNap?: number;
+    // BossDef.colours: when it next changes
+    nextColour?: number;
+    // BossDef.stare: the way it's staring (radians, none until it does), and when it next turns
+    stareAngle?: number;
+    nextStare?: number;
     // BossDef.stomp: hits since the player stepped under it, and the next one
     stomps?: number;
     nextStomp?: number;
@@ -174,6 +182,10 @@ export type GroundHazard = {
     // in until this tick, once each (hit, by hero index); 0 without one
     grabEnd: number;
     hit: number[];
+    // Landed and lingering (GroundPatternDef.lingers) until this tick, -1 when not,
+    // and when it next hurts whoever's in it
+    lingerEnd: number;
+    nextHurt: number;
 };
 
 // A boss's corpse flowers (BossAttackDef quarters), crossing at (x, y). The
@@ -671,6 +683,10 @@ export type Visitor = {
 export type EventOption =
     | { kind: "powerUp"; powerUpId: string; price: number; sold: boolean }
     | { kind: "revive"; price: number; sold: boolean }
+    // A raid's supply chest: paid for in raid points, not coins
+    | { kind: "supply"; supplyId: string; price: number; sold: boolean }
+    // A raid's teleporter: on to this room's boss now
+    | { kind: "teleport" }
     | { kind: "answer"; itemId: string; correct: boolean };
 
 export type EventOffer = {

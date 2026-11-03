@@ -7,7 +7,17 @@ import {
 import { CHARACTERS } from "../content/characters";
 import { ENEMY_BY_ID } from "../content/enemies";
 import { ITEM_BY_ID, getGear } from "../content/items";
-import { ALL_MAPS, MAPS, MAP_BY_ID, isDevMap, isFunMap, isSeasonalMap } from "../content/maps";
+import {
+    ALL_MAPS,
+    MAPS,
+    MAP_BY_ID,
+    RAID_MAPS,
+    getMap,
+    isDevMap,
+    isFunMap,
+    isRaidMap,
+    isSeasonalMap,
+} from "../content/maps";
 import { QUESTS, QUEST_BY_ID } from "../content/quests";
 import { SHOP_UPGRADES, SHOP_UPGRADE_BY_ID, getUpgradeCost } from "../content/shop";
 import { TROPHY_BY_ID } from "../content/trophies";
@@ -53,6 +63,8 @@ export type SaveData = {
     mapVictories: Record<string, number>;
     // Map id -> the times of those that were on hard mode
     hardVictories: Record<string, number>;
+    // A raid's expert mode wins, which also count as hard ones
+    expertVictories: Record<string, number>;
     totalKills: number;
     bestSeconds: number;
     bestLevel: number;
@@ -93,6 +105,7 @@ export function createSave(): SaveData {
         victories: 0,
         mapVictories: {},
         hardVictories: {},
+        expertVictories: {},
         totalKills: 0,
         bestSeconds: 0,
         bestLevel: 0,
@@ -143,11 +156,14 @@ export function migrateSave(raw: unknown): SaveData {
             }
         }
     }
+    // The maps that can be won: the campaign's and seasonal ones, and the raids
+    const winnable = (id: string) =>
+        MAPS.some((m) => m.id === id) || RAID_MAPS.some((m) => m.id === id);
     save.runs = num(data.runs, 0);
     save.victories = num(data.victories, 0);
     if (data.mapVictories && typeof data.mapVictories === "object") {
         for (const [id, wins] of Object.entries(data.mapVictories)) {
-            if (MAPS.some((m) => m.id === id) && num(wins, 0) > 0) {
+            if (winnable(id) && num(wins, 0) > 0) {
                 save.mapVictories[id] = num(wins, 0);
             }
         }
@@ -157,8 +173,15 @@ export function migrateSave(raw: unknown): SaveData {
     }
     if (data.hardVictories && typeof data.hardVictories === "object") {
         for (const [id, wins] of Object.entries(data.hardVictories)) {
-            if (MAPS.some((m) => m.id === id) && num(wins, 0) > 0) {
+            if (winnable(id) && num(wins, 0) > 0) {
                 save.hardVictories[id] = num(wins, 0);
+            }
+        }
+    }
+    if (data.expertVictories && typeof data.expertVictories === "object") {
+        for (const [id, wins] of Object.entries(data.expertVictories)) {
+            if (isRaidMap(id) && num(wins, 0) > 0) {
+                save.expertVictories[id] = num(wins, 0);
             }
         }
     }
@@ -300,6 +323,8 @@ export type RunSummary = {
     endless?: boolean;
     round?: number;
     hard?: boolean;
+    // A raid's expert mode (hard as well)
+    expert?: boolean;
     victory: boolean;
     seconds: number;
     level: number;
@@ -331,6 +356,9 @@ export function recordRun(save: SaveData, run: RunSummary): QuestDef[] {
         save.mapVictories[run.mapId] = (save.mapVictories[run.mapId] ?? 0) + 1;
         if (run.hard) {
             save.hardVictories[run.mapId] = (save.hardVictories[run.mapId] ?? 0) + 1;
+        }
+        if (run.expert) {
+            save.expertVictories[run.mapId] = (save.expertVictories[run.mapId] ?? 0) + 1;
         }
     }
     save.totalKills += run.kills;
@@ -440,7 +468,7 @@ export function isEndlessRecord(save: SaveData, run: RunSummary): boolean {
 function isTaskDone(save: SaveData, task: UnlockTask, run?: RunSummary): boolean {
     switch (task.kind) {
         case "beatMap":
-            return (save.mapVictories[task.mapId] ?? 0) > 0;
+            return ((task.hard ? save.hardVictories : save.mapVictories)[task.mapId] ?? 0) > 0;
         case "killBoss":
             return run?.mapId === task.mapId && run.bossesKilled.includes(task.enemyId);
         case "survive":
@@ -479,7 +507,7 @@ export function applyUnlocks(save: SaveData, run?: RunSummary): void {
 // has been beaten, or once it's been beaten itself (a co-op guest can win on
 // a map the host had open). The fun and seasonal maps are open from the start.
 export function isMapUnlocked(save: SaveData, mapId: string): boolean {
-    if (isFunMap(mapId) || isSeasonalMap(mapId)) {
+    if (isFunMap(mapId) || isSeasonalMap(mapId) || isRaidMap(mapId)) {
         return true;
     }
     // A boss fight opens once the map it's the hard mode of has been beaten
@@ -498,7 +526,8 @@ export function isMapUnlocked(save: SaveData, mapId: string): boolean {
 // A map can be played endless once it's been beaten; the fun maps are only
 // ever endless, and a boss fight never is (there's nothing after its boss)
 export function isEndlessUnlocked(save: SaveData, mapId: string): boolean {
-    if (MAP_BY_ID.get(mapId)?.fight) {
+    // A raid ends with its last room: there's no round after it to come round again
+    if (MAP_BY_ID.get(mapId)?.fight || isRaidMap(mapId)) {
         return false;
     }
     return isFunMap(mapId) || (save.mapVictories[mapId] ?? 0) > 0;
@@ -508,6 +537,37 @@ export function isEndlessUnlocked(save: SaveData, mapId: string): boolean {
 // on the fun maps, which can't be
 export function isHardUnlocked(save: SaveData, mapId: string): boolean {
     return isFunMap(mapId) || (save.mapVictories[mapId] ?? 0) > 0;
+}
+
+// A raid's expert mode, once it's been beaten on hard
+export function isExpertUnlocked(save: SaveData, mapId: string): boolean {
+    return isRaidMap(mapId) && (save.hardVictories[mapId] ?? 0) > 0;
+}
+
+// Which of a raid's halls have a teleporter: the rooms whose boss has been killed before, in any
+// of its forms (Nylocas Vasilias's colours, what Verzik rises into)
+export function getRaidPortals(save: SaveData, mapId: string): boolean[] {
+    const raid = getMap(mapId).raid;
+    if (!raid) {
+        return [];
+    }
+    return raid.rooms.map((room) => {
+        const seen = new Set<string>();
+        const ids = [room.boss];
+        while (ids.length > 0) {
+            const id = ids.pop()!;
+            if (seen.has(id)) {
+                continue;
+            }
+            seen.add(id);
+            const boss = ENEMY_BY_ID.get(id)?.boss;
+            ids.push(...(boss?.colours?.forms ?? []));
+            if (boss?.rises?.into) {
+                ids.push(boss.rises.into);
+            }
+        }
+        return [...seen].some((id) => (save.enemyKills[id] ?? 0) > 0);
+    });
 }
 
 // A piece's next upgrade in the Armoury: what it becomes, what that costs,

@@ -146,6 +146,12 @@ export function GameApp(): JSX.Element {
             {
                 stress: parseInt(params.get("stress") ?? "0") || 0,
                 autostart: params.get("autostart") ?? undefined,
+                raidTest:
+                    import.meta.env.DEV && params.has("raidtest")
+                        ? params.get("raidtest") === "short"
+                            ? "short"
+                            : "max"
+                        : undefined,
             },
         )
             .then((gameClient) => {

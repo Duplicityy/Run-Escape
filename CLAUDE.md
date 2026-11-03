@@ -58,6 +58,8 @@ go stale. Add anything that cost you time to work out.
 | Co-op lockstep and rooms; the lobby UI                 | `src/game/client/coop/`, `ui/CoopScreen`                               |
 | Finding ids in the cache                               | `scripts/cache/`                                                       |
 | ScapeRune: making maps that aren't in OSRS             | `src/game/scaperune/CLAUDE.md`                                         |
+| Raids: rooms, points, chests, teleporters, expert      | `src/game/content/raids.ts`                                            |
+| The Theatre of Blood's bosses                          | `src/game/content/theatre.ts`                                          |
 | What a frame costs, and what's culled                  | `docs/DEVELOPMENT.md`, `scripts/dev/`                                  |
 | Frame cap, lost graphics, the HUD's two stores         | `docs/DEVELOPMENT.md`, Keeping it light                                |
 
