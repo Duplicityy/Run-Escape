@@ -107,6 +107,8 @@ export type EventView = {
     name: string;
     speech: string;
     leaveLabel: string;
+    // A raid's supply chest: prices are in raid points, and this is what the player has
+    points?: number;
     options: {
         title: string;
         text?: string;
@@ -123,6 +125,9 @@ export type HudView = {
     mapId: string;
     // An endless run's round
     round?: number;
+    // A raid's room: which of how many, and its boss's name
+    // waves: still in its waves, so its boss is on the way (not fought or beaten)
+    raidRoom?: { number: number; count: number; name: string; points: number; waves: boolean };
     // Seconds until this round's final boss
     bossIn: number;
     hp: number;
@@ -299,6 +304,8 @@ export type UiSnapshot = {
     mapId: string;
     endless: boolean;
     hard: boolean;
+    // A raid's expert mode (solo for now)
+    expert: boolean;
     hud?: HudView;
     overlay: RunOverlay;
     // Co-op: the room and its menus, everyone else in the run, and who the
@@ -360,6 +367,7 @@ export class GameStore {
             mapId: "lumbridge",
             endless: false,
             hard: false,
+            expert: false,
             overlay: "none",
             coop: OFFLINE,
             party: [],

@@ -26,20 +26,31 @@ import {
 } from "../client/GameStore";
 import { formatTime } from "../client/GameView";
 import { CHARACTERS, getCharacter } from "../content/characters";
-import { CAMPAIGN_MAPS, DEV_MAPS, FUN_MAPS, MAPS, SEASONAL_MAPS, getMap } from "../content/maps";
+import {
+    CAMPAIGN_MAPS,
+    DEV_MAPS,
+    FUN_MAPS,
+    MAPS,
+    RAID_MAPS,
+    SEASONAL_MAPS,
+    getMap,
+} from "../content/maps";
 import { RARITIES } from "../content/rarity";
 import { SHOP_UPGRADES } from "../content/shop";
 import { COLLECTION_LOG_OBJ, TITLE_TAB_SPRITES } from "../content/titleIcons";
+import { TROPHY_BY_ID } from "../content/trophies";
 import { CharacterDef, CombatStyle, MapDef } from "../content/types";
 import { MapReward, describeUnlockTask, getMapRewards } from "../content/unlocks";
 import { WeaponStatLine } from "../content/weaponStats";
 import { WEAPONS, getWeapon } from "../content/weapons";
+import type { RaidChest } from "../core/Sim";
 import {
     NewerSaveError,
     SaveData,
     getNextUpgradeCost,
     importSave,
     isEndlessUnlocked,
+    isExpertUnlocked,
     isHardUnlocked,
     isMapUnlocked,
 } from "../core/save";
@@ -726,8 +737,12 @@ function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
                     Back
                 </button>
                 <Coins amount={ui.save.coins} />
-                <EndlessSwitch ui={ui} client={client} />
+                {/* A raid ends with its last room: no endless */}
+                {!getMap(ui.mapId).raid && <EndlessSwitch ui={ui} client={client} />}
                 <HardSwitch ui={ui} client={client} />
+                {getMap(ui.mapId).raid && ui.coop.status === "offline" && (
+                    <ExpertSwitch ui={ui} client={client} />
+                )}
                 <button
                     className="ui-button ui-button-go ui-select-go"
                     onClick={() => client.startRun()}
@@ -795,6 +810,59 @@ function HardSwitch({ ui, client }: ScreenProps): JSX.Element {
                 <Toggle on={ui.hard} label="Hard" onToggle={() => client.toggleHard()} />
             ) : (
                 <span className="ui-endless-hint">Beat the map</span>
+            )}
+        </div>
+    );
+}
+
+// The chest at the end of a raid: what it was rolled with, and what came out
+function RaidChestView({ chest }: { chest: RaidChest }): JSX.Element {
+    const found = chest.found.map((id) => TROPHY_BY_ID.get(id)!).filter(Boolean);
+    return (
+        <div className="ui-raid-chest">
+            <div className="ui-raid-chest-title">
+                {found.length > 0 ? "A purple chest!" : "The raid's chest"}
+            </div>
+            <div className="ui-subtle">
+                {chest.points.toLocaleString("en-GB")} raid points: a{" "}
+                {Math.round(chest.chance * 100)}% chance of a unique
+            </div>
+            {found.length > 0 ? (
+                <div className="ui-raid-chest-items">
+                    {found.map((trophy) => (
+                        <span key={trophy.id} className="ui-raid-chest-item">
+                            <ItemIcon objId={trophy.objId} size={36} />
+                            {trophy.name}
+                        </span>
+                    ))}
+                </div>
+            ) : (
+                <div className="ui-subtle">No unique this time.</div>
+            )}
+        </div>
+    );
+}
+
+// A raid's expert mode, once it's been beaten on hard: hard mode, and the Nylocas only hurt by
+// their own style
+function ExpertSwitch({ ui, client }: ScreenProps): JSX.Element {
+    const open = isExpertUnlocked(ui.save, ui.mapId);
+    return (
+        <div
+            className={"ui-endless" + (open ? "" : " ui-endless-locked")}
+            title={
+                open
+                    ? "Hard mode, and the Nylocas only take damage from their own style: grey " +
+                      "melee, green ranged, blue magic. Nylocas Vasilias changes colour. Bring " +
+                      "all three. Twice the coins, and one of Lil' Zik's looks each clear."
+                    : `Beat ${getMap(ui.mapId).name} on hard to play it on expert`
+            }
+        >
+            <span className="ui-endless-name">Expert</span>
+            {open ? (
+                <Toggle on={ui.expert} label="Expert" onToggle={() => client.toggleExpert()} />
+            ) : (
+                <span className="ui-endless-hint">Beat it on hard</span>
             )}
         </div>
     );
@@ -975,6 +1043,13 @@ function MapPanel({ ui, client }: ScreenProps): JSX.Element {
                 <div className="ui-style-group">
                     <div className="ui-style-name">Campaign</div>
                     <div className="ui-map-list">{CAMPAIGN_MAPS.map(tile)}</div>
+                </div>
+                <div className="ui-style-group">
+                    <div className="ui-style-name">
+                        Raids
+                        <span className="ui-style-treasure">room by room, open from the start</span>
+                    </div>
+                    <div className="ui-map-list">{RAID_MAPS.map(tile)}</div>
                 </div>
                 <div className="ui-style-group">
                     <div className="ui-style-name">
@@ -1372,6 +1447,16 @@ function Hud({
                     </div>
                     <Coins amount={hud.coins} />
                     {hud.round !== undefined && <div className="ui-round">Round {hud.round}</div>}
+                    {hud.raidRoom && (
+                        <div className="ui-round">
+                            Room {hud.raidRoom.number} / {hud.raidRoom.count}
+                        </div>
+                    )}
+                    {hud.raidRoom && (
+                        <div className="ui-raid-points" title="Raid points, for the supply chest">
+                            {hud.raidRoom.points} pts
+                        </div>
+                    )}
                     {hud.quests.length > 0 && (
                         <QuestTracker quests={hud.quests} open={questTracker} client={client} />
                     )}
@@ -1434,9 +1519,13 @@ function Hud({
                     )}
                 </div>
             ) : (
-                bossIn <= 60 && (
+                bossIn <= 60 &&
+                (!hud.raidRoom || hud.raidRoom.waves) && (
                     <div className="ui-boss-warning">
-                        {getMap(hud.mapId).finalBossWarning} {Math.ceil(bossIn)}s
+                        {hud.raidRoom && hud.raidRoom.number < hud.raidRoom.count
+                            ? `${hud.raidRoom.name} awaits...`
+                            : getMap(hud.mapId).finalBossWarning}{" "}
+                        {Math.ceil(bossIn)}s
                     </div>
                 )
             )}
@@ -2011,6 +2100,7 @@ export function ResultModal({ ui, client }: ScreenProps): JSX.Element {
                         {getMap(result.mapId).name}!
                     </p>
                 )}
+                {result?.raidChest && <RaidChestView chest={result.raidChest} />}
                 {result?.firstHardWin && (
                     <p className="ui-unlocked">
                         You've beaten {getMap(result.mapId).name} on hard!

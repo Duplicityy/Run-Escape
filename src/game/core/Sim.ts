@@ -49,6 +49,18 @@ import {
     getPowerUp,
 } from "../content/powerups";
 import {
+    EXPERT_RAID_COINS,
+    HARD_RAID_COINS,
+    HARD_UNIQUE_CHANCE,
+    PURPLE_CHANCE,
+    PURPLE_POINTS,
+    RAID_COINS_PER_POINT,
+    RAID_SUPPLIES,
+    RAID_SUPPLY_CHEST,
+    getRaidSupply,
+    getRoomPoints,
+} from "../content/raids";
+import {
     OLD_MAN_OFFERS,
     OLD_MAN_PRICE_PER_MINUTE,
     RANDOM_EVENTS,
@@ -76,6 +88,7 @@ import { TROPHIES, TrophyDef } from "../content/trophies";
 import {
     BoltProcDef,
     BossAttackDef,
+    BossDef,
     BossPhasesDef,
     CasketTier,
     CombatStyle,
@@ -91,6 +104,7 @@ import {
     PlayerEffectDef,
     PowerUpDef,
     PowerUpEffect,
+    RaidRoomDef,
     RandomEventDef,
     RandomEventEffect,
     SpecialAttackDef,
@@ -249,6 +263,12 @@ const DISGUISE_ATTACK_DELAY = 100;
 const MAX_POOLS = 12;
 // Enemies left this far behind are brought back near the player
 const RELOCATE_DISTANCE = 34;
+// A raid's room, cleared: seconds to gather what's on the ground before the next
+const RAID_CLEARED_SECONDS = 2;
+// The waves a raid's room has at the least, when its last boss took long (RaidDef.minWaveSeconds)
+const RAID_MIN_WAVE_SECONDS = 60;
+// How close to a raid hall's teleporter asks to use it (tiles from its middle; it's 2 by 2 and solid)
+const TELEPORTER_REACH = 2.2;
 const FLOW_FIELD_SIZE = 96;
 const FLOW_FIELD_INTERVAL = 8;
 // A ditch jump, in ticks from its start: the leap is from JUMP_LEAVE to
@@ -456,6 +476,9 @@ export type SimOptions = {
     endless?: boolean;
     // Everything on the map tougher, for more coins (see hard.ts)
     hard?: boolean;
+    // A raid's expert mode: hard mode, and the Nylocas only hurt by their own style
+    // (EnemyDef.onlyStyle, BossDef.colours). Ignored off a raid.
+    expert?: boolean;
     // The pieces upgraded in the Armoury, which caskets give as what they've
     // become (none when unset)
     armoury?: ArmouryUpgrades;
@@ -464,12 +487,27 @@ export type SimOptions = {
     // which of them this copy plays
     party?: HeroOptions[];
     focus?: number;
+    // A raid's teleporters: how many rooms' waves can be skipped (none until it's been beaten)
+    raidTeleports?: number;
+    // For trying things out on the dev server (?raidtest): a raid's rooms this many seconds
+    // apart, and every level up's pick straight to its max
+    testing?: SimTesting;
 };
+
+export type SimTesting = { raidRoomSeconds?: number; maxLevelUps?: boolean };
+
+// A raid's chest at the end: the points it went by, the chance of a purple they gave, and the
+// trophies in it
+export type RaidChest = { points: number; chance: number; found: string[] };
 
 export type RunResult = {
     mapId: string;
     endless: boolean;
     hard: boolean;
+    // A raid's expert mode (hard as well)
+    expert: boolean;
+    // A raid's chest, once it's beaten
+    raidChest?: RaidChest;
     // The round reached (1 outside endless runs)
     round: number;
     victory: boolean;
@@ -511,6 +549,16 @@ export type RunStats = {
 export type Hero = {
     // Where it is in Sim.heroes
     index: number;
+    // A raid's points, for its supply chest, and damage taken before this room, which it's
+    // scored on
+    raidPoints: number;
+    raidDamageAtStart: number;
+    // Every raid point earned, spent or not, for the chest at the end
+    raidPointsEarned: number;
+    // BossDef.stare: when hitting a staring boss can hurt this hero again
+    staredUntil?: number;
+    // What came out of a raid's chest at the end, for the result screen
+    raidChest?: RaidChest;
     name: string;
     characterId: string;
     // Permanent bonuses from their shop, their map tasks' items, and their
@@ -623,6 +671,7 @@ export class Sim {
     readonly rng: Rng;
     readonly endless: boolean;
     readonly hard: boolean;
+    readonly expert: boolean;
 
     tick = 0;
     // Tick the run ended, -1 while it's going
@@ -698,6 +747,20 @@ export class Sim {
     private damageSource: DamageSource = "other";
     // The final boss is up
     bossSpawned = false;
+    // Raids (MapDef.raid): the room the party's in, the tick its waves started, and where it's at:
+    // its waves, its boss's fight, or cleared and about to move on (since raidStageTick)
+    raidRoom = 0;
+    raidRoomStartTick = 0;
+    readonly testing?: SimTesting;
+    raidStage: "waves" | "boss" | "cleared" = "waves";
+    raidStageTick = 0;
+    // Who's still to have their turn at a cleared room's supply chest
+    private raidShopQueue: number[] = [];
+    // The hall's teleporter: uses left this raid, and whether walking up to it asks again (only
+    // once whoever it asked has stepped away)
+    raidTeleportsLeft = 0;
+    private readonly raidTeleports: number;
+    private teleporterArmed = true;
     // Endless runs' round, and the tick it started; killing the final boss
     // starts the next
     round = 1;
@@ -973,7 +1036,11 @@ export class Sim {
         this.rng = new Rng(options.seed);
         // Fun maps are endless from the start
         this.endless = (options.endless ?? false) || this.map.fun !== undefined;
-        this.hard = options.hard ?? false;
+        this.expert = (options.expert ?? false) && this.map.raid !== undefined;
+        this.hard = (options.hard ?? false) || this.expert;
+        this.testing = options.testing;
+        this.raidTeleports = this.map.raid ? (options.raidTeleports ?? 0) : 0;
+        this.raidTeleportsLeft = this.raidTeleports;
         this.hardScale = this.hard ? getHardScale(this.map) : { hp: 1, damage: 1 };
         const party: HeroOptions[] = options.party ?? [
             {
@@ -1007,6 +1074,10 @@ export class Sim {
             hero.revivesLeft = hero.stats.revival;
             hero.rerollsLeft = BASE_REROLLS + hero.stats.reroll;
             hero.rerollsAtStart = hero.rerollsLeft;
+            // Testing: the starting weapon at its max too
+            if (this.testing?.maxLevelUps) {
+                this.maxEverything();
+            }
             this.updateFlowField();
         }
         this.use(this.heroes[this.focus]);
@@ -1078,6 +1149,9 @@ export class Sim {
             killsBySource: {},
             casketsOpened: 0,
             damageTaken: 0,
+            raidPoints: 0,
+            raidDamageAtStart: 0,
+            raidPointsEarned: 0,
             healed: 0,
             highestHit: 0,
             weaponSince: {},
@@ -1321,6 +1395,8 @@ export class Sim {
             mapId: this.map.id,
             endless: this.endless,
             hard: this.hard,
+            expert: this.expert,
+            ...(this.hero.raidChest && { raidChest: this.hero.raidChest }),
             round: this.round,
             victory: this.state === "victory",
             seconds: this.seconds,
@@ -1461,6 +1537,9 @@ export class Sim {
         const choice = this.choices[index];
         if (choice) {
             this.apply(choice);
+            if (this.testing?.maxLevelUps) {
+                this.maxEverything();
+            }
         }
         // A godsword's blade or an Ancient burst that just reached its pick
         // level: picking is the rest of this level up
@@ -1692,6 +1771,22 @@ export class Sim {
                 this.heal(choice.amount);
                 break;
         }
+    }
+
+    // Testing (SimTesting.maxLevelUps): every weapon and passive at its last level
+    private maxEverything(): void {
+        for (const weapon of this.weapons) {
+            weapon.level = Math.max(weapon.level, weapon.def.levels.length);
+        }
+        for (const passive of this.passives) {
+            const def = getPassive(passive.id);
+            if (passive.level < def.maxLevel) {
+                passive.value += getPassiveGain(def, "veryRare") * (def.maxLevel - passive.level);
+                passive.level = def.maxLevel;
+            }
+        }
+        this.updateStats();
+        this.appearanceVersion++;
     }
 
     heal(amount: number): void {
@@ -1965,7 +2060,9 @@ export class Sim {
         hero.pendingLevelUps = 0;
         hero.choices = [];
         hero.chests = [];
-        if (this.offer?.hero === heroIndex) {
+        this.raidShopQueue = this.raidShopQueue.filter((index) => index !== heroIndex);
+        const theirTurn = this.offer?.hero === heroIndex;
+        if (theirTurn) {
             this.offer = undefined;
         }
         this.as(heroIndex, () => this.emit({ type: "heroLeft" }));
@@ -1975,6 +2072,9 @@ export class Sim {
         this.rescaleParty();
         if (!this.heroes.some((other) => this.isUp(other))) {
             this.endRun("dead");
+        } else if (theirTurn && this.raidShopQueue.length > 0) {
+            // The supply chest goes on to whoever's next
+            this.openNextRaidShop();
         } else if (this.state !== "playing") {
             this.settle();
             if ((this.state as SimState) === "playing") {
@@ -2029,6 +2129,7 @@ export class Sim {
         if (this.map.fun && this.mapSeconds >= RUN_LENGTH) {
             this.nextRound();
         }
+        this.stepRaid();
         this.stepIntro();
         this.stepDirector();
         this.stepChat();
@@ -2162,9 +2263,32 @@ export class Sim {
 
     // ---- Spawning ----
 
+    // A raid's room has its own waves and events, timed from when its waves started
+    private get raidRoomDef(): RaidRoomDef | undefined {
+        return this.map.raid?.rooms[this.raidRoom];
+    }
+
+    // The run's second this room's boss comes: when it says, with a room's least waves first
+    private get raidBossDue(): number {
+        const raid = this.map.raid!;
+        const room = raid.rooms[this.raidRoom];
+        const start = this.raidRoomStartTick / TICKS_PER_SECOND;
+        const testRoom = this.testing?.raidRoomSeconds;
+        if (testRoom) {
+            return Math.max((this.raidRoom + 1) * testRoom, start + testRoom / 4);
+        }
+        return Math.max(room.at, start + (raid.minWaveSeconds ?? RAID_MIN_WAVE_SECONDS));
+    }
+
+    private get directorSeconds(): number {
+        return this.map.raid
+            ? (this.tick - this.raidRoomStartTick) / TICKS_PER_SECOND
+            : this.mapSeconds;
+    }
+
     private currentWave() {
-        const seconds = this.mapSeconds;
-        const waves = this.map.waves;
+        const seconds = this.directorSeconds;
+        const waves = this.raidRoomDef?.waves ?? this.map.waves;
         let wave = waves[0];
         for (const w of waves) {
             if (w.start <= seconds) {
@@ -2178,12 +2302,13 @@ export class Sim {
         if (this.aloneWith?.dead) {
             this.aloneWith = undefined;
         }
-        // Nothing else comes while a boss makes its entrance, or fights alone
-        if (this.intro || this.aloneWith) {
+        // Nothing else comes while a boss makes its entrance, or fights alone, or in a raid's
+        // boss room
+        if (this.intro || this.aloneWith || (this.map.raid && this.raidStage !== "waves")) {
             return;
         }
-        const seconds = this.mapSeconds;
-        const events = this.map.events;
+        const seconds = this.directorSeconds;
+        const events = this.raidRoomDef?.events ?? this.map.events;
         while (this.eventIndex < events.length && events[this.eventIndex].at <= seconds) {
             const event = events[this.eventIndex];
             this.useSpawnHero();
@@ -2487,6 +2612,10 @@ export class Sim {
         bossHp?: number,
         encounter?: Encounter,
     ): Enemy | undefined {
+        // Expert mode's own version of it (EnemyDef.expertAs)
+        if (this.expert && def.expertAs) {
+            def = getEnemy(def.expertAs);
+        }
         const boss = type === "boss" || type === "finalBoss";
         let pos = at;
         if (!pos && def.spawnAt) {
@@ -2808,7 +2937,12 @@ export class Sim {
                 const bossState = enemy.bossState;
                 if (bossState) {
                     const keep = enemy.def.boss?.keepDistance;
-                    if (bossState.windup || bossState.surge || bossState.walkers) {
+                    if (
+                        bossState.windup ||
+                        bossState.surge ||
+                        bossState.walkers ||
+                        this.isNapping(enemy)
+                    ) {
                         // Stands still winding up, so a swing can be stepped away from
                         dirX = dirY = 0;
                     } else if (this.tick < bossState.channelEnd) {
@@ -3715,6 +3849,414 @@ export class Sim {
         };
     }
 
+    // ---- Raids ----
+
+    // A raid's room: its waves until its time's up, then the party's taken into its boss's room
+    // and the boss turns up. Once it's dead, a moment to gather what's on the ground, and on to
+    // the next room. The last room's boss is the final boss, so killing it wins as anywhere.
+    private stepRaid(): void {
+        const raid = this.map.raid;
+        if (!raid || this.runOver) {
+            return;
+        }
+        const room = raid.rooms[this.raidRoom];
+        const last = this.raidRoom === raid.rooms.length - 1;
+        if (this.raidStage === "waves") {
+            if (this.seconds >= this.raidBossDue) {
+                this.startRaidBoss(room, last);
+            } else {
+                this.stepTeleporter(room);
+            }
+        } else if (this.raidStage === "boss") {
+            if (!last && !this.enemies.some((enemy) => enemy.boss && !enemy.dead)) {
+                this.raidStage = "cleared";
+                this.raidStageTick = this.tick;
+                for (const enemy of this.enemies) {
+                    if (!enemy.dead) {
+                        this.vanish(enemy);
+                    }
+                }
+                this.clearBossAttacks();
+                this.enemyProjectiles = [];
+                for (const pickup of this.pickups) {
+                    pickup.attracted = true;
+                    pickup.speed = Math.max(pickup.speed, 0.15);
+                }
+                this.scoreRaidRoom();
+                // Each player's turn at the supply chest, before the next room
+                this.raidShopQueue = this.heroes
+                    .filter((hero) => this.isUp(hero))
+                    .map((hero) => hero.index);
+                this.openNextRaidShop();
+            }
+        } else if (this.tick - this.raidStageTick >= RAID_CLEARED_SECONDS * TICKS_PER_SECOND) {
+            this.raidRoom++;
+            const next = raid.rooms[this.raidRoom];
+            this.raidStage = "waves";
+            this.raidStageTick = this.tick;
+            this.raidRoomStartTick = this.tick;
+            this.raidShopQueue = [];
+            this.eventIndex = 0;
+            this.spawnAccumulator = 0;
+            this.moveParty(next.start);
+            for (const hero of this.heroes) {
+                hero.raidDamageAtStart = hero.damageTaken;
+            }
+            this.emit({
+                type: "notice",
+                message: `Room ${this.raidRoom + 1} of ${raid.rooms.length}: ${next.name}`,
+            });
+        }
+    }
+
+    // The hall's teleporter: walking up to it asks whether to skip the room's waves
+    private stepTeleporter(room: RaidRoomDef): void {
+        const at = room.teleporter;
+        if (!at || this.state !== "playing") {
+            return;
+        }
+        const near = this.heroes.find(
+            (hero) =>
+                this.isUp(hero) &&
+                fm.hypot(hero.player.x - at.x, hero.player.y - at.y) <= TELEPORTER_REACH,
+        );
+        if (!near) {
+            // Stepped away: it'll ask again
+            if (
+                !this.heroes.some(
+                    (hero) =>
+                        fm.hypot(hero.player.x - at.x, hero.player.y - at.y) <=
+                        TELEPORTER_REACH + 1.5,
+                )
+            ) {
+                this.teleporterArmed = true;
+            }
+            return;
+        }
+        if (!this.teleporterArmed) {
+            return;
+        }
+        this.teleporterArmed = false;
+        const current = this.hero;
+        this.use(near);
+        if (this.raidTeleportsLeft <= 0) {
+            this.emit(
+                {
+                    type: "notice",
+                    message:
+                        this.heroes.length > 1
+                            ? "The teleporters are for solo raids, for now."
+                            : this.raidTeleports === 0
+                              ? "The teleporter's dormant. Beat the raid once to use it."
+                              : "The teleporter's dormant: you've used all your teleports this raid.",
+                },
+                true,
+            );
+            this.use(current);
+            return;
+        }
+        const left = this.raidTeleportsLeft;
+        this.openOffer(
+            {
+                id: "raid_teleporter",
+                name: "Teleporter",
+                weight: 0,
+                speech:
+                    `Skips the rest of this room's waves and takes you straight to ${room.name}. ` +
+                    `You can use ${left === 1 ? "1 more teleport" : `${left} more teleports`} this raid.`,
+                effect: { kind: "shop", leaveLabel: "Cancel" },
+            },
+            [{ kind: "teleport" }],
+        );
+        this.use(current);
+    }
+
+    // Into the boss's room, with the crowd gone. Retried next tick if the boss can't turn up.
+    private startRaidBoss(room: RaidRoomDef, last: boolean): void {
+        // Nobody's left walking over from the hall
+        this.visitor = undefined;
+        for (const enemy of this.enemies) {
+            if (!enemy.dead) {
+                this.vanish(enemy);
+            }
+        }
+        this.clearBossAttacks();
+        this.enemyProjectiles = [];
+        this.funBossGroup = [];
+        this.moveParty(room.arrive);
+        this.useSpawnHero();
+        const boss = this.spawnBoss(
+            getEnemy(room.boss),
+            last ? "finalBoss" : "boss",
+            room.bossHp,
+            room.bossAt,
+        );
+        if (boss) {
+            this.raidStage = "boss";
+            this.raidStageTick = this.tick;
+            const protects = boss.def.protects;
+            if (protects) {
+                const styles = protects.styles.map((style) =>
+                    style === "ranged" ? "missiles" : style,
+                );
+                this.emit({
+                    type: "notice",
+                    message: `${boss.def.name} protects from ${styles.join(" and ")}!`,
+                });
+            }
+        }
+    }
+
+    // Expert mode: once it's enraged, it stares one way a while, then turns a quarter (BossDef.stare)
+    private stepStare(enemy: Enemy): void {
+        const stare = enemy.def.boss?.stare;
+        const state = enemy.bossState!;
+        if (!this.expert || !stare || !state.enraged) {
+            return;
+        }
+        if (state.stareAngle === undefined || this.tick >= (state.nextStare ?? 0)) {
+            const turns = 1 + this.rng.int(3);
+            state.stareAngle =
+                (state.stareAngle ?? this.rng.int(4) * (Math.PI / 2)) + turns * (Math.PI / 2);
+            state.nextStare = this.tick + secondsToTicks(stare.every);
+            this.emit({ type: "notice", message: stare.message });
+        }
+        enemy.yaw = yawFromVector(fm.cos(state.stareAngle), fm.sin(state.stareAngle));
+    }
+
+    // Whether the player's in front of a staring boss (BossDef.stare), and so hurt by hitting it
+    private staredAt(enemy: Enemy): boolean {
+        const stare = enemy.def.boss?.stare;
+        const angle = enemy.bossState?.stareAngle;
+        if (
+            !this.expert ||
+            !stare ||
+            angle === undefined ||
+            !this.damageSource.startsWith("weapon:")
+        ) {
+            return false;
+        }
+        const player = this.player;
+        const toward = fm.atan2(player.y - enemy.y, player.x - enemy.x);
+        const off = Math.abs(fm.atan2(fm.sin(toward - angle), fm.cos(toward - angle)));
+        return off <= stare.arc / 2;
+    }
+
+    // A weapon's hit an expert raid's Nylocas won't take (EnemyDef.onlyStyle)
+    private wrongStyle(enemy: Enemy): boolean {
+        const only = enemy.def.onlyStyle;
+        const source = this.damageSource;
+        if (!this.expert || !only || !source.startsWith("weapon:")) {
+            return false;
+        }
+        return getWeaponStyle(getWeapon(source.slice("weapon:".length))) !== only;
+    }
+
+    // Expert mode: the next of BossDef.colours' forms, keeping its hitpoints, every so often
+    private stepColours(enemy: Enemy): void {
+        const colours = enemy.def.boss?.colours;
+        if (!this.expert || !colours) {
+            return;
+        }
+        const state = enemy.bossState!;
+        state.nextColour ??= this.tick + secondsToTicks(colours.every);
+        if (this.tick < state.nextColour || state.windup) {
+            return;
+        }
+        state.nextColour = this.tick + secondsToTicks(colours.every);
+        const index = colours.forms.indexOf(enemy.def.id);
+        const form = getEnemy(colours.forms[(index + 1) % colours.forms.length]);
+        enemy.def = form;
+        enemy.attackSeq = form.attackSeq;
+        enemy.anim = "idle";
+        enemy.animStart = this.tick;
+        this.appearanceVersion++;
+        const style = form.onlyStyle;
+        this.emit({
+            type: "notice",
+            message: `${form.name} turns ${style === "melee" ? "grey" : style === "ranged" ? "green" : "blue"}! Only ${style} hurts it.`,
+        });
+    }
+
+    // The share of a weapon's hit an enemy takes, praying against its style (EnemyDef.protects)
+    private prayedAgainst(enemy: Enemy): number {
+        const protects = enemy.def.protects;
+        // On expert, a Nylocas takes its own style in full (EnemyDef.onlyStyle)
+        if (this.expert && enemy.def.onlyStyle) {
+            return 1;
+        }
+        const source = this.damageSource;
+        if (!protects || !source.startsWith("weapon:")) {
+            return 1;
+        }
+        const style = getWeaponStyle(getWeapon(source.slice("weapon:".length)));
+        return protects.styles.includes(style) ? protects.damage : 1;
+    }
+
+    // Each player's points for the room just cleared (getRoomPoints): how fast its boss went down,
+    // and how little they were hurt
+    private scoreRaidRoom(): void {
+        const bossSeconds = (this.tick - this.raidStageTick) / TICKS_PER_SECOND;
+        const minutes = Math.floor(bossSeconds / 60);
+        const seconds = String(Math.floor(bossSeconds % 60)).padStart(2, "0");
+        const current = this.hero;
+        const scores = this.heroes.map((hero) =>
+            getRoomPoints(
+                bossSeconds,
+                hero.damageTaken - hero.raidDamageAtStart,
+                hero.player.maxHp,
+            ),
+        );
+        // The party's coins, on its average
+        const inRaid = this.heroes.filter((hero) => !hero.left);
+        const average =
+            inRaid.reduce((sum, hero) => sum + scores[hero.index], 0) / Math.max(1, inRaid.length);
+        const scale = this.expert ? EXPERT_RAID_COINS : this.hard ? HARD_RAID_COINS : 1;
+        const coins = Math.round(average * RAID_COINS_PER_POINT * scale);
+        this.coins += coins;
+        for (const hero of this.heroes) {
+            this.use(hero);
+            const points = scores[hero.index];
+            hero.raidPoints += points;
+            hero.raidPointsEarned += points;
+            this.emit(
+                {
+                    type: "notice",
+                    message:
+                        `Room cleared! Boss down in ${minutes}:${seconds}: ` +
+                        `+${points} raid points, +${coins.toLocaleString("en-GB")} coins.`,
+                },
+                true,
+            );
+        }
+        this.use(current);
+    }
+
+    // The supply chest's screen for whoever's next in the queue
+    private openNextRaidShop(): void {
+        let index = this.raidShopQueue.shift();
+        // Anyone who's gone or gone down since misses their turn
+        while (index !== undefined && !this.isUp(this.heroes[index])) {
+            index = this.raidShopQueue.shift();
+        }
+        if (index === undefined) {
+            return;
+        }
+        this.use(this.heroes[index]);
+        this.openOffer(
+            RAID_SUPPLY_CHEST,
+            RAID_SUPPLIES.map((supply) => ({
+                kind: "supply",
+                supplyId: supply.id,
+                price: supply.price,
+                sold: false,
+            })),
+        );
+    }
+
+    // The chest once the raid's done, each of the party their own: a purple, more likely the more
+    // points they earned, and on hard mode a roll for its own uniques too
+    private openRaidChest(): void {
+        const id = this.map.id;
+        const purples = TROPHIES.filter((t) => t.from.kind === "raid" && t.from.mapId === id);
+        const pick = (hard: boolean): TrophyDef | undefined => {
+            const pool = purples.filter(
+                (t) =>
+                    t.from.kind === "raid" &&
+                    (t.from.hard ?? false) === hard &&
+                    !(t.from.expert ?? false),
+            );
+            if (pool.length === 0) {
+                return undefined;
+            }
+            const weights = pool.map((t) => (t.from.kind === "raid" ? t.from.weight : 0));
+            return pool[this.rng.weightedIndex(weights)];
+        };
+        const current = this.hero;
+        for (const hero of this.heroes) {
+            this.use(hero);
+            const [min, max] = PURPLE_CHANCE;
+            const chance = Math.min(max, Math.max(min, hero.raidPointsEarned / PURPLE_POINTS));
+            const purple = this.rng.chance(chance) ? pick(false) : undefined;
+            const hardOne =
+                this.hard && this.rng.chance(HARD_UNIQUE_CHANCE) ? pick(true) : undefined;
+            // Expert mode: one of Lil' Zik's looks, every time
+            const expertPool = purples.filter((t) => t.from.kind === "raid" && t.from.expert);
+            const expertOne =
+                this.expert && expertPool.length > 0
+                    ? expertPool[this.rng.int(expertPool.length)]
+                    : undefined;
+            const found = [purple, hardOne, expertOne].filter(
+                (t): t is TrophyDef => t !== undefined,
+            );
+            hero.raidChest = {
+                points: hero.raidPointsEarned,
+                chance,
+                found: found.map((t) => t.id),
+            };
+            this.emit(
+                {
+                    type: "notice",
+                    message:
+                        found.length > 0
+                            ? `A purple chest! ${found.map((t) => this.findTrophy(t)).join(" ")}`
+                            : `The chest holds no unique this time (${Math.round(chance * 100)}% chance).`,
+                },
+                true,
+            );
+        }
+        this.use(current);
+    }
+
+    get raidPoints(): number {
+        return this.hero.raidPoints;
+    }
+
+    private useRaidSupply(supplyId: string): void {
+        const supply = getRaidSupply(supplyId);
+        const effect = supply.effect;
+        if (effect.kind === "heal") {
+            this.heal(this.player.maxHp * effect.fraction);
+            return;
+        }
+        if (effect.cures) {
+            this.player.poisonEnd = -1;
+            this.player.poisonDamage = 0;
+            this.debuffs = [];
+        }
+        this.addBuff(`raid:${supply.id}`, effect.stats, effect.seconds, effect.cures ?? false);
+        this.buffs[this.buffs.length - 1].look = { name: supply.name, objId: supply.objId };
+    }
+
+    // Everyone to a spot, side by side north to south, down or not, and what's on the ground
+    // with them, so nothing's left in a room they can't get back to
+    private moveParty(to: { x: number; y: number }): void {
+        const current = this.hero;
+        this.heroes.forEach((hero, i) => {
+            const one = hero.player;
+            one.x = one.prevX = to.x;
+            one.y = one.prevY = to.y + (i - (this.heroes.length - 1) / 2) * 1.5;
+            this.use(hero);
+            this.updateFlowField();
+        });
+        this.use(current);
+        this.pickups.forEach((pickup, i) => {
+            if (pickup.disguise) {
+                pickup.value = -1;
+                return;
+            }
+            const angle = (i * 2.399) % (Math.PI * 2);
+            const distance = 1.5 + (i % 5) * 0.5;
+            pickup.x = to.x + fm.cos(angle) * distance;
+            pickup.y = to.y + fm.sin(angle) * distance;
+            pickup.pileUid = 0;
+            if (pickup.kind !== "casket" && pickup.kind !== "powerUp") {
+                pickup.attracted = true;
+                pickup.speed = Math.max(pickup.speed, 0.15);
+            }
+        });
+    }
+
     // The player's safe and everything runs for it (BossDef.intro); the boss
     // comes up partway through
     startIntro(def: EnemyDef, type: "boss" | "finalBoss", hp?: number): void {
@@ -4052,6 +4594,19 @@ export class Sim {
         return along >= fm.cos(cone / 2);
     }
 
+    // Whether the player's standing in a safe mark of this attack (GroundPatternDef.safe)
+    private inSafeMark(attack: BossAttackDef): boolean {
+        if (!attack.ground?.safe) {
+            return false;
+        }
+        const player = this.player;
+        return this.hazards.some(
+            (hazard) =>
+                hazard.attack === attack &&
+                fm.hypot(player.x - hazard.x, player.y - hazard.y) <= hazard.radius,
+        );
+    }
+
     // The marks of a ground attack, there from now until they land
     private markGround(enemy: Enemy, attack: BossAttackDef, landTick: number): void {
         const ground = attack.ground;
@@ -4059,7 +4614,7 @@ export class Sim {
             return;
         }
         const player = this.player;
-        const damage = attack.damage > 0 ? this.getBossDamage(enemy, attack) : 0;
+        const damage = attack.damage > 0 && !ground.safe ? this.getBossDamage(enemy, attack) : 0;
         const armed = ground.armed !== undefined;
         const add = (x: number, y: number) => {
             this.hazards.push({
@@ -4075,6 +4630,8 @@ export class Sim {
                 endTick: armed ? landTick + secondsToTicks(ground.armed!) : landTick,
                 armed,
                 fuseTick: -1,
+                lingerEnd: -1,
+                nextHurt: -1,
             });
         };
         for (const spots of ground.spots) {
@@ -4108,12 +4665,25 @@ export class Sim {
                 }
                 case "scatter":
                     for (let i = 0; i < spots.count; i++) {
-                        const angle = this.rng.range(0, Math.PI * 2);
-                        const distance = this.rng.range(1, spots.spread);
-                        add(
-                            player.x + fm.cos(angle) * distance,
-                            player.y + fm.sin(angle) * distance,
-                        );
+                        let x = player.x;
+                        let y = player.y;
+                        // Rolled again until it's far enough from the boss, on ground that can
+                        // be walked to (a few tries, then the last one stands)
+                        for (let attempt = 0; attempt < (spots.awayFrom ? 16 : 1); attempt++) {
+                            const angle = this.rng.range(0, Math.PI * 2);
+                            const distance = this.rng.range(1, spots.spread);
+                            x = player.x + fm.cos(angle) * distance;
+                            y = player.y + fm.sin(angle) * distance;
+                            if (
+                                !spots.awayFrom ||
+                                (fm.hypot(x - enemy.x, y - enemy.y) >= spots.awayFrom &&
+                                    this.grid.contains(Math.floor(x), Math.floor(y)) &&
+                                    this.isWalkableTile(Math.floor(x), Math.floor(y)))
+                            ) {
+                                break;
+                            }
+                        }
+                        add(x, y);
                     }
                     break;
             }
@@ -4268,7 +4838,7 @@ export class Sim {
             }
             this.bulletSources[source] = { attack, enemy };
         }
-        const aimed = pattern.shape === "spread";
+        const aimed = pattern.shape === "spread" || pattern.shape === "wall";
         this.emitters.push({
             enemyUid: enemy.uid,
             attack,
@@ -4311,6 +4881,10 @@ export class Sim {
         const life = Math.ceil(pattern.range / speed);
         const turn = (pattern.curve ?? 0) / TICKS_PER_SECOND;
         const count = pattern.count;
+        if (pattern.shape === "wall" || pattern.shape === "closing") {
+            this.fireGappedVolley(emitter, boss, speed, life, turn);
+            return;
+        }
         const spread = pattern.shape === "spread";
         const step = spread ? (pattern.arc ?? 1) / Math.max(1, count - 1) : (Math.PI * 2) / count;
         const first = spread ? emitter.angle - (pattern.arc ?? 1) / 2 : emitter.angle;
@@ -4330,6 +4904,73 @@ export class Sim {
             );
         }
         emitter.angle += pattern.turn ?? 0;
+    }
+
+    // A wall or a closing ring: bullets side by side but for a gap of pattern.gap of them, which
+    // moves each volley. A wall goes from the boss the way it faces, across it; a closing ring
+    // forms round whoever's nearest the boss and comes in on where they stood.
+    private fireGappedVolley(
+        emitter: BulletEmitter,
+        boss: Enemy,
+        speed: number,
+        life: number,
+        turn: number,
+    ): void {
+        const pattern = emitter.attack.pattern!;
+        const count = pattern.count;
+        const gap = Math.min(pattern.gap ?? 2, count - 1);
+        // Anywhere round a ring; never at a wall's ends, which can be in a room's walls
+        const gapStart =
+            pattern.shape === "closing"
+                ? this.rng.int(count)
+                : 1 + this.rng.int(Math.max(1, count - gap - 1));
+        const inGap = (i: number) => (i - gapStart + count) % count < gap;
+        const add = (x: number, y: number, angle: number, ticks: number) =>
+            this.bullets.add(
+                x,
+                y,
+                fm.cos(angle) * speed,
+                fm.sin(angle) * speed,
+                turn,
+                pattern.radius,
+                emitter.damage,
+                ticks,
+                emitter.source,
+                this.tick,
+            );
+        if (pattern.shape === "wall") {
+            const spacing = pattern.spacing ?? pattern.radius * 2.5;
+            const across = emitter.angle + Math.PI / 2;
+            for (let i = 0; i < count; i++) {
+                if (inGap(i)) {
+                    continue;
+                }
+                const offset = (i - (count - 1) / 2) * spacing;
+                add(
+                    boss.x + fm.cos(across) * offset,
+                    boss.y + fm.sin(across) * offset,
+                    emitter.angle,
+                    life,
+                );
+            }
+            return;
+        }
+        const target = this.nearestUpHero(boss.x, boss.y).player;
+        const distance = pattern.distance ?? 8;
+        // In to where they stood, and no further
+        const ticks = Math.min(life, Math.ceil(distance / speed));
+        for (let i = 0; i < count; i++) {
+            if (inGap(i)) {
+                continue;
+            }
+            const angle = emitter.angle + (i / count) * Math.PI * 2;
+            add(
+                target.x + fm.cos(angle) * distance,
+                target.y + fm.sin(angle) * distance,
+                angle + Math.PI,
+                ticks,
+            );
+        }
     }
 
     private stepBossFight(): void {
@@ -4436,6 +5077,21 @@ export class Sim {
         // However many land on someone, it's the one hit (by hero)
         const landed: boolean[] = [];
         for (const hazard of hazards) {
+            if (hazard.lingerEnd !== -1) {
+                // On the ground, hurting whoever stands in it now and then
+                if (tick >= hazard.lingerEnd) {
+                    hazard.endTick = -1;
+                    spent = true;
+                } else if (tick >= hazard.nextHurt) {
+                    const lingers = hazard.attack.ground!.lingers!;
+                    hazard.nextHurt = tick + secondsToTicks(lingers.interval);
+                    this.landHazard(hazard, landed, lingers.damage, true);
+                    if (this.runOver) {
+                        return;
+                    }
+                }
+                continue;
+            }
             if (hazard.armed && hazard.fuseTick === -1) {
                 // Waiting to be walked into, by anyone, until it gives up
                 if (tick >= hazard.endTick) {
@@ -4458,8 +5114,15 @@ export class Sim {
             if (tick < (hazard.armed ? hazard.fuseTick : hazard.landTick)) {
                 continue;
             }
-            hazard.endTick = -1;
-            spent = true;
+            const lingers = hazard.attack.ground?.lingers;
+            if (lingers) {
+                hazard.lingerEnd = tick + secondsToTicks(lingers.seconds);
+                hazard.endTick = hazard.lingerEnd;
+                hazard.nextHurt = tick + secondsToTicks(lingers.interval);
+            } else {
+                hazard.endTick = -1;
+                spent = true;
+            }
             this.landHazard(hazard, landed);
             if (this.runOver) {
                 return;
@@ -4472,9 +5135,17 @@ export class Sim {
 
     // landed: the heroes something's landed on this tick, by index, who it
     // passes by; it adds whoever it hits
-    private landHazard(hazard: GroundHazard, landed: boolean[]): void {
+    // share: of its damage; lingering: it's on the ground after it landed, so no splash again
+    private landHazard(
+        hazard: GroundHazard,
+        landed: boolean[],
+        share = 1,
+        lingering = false,
+    ): void {
         const { attack, x, y, radius } = hazard;
-        if (attack.impactSpotAnim !== undefined) {
+        if (lingering) {
+            // Already landed
+        } else if (attack.impactSpotAnim !== undefined) {
             this.addEffect(attack.impactSpotAnim, x, y, 0, 40);
         } else if (!attack.ground?.spotAnim) {
             this.emit({ type: "bossSwing", x, y, radius });
@@ -4492,7 +5163,8 @@ export class Sim {
             landed[index] = true;
             const enemy = this.enemies.find((e) => e.uid === hazard.enemyUid);
             if (hazard.damage > 0) {
-                this.bossHit(enemy?.def.id ?? "", enemy, attack, hazard.damage, false);
+                const damage = Math.max(1, Math.round(hazard.damage * share));
+                this.bossHit(enemy?.def.id ?? "", enemy, attack, damage, false);
             } else if (attack.effect && !this.reviving) {
                 this.applyPlayerEffect(attack.effect, enemy);
             }
@@ -4636,6 +5308,43 @@ export class Sim {
 
     // Picks an attack once the last one is done (among those the player is in
     // range of), winds it up, then lands or fires it
+    // BossDef.naps: true while it's down, and so doing nothing else
+    private stepNap(enemy: Enemy, naps: NonNullable<BossDef["naps"]>): boolean {
+        const state = enemy.bossState!;
+        state.nextNap ??= this.tick + secondsToTicks(naps.every);
+        if (state.napEnd !== undefined && state.napEnd !== -1) {
+            if (this.tick < state.napEnd) {
+                return true;
+            }
+            // Up again, with a stomp
+            state.napEnd = -1;
+            state.nextNap = this.tick + secondsToTicks(naps.every);
+            enemy.attackCooldown = 0;
+            this.emit({ type: "notice", message: naps.wakeMessage });
+            const wake = enemy.def.boss!.attacks.find((a) => a.name === naps.wake);
+            if (wake) {
+                this.startBossAttack(enemy, wake);
+            }
+            return true;
+        }
+        if (this.tick < state.nextNap) {
+            return false;
+        }
+        state.napEnd = this.tick + secondsToTicks(naps.seconds);
+        enemy.vx = enemy.vy = 0;
+        enemy.anim = "attack";
+        enemy.attackSeq = naps.seq;
+        enemy.animStart = this.tick;
+        this.emit({ type: "notice", message: naps.message });
+        return true;
+    }
+
+    // BossDef.naps: down right now (the bot walks up to it then)
+    isNapping(enemy: Enemy): boolean {
+        const napEnd = enemy.bossState?.napEnd;
+        return napEnd !== undefined && napEnd !== -1 && this.tick < napEnd;
+    }
+
     private stepBoss(enemy: Enemy, distance: number): void {
         const state = enemy.bossState!;
         const def = enemy.def.boss!;
@@ -4658,6 +5367,11 @@ export class Sim {
         if (state.walkers && this.stepWalkers(enemy, state.walkers)) {
             return;
         }
+        if (def.naps && !state.windup && this.stepNap(enemy, def.naps)) {
+            return;
+        }
+        this.stepColours(enemy);
+        this.stepStare(enemy);
         const windup = state.windup;
         if (windup) {
             if (this.tick >= windup.landTick) {
@@ -4687,6 +5401,7 @@ export class Sim {
                 distance <= attack.range &&
                 distance >= (attack.minRange ?? 0) &&
                 (!attack.enraged || state.enraged) &&
+                (!attack.expert || this.expert) &&
                 (!attack.phases || !phase || attack.phases.includes(phase.index + 1)) &&
                 !(attack.parasite && this.parasite)
             ) {
@@ -4720,6 +5435,10 @@ export class Sim {
             dirY: (player.y - enemy.y) / toPlayer,
         };
         state.windup = windup;
+        // Somewhere safe from it, there from the start (GroundPatternDef.safe)
+        if (attack.ground?.safe) {
+            this.markGround(enemy, attack, this.tick);
+        }
         if (attack.kind === "ground") {
             this.markGround(enemy, attack, landTick);
         } else if (attack.kind === "quarters") {
@@ -5116,6 +5835,10 @@ export class Sim {
                 if (projectile.crowd && player.invulnerable > 0) {
                     continue;
                 }
+                if (this.inSafeMark(projectile.attack)) {
+                    this.emit({ type: "notice", message: "The circle shields you!" }, true);
+                    continue;
+                }
                 const enemy = this.enemies.find((e) => e.uid === projectile.enemyUid);
                 this.bossHit(projectile.enemyId, enemy, projectile.attack, projectile.damage);
                 if (this.runOver) {
@@ -5412,6 +6135,25 @@ export class Sim {
             return 0;
         }
         const drain = enemy.drainEnd > this.tick ? enemy.drain : 0;
+        // Expert mode: a Nylocas only takes its own style from weapons
+        if (!poison && this.wrongStyle(enemy)) {
+            this.showBlocked(enemy);
+            return 0;
+        }
+        // And a staring boss turns a hit from in front back on whoever made it
+        if (!poison && this.staredAt(enemy)) {
+            this.showBlocked(enemy);
+            const hero = this.hero;
+            if (this.tick >= (hero.staredUntil ?? 0)) {
+                hero.staredUntil = this.tick + secondsToTicks(0.5);
+                const stare = enemy.def.boss!.stare!;
+                this.damagePlayer(stare.damage * this.map.difficulty.damage, enemy.def.id, false);
+            }
+            return 0;
+        }
+        const naps = enemy.def.boss?.naps;
+        const guard = naps && !this.isNapping(enemy) ? naps.awakeDamage : 1;
+        const prayed = this.prayedAgainst(enemy) * guard;
         // Damage that ignores the damage bonus (mightScale 0: the nuke's share
         // of a boss's hitpoints, a ruby bolt's) ignores this one too
         const bossMight = enemy.boss && mightScale > 0 ? this.stats.bossMight : 0;
@@ -5422,6 +6164,7 @@ export class Sim {
                     (1 + this.stats.might * mightScale) *
                     (1 + bossMight) *
                     (1 + drain) *
+                    prayed *
                     this.rng.range(0.85, 1.15),
             ),
         );
@@ -5550,6 +6293,10 @@ export class Sim {
             if (this.endless) {
                 this.nextRound();
             } else {
+                if (this.map.raid) {
+                    this.scoreRaidRoom();
+                    this.openRaidChest();
+                }
                 this.endRun("victory");
             }
         }
@@ -5628,6 +6375,10 @@ export class Sim {
 
     // Bones, and now and then a casket, coins, food or a power-up
     private dropLoot(enemy: Enemy): void {
+        // A raid boss's adds drop nothing: the room's the boss's
+        if (this.map.raid && this.raidStage !== "waves" && !enemy.boss) {
+            return;
+        }
         this.dropPickup("bones", enemy.x, enemy.y, enemy.xp);
         // Co-op: one of a boss's copies, whose loot comes with the last to fall
         if (this.encounterLeft(enemy)) {
@@ -8108,9 +8859,10 @@ export class Sim {
             this.stepVisitor(visitor);
         } else if (
             this.seconds >= this.nextRandomEventSeconds &&
-            // Nobody drops by in the middle of a phased boss's fight
+            // Nobody drops by in the middle of a phased boss's fight, or a raid's boss room
             !this.intro &&
-            !this.shownBoss?.def.boss?.phases
+            !this.shownBoss?.def.boss?.phases &&
+            !(this.map.raid && this.raidStage !== "waves")
         ) {
             this.useVisitorHero();
             // (none to pick or nowhere to put one: it's due again in a moment)
@@ -8360,22 +9112,45 @@ export class Sim {
         if (this.state !== "event" || !offer || !option || offer.hero !== this.hero.index) {
             return false;
         }
-        if (option.kind === "powerUp" || option.kind === "revive") {
-            if (option.sold || this.coins < option.price) {
+        if (option.kind === "powerUp" || option.kind === "revive" || option.kind === "supply") {
+            // A raid's supplies are paid for in its points
+            const points = option.kind === "supply";
+            if (option.sold || (points ? this.hero.raidPoints : this.coins) < option.price) {
                 return false;
             }
-            this.coins -= option.price;
+            if (points) {
+                this.hero.raidPoints -= option.price;
+            } else {
+                this.coins -= option.price;
+            }
             option.sold = true;
             this.emit({ type: "visitor", message: "", sound: SOUNDS.buy }, true);
             if (option.kind === "revive") {
                 this.gainRevive();
+            } else if (option.kind === "supply") {
+                this.useRaidSupply(option.supplyId);
             } else {
                 this.usePowerUp(getPowerUp(option.powerUpId));
             }
             // A bought nuke can finish off a final boss
-            if (this.runOver || offer.options.every((o) => o.kind !== "answer" && o.sold)) {
+            if (
+                this.runOver ||
+                offer.options.every((o) => o.kind !== "answer" && o.kind !== "teleport" && o.sold)
+            ) {
                 this.leaveEvent();
             }
+            return true;
+        }
+        if (option.kind === "teleport") {
+            const raid = this.map.raid!;
+            const room = raid.rooms[this.raidRoom];
+            this.raidTeleportsLeft--;
+            this.leaveEvent();
+            this.emit({
+                type: "notice",
+                message: `Teleported to ${room.name}. ${this.raidTeleportsLeft} ${this.raidTeleportsLeft === 1 ? "teleport" : "teleports"} left.`,
+            });
+            this.startRaidBoss(room, this.raidRoom === raid.rooms.length - 1);
             return true;
         }
         const effect = offer.def.effect;
@@ -8404,6 +9179,10 @@ export class Sim {
         }
         this.offer = undefined;
         if (this.state !== "event") {
+            return;
+        }
+        if (this.raidShopQueue.length > 0) {
+            this.openNextRaidShop();
             return;
         }
         this.state = this.heroes.some((hero) => hero.chests.length > 0) ? "chest" : "playing";
@@ -8555,6 +9334,10 @@ export class Sim {
 
     // Until this round's final boss
     get timeLeftForBoss(): number {
+        const room = this.raidRoomDef;
+        if (room) {
+            return this.raidStage === "waves" ? Math.max(0, this.raidBossDue - this.seconds) : 0;
+        }
         return Math.max(0, RUN_LENGTH - this.mapSeconds);
     }
 }

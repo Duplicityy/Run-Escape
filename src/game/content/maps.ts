@@ -3,6 +3,7 @@ import { HALLOWED_BOSS_ARENA, HALLOWED_NIGHT } from "../scaperune/maps/hallowedN
 import { MapRecipe, getRecipeArena, getRecipeWorldTile } from "../scaperune/recipe";
 import { getEnemy } from "./enemies";
 import { FUN_MAPS } from "./fun/maps";
+import { RAID_MAPS } from "./raids";
 import { MapDef } from "./types";
 import {
     BARROWS_EVENTS,
@@ -337,6 +338,10 @@ export const SEASONAL_MAPS: MapDef[] = MAPS.filter((map) => map.seasonal);
 // campaign's chain
 export { FUN_MAPS };
 
+// Raids (raids.ts): rooms one after another, each with its boss. Open from the start, outside the
+// campaign's chain.
+export { RAID_MAPS };
+
 // Dev server only (or DEV_MAPS=1 in a script): ScapeRune's maps, ground of our
 // own rather than a slice of the real world (scaperune/CLAUDE.md)
 const showDevMaps =
@@ -373,8 +378,8 @@ function createDevMap(recipe: MapRecipe): MapDef {
 
 export const DEV_MAPS: MapDef[] = showDevMaps ? SCAPERUNE_DEV_MAPS.map(createDevMap) : [];
 
-// Every map, the campaign's and the fun ones
-export const ALL_MAPS: MapDef[] = [...MAPS, ...FUN_MAPS, ...DEV_MAPS];
+// Every map, the campaign's, the raids and the fun ones
+export const ALL_MAPS: MapDef[] = [...MAPS, ...RAID_MAPS, ...FUN_MAPS, ...DEV_MAPS];
 
 export const MAP_BY_ID: Map<string, MapDef> = new Map(ALL_MAPS.map((m) => [m.id, m]));
 
@@ -390,6 +395,10 @@ export function isDevMap(mapId: string): boolean {
 
 export function isFunMap(mapId: string): boolean {
     return MAP_BY_ID.get(mapId)?.fun !== undefined;
+}
+
+export function isRaidMap(mapId: string): boolean {
+    return MAP_BY_ID.get(mapId)?.raid !== undefined;
 }
 
 export function isSeasonalMap(mapId: string): boolean {

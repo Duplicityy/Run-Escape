@@ -70,7 +70,7 @@ export function describeUnlockTask(task: UnlockTask, withMap = true): string {
     const where = withMap ? ` in ${map}` : "";
     switch (task.kind) {
         case "beatMap":
-            return `Beat ${map}`;
+            return task.hard ? `Beat ${map} on hard` : `Beat ${map}`;
         case "killBoss":
             return `Kill ${getEnemy(task.enemyId).name}${where}`;
         case "survive":

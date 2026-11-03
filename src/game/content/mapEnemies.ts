@@ -28,7 +28,11 @@ export function getMapEnemies(map: MapDef): EnemyDef[] {
     const pumpkins = PUMPKIN_MAPS.includes(map.id) ? PUMPKIN_OUTCOMES : [];
     // Random events go by their effects: the rest is names and lines of chat
     const randomEvents = RANDOM_EVENTS.map((event) => event.effect);
-    collectEnemyIds([map.waves, map.events, map.fun?.bosses, pumpkins, randomEvents], ids, seen);
+    collectEnemyIds(
+        [map.waves, map.events, map.fun?.bosses, map.raid, pumpkins, randomEvents],
+        ids,
+        seen,
+    );
     // A Set visits what's added to it as it goes
     for (const id of ids) {
         collectEnemyIds(ENEMY_BY_ID.get(id), ids, seen);

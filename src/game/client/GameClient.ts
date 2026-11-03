@@ -16,6 +16,7 @@ import {
     FUN_MAPS,
     MAPS,
     MAP_BY_ID,
+    RAID_MAPS,
     getArenaRegion,
     getMap,
     isDevMap,
@@ -24,6 +25,7 @@ import {
 import { formatPassiveValue, getPassive } from "../content/passives";
 import { getPowerUp } from "../content/powerups";
 import { QUESTS, canDoQuestOn, describeQuest } from "../content/quests";
+import { RAID_TELEPORTS } from "../content/raids";
 import { RARITIES, Rarity } from "../content/rarity";
 import { SHOP_UPGRADES } from "../content/shop";
 import { formatStats } from "../content/stats";
@@ -51,6 +53,7 @@ import {
     getQuestProgress,
     isEndlessRecord,
     isEndlessUnlocked,
+    isExpertUnlocked,
     isHardUnlocked,
     isMapUnlocked,
     recordRun,
@@ -262,6 +265,9 @@ export type GameClientOptions = {
     stress: number;
     // Start a run with this character straight away (testing)
     autostart?: string;
+    // ?raidtest on the dev server: solo runs with a raid's rooms two minutes apart and every
+    // level up at its max (SimTesting); "short" for the rooms alone
+    raidTest?: "max" | "short";
 };
 
 export class GameClient implements GameFrameHandler {
@@ -484,6 +490,7 @@ export class GameClient implements GameFrameHandler {
             mapId,
             endless: snapshot.endless && isEndlessUnlocked(this.save, mapId),
             hard: snapshot.hard && isHardUnlocked(this.save, mapId),
+            expert: snapshot.expert && isExpertUnlocked(this.save, mapId),
         });
     }
 
@@ -514,6 +521,16 @@ export class GameClient implements GameFrameHandler {
         const { mapId, hard } = this.store.getSnapshot();
         if (hard || isHardUnlocked(this.save, mapId)) {
             this.store.set({ hard: !hard });
+        }
+    }
+
+    // A raid's expert mode, once it's been beaten on hard. Solo only for now: co-op's rooms
+    // don't carry it.
+    toggleExpert(): void {
+        const { mapId, expert, hard } = this.store.getSnapshot();
+        if (expert || isExpertUnlocked(this.save, mapId)) {
+            // Expert's hard mode too
+            this.store.set({ expert: !expert, hard: !expert || hard });
         }
     }
 
@@ -613,7 +630,7 @@ export class GameClient implements GameFrameHandler {
     // The maps this player has, and has endless and hard mode for, which rooms
     // go by
     private getUnlocks(): Unlocks {
-        const ids = [...MAPS, ...FUN_MAPS].map((m) => m.id);
+        const ids = [...MAPS, ...RAID_MAPS, ...FUN_MAPS].map((m) => m.id);
         return {
             maps: ids.filter((id) => isMapUnlocked(this.save, id)),
             endless: ids.filter((id) => isEndlessUnlocked(this.save, id)),
@@ -994,6 +1011,7 @@ export class GameClient implements GameFrameHandler {
             map.fun !== undefined ||
             (this.store.getSnapshot().endless && isEndlessUnlocked(this.save, mapId));
         const hard = this.store.getSnapshot().hard && isHardUnlocked(this.save, mapId);
+        const expert = this.store.getSnapshot().expert && isExpertUnlocked(this.save, mapId);
         const characterId = map.fun?.character ?? this.store.getSnapshot().characterId;
         if (!(await this.travelTo(mapId, "characters"))) {
             return;
@@ -1010,7 +1028,12 @@ export class GameClient implements GameFrameHandler {
             unlockedItems: new Set(this.save.unlockedItems),
             endless,
             hard,
+            expert,
+            raidTeleports: (this.save.mapVictories[mapId] ?? 0) > 0 ? RAID_TELEPORTS : 0,
             armoury: { ...this.save.armoury },
+            testing: this.options.raidTest
+                ? { raidRoomSeconds: 120, maxLevelUps: this.options.raidTest === "max" }
+                : undefined,
         });
         for (let i = 0; i < this.options.stress; i++) {
             sim.spawnEnemy(getEnemy("goblin"), "normal");
@@ -2017,6 +2040,13 @@ export class GameClient implements GameFrameHandler {
         const hud: HudView = {
             mapId: sim.map.id,
             round: sim.endless ? sim.round : undefined,
+            raidRoom: sim.map.raid && {
+                number: sim.raidRoom + 1,
+                count: sim.map.raid.rooms.length,
+                name: sim.map.raid.rooms[sim.raidRoom].name,
+                points: sim.raidPoints,
+                waves: sim.raidStage === "waves",
+            },
             bossIn: sim.timeLeftForBoss,
             hp: Math.max(0, Math.round(sim.player.hp)),
             maxHp: sim.player.maxHp,

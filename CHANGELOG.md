@@ -5,6 +5,18 @@ the version in the corner).
 
 ## Unreleased
 
+### Added
+
+- Raids, by Okaeri: the Theatre of Blood, a new section on the map screen. Six rooms one after
+  another, each with its own waves and then its boss in its real room from OSRS, fought as a
+  bullet hell. It's a melee raid: its bosses take far less from missiles and magic.
+- Raid points for each room, more for a fast, clean kill: they pay coins, buy food and potions from
+  a supply chest between rooms, and better your chance of a purple from the chest at the end.
+- The Theatre's uniques for the Collection log, Lil' Zik, and two weapons: the Ghrazi rapier for
+  beating it, and the Holy Scythe of Vitur for beating it on hard.
+- Beat the raid once for two teleports a raid, to skip a room's waves; beat it on hard for expert
+  mode, with more of the real raid's mechanics, twice the coins and Lil' Zik's looks.
+
 ## 0.23.0 - 2026-11-02
 
 ### Added

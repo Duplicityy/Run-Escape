@@ -10,6 +10,7 @@
 //   ARMOURY=max npx tsx scripts/game/simulate-run.ts     # all gear upgraded in the Armoury (none by default)
 //   ENDLESS=1 npx tsx scripts/game/simulate-run.ts       # an endless run (up to 90 minutes)
 //   HARD=1 npx tsx scripts/game/simulate-run.ts          # on hard mode
+//   EXPERT=1 MAP=theatre_of_blood ...  # a raid's expert mode (hard, and the Nylocas's colours)
 //   WEAPON=crystal_bow npx tsx scripts/game/simulate-run.ts ranger  # start with this weapon instead
 //   FINAL_BOSS=the_nightmare BOSS_ARENA=48 npx tsx ...   # another final boss, on a square of the map
 //   FRESH=1 ...                                          # straight to it with nothing upgraded
@@ -42,6 +43,7 @@ const REPORT_SECONDS = parseInt(process.env.REPORT ?? "60");
 const map = getMap(process.env.MAP ?? "lumbridge");
 const endless = process.env.ENDLESS === "1";
 const hard = process.env.HARD === "1";
+const expert = process.env.EXPERT === "1";
 // The weapons, passives and items brought in by map tasks: all of them, or none
 const unlockedItems = process.env.UNLOCKS === "none" ? new Set<string>() : undefined;
 // The shop's permanent upgrades: none, or all of them, as a player has by the
@@ -166,6 +168,16 @@ function botMove(sim: Sim): { x: number; y: number } {
         const dx = player.x - enemy.x;
         const dy = player.y - enemy.y;
         const distSq = dx * dx + dy * dy;
+        if (enemy.boss && (enemy.def.stationary || sim.isNapping(enemy))) {
+            // One that can't come to you (the Maiden, Xarpus), or that's down for a moment (the
+            // Bloat), a person walks up to, to about 2.5 tiles, or nothing but a ranged weapon
+            // would ever reach it
+            const w = distSq > 6.25 ? -2 / Math.sqrt(distSq) : 1 / Math.max(distSq, 0.25);
+            ax += dx * w;
+            ay += dy * w;
+            threat += Math.abs(w);
+            continue;
+        }
         if (distSq < (enemy.boss ? 144 : 64)) {
             // A person keeps well away from the boss
             const w = (enemy.boss ? 8 : 1) / Math.max(distSq, 0.25);
@@ -314,16 +326,29 @@ function uncursed(sim: Sim, move: { x: number; y: number }): { x: number; y: num
 
 // Buys the dearest power-up it can until there's none it can, and knows the
 // answer to every question
+// How long a run can go: two minutes past the final boss's time
+function runSeconds(): number {
+    const rooms = map.raid?.rooms;
+    return (rooms ? rooms[rooms.length - 1].at : RUN_LENGTH) + 120;
+}
+
 function eventChoice(sim: Sim): number {
     const options = sim.offer?.options ?? [];
     let best = -1;
     let bestPrice = -1;
     options.forEach((option, index) => {
+        if (option.kind === "teleport") {
+            return;
+        }
         if (option.kind === "answer") {
             if (option.correct) {
                 best = index;
             }
-        } else if (!option.sold && option.price <= sim.coins && option.price > bestPrice) {
+        } else if (
+            !option.sold &&
+            option.price <= (option.kind === "supply" ? sim.raidPoints : sim.coins) &&
+            option.price > bestPrice
+        ) {
             best = index;
             bestPrice = option.price;
         }
@@ -343,6 +368,7 @@ function runOnce(characterId: string, seed: number) {
         unlockedItems,
         endless,
         hard,
+        expert,
         armoury,
     });
     // Another weapon to start with, to compare weapons on one character
@@ -351,8 +377,11 @@ function runOnce(characterId: string, seed: number) {
         sim.addWeapon(process.env.WEAPON);
     }
     const maxTicks =
-        (minutesArg ? parseFloat(minutesArg) * 60 : endless ? 90 * 60 : RUN_LENGTH + 120) *
+        (minutesArg ? parseFloat(minutesArg) * 60 : endless ? 90 * 60 : runSeconds()) *
         TICKS_PER_SECOND;
+    // A raid's rooms: when each boss turned up and went down
+    let raidStage = sim.raidStage;
+    let bossTick = 0;
     let nextReport = REPORT_SECONDS;
     let stuckTicks = 0;
     let lastX = sim.player.x;
@@ -389,6 +418,18 @@ function runOnce(characterId: string, seed: number) {
                 finished.add(set);
             }
             continue;
+        }
+        if (sim.raidStage !== raidStage) {
+            if (sim.raidStage === "boss") {
+                bossTick = sim.tick;
+            } else if (raidStage === "boss") {
+                const seconds = Math.round((sim.tick - bossTick) / TICKS_PER_SECOND);
+                console.log(
+                    `  room ${sim.raidRoom + 1}: ${sim.map.raid!.rooms[sim.raidRoom].boss} down in ${seconds}s, ` +
+                        `${sim.raidPoints} raid points`,
+                );
+            }
+            raidStage = sim.raidStage;
         }
         if (sim.state === "event") {
             const choice = eventChoice(sim);
@@ -508,6 +549,7 @@ function runParty(characterId: string, seed: number) {
         spawnY: map.spawn.y,
         endless,
         hard,
+        expert,
         party: Array.from({ length: partySize }, (_, i) => ({
             name: "bot" + (i + 1),
             characterId,
@@ -516,7 +558,7 @@ function runParty(characterId: string, seed: number) {
             armoury,
         })),
     });
-    const maxTicks = (endless ? 90 * 60 : RUN_LENGTH + 120) * TICKS_PER_SECOND;
+    const maxTicks = (endless ? 90 * 60 : runSeconds()) * TICKS_PER_SECOND;
     const moves = sim.heroes.map(() => ({ x: 0, y: 0 }));
     let firstDown: number | undefined;
     let fightTicks = 0;

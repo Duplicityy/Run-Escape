@@ -149,6 +149,17 @@ Add it to `MAPS` in `maps.ts` (fun maps go in `fun/maps.ts`), with its waves in 
   `scaperune/maps/shippedMaps.ts` with `scaperune: true` on its `MapDef`: see
   `src/game/scaperune/CLAUDE.md`, which also has a random generator.
 
+## Raid
+
+A raid is a map with `raid` set, listed in `RAID_MAPS` (`raids.ts`), not `MAPS`: its rooms one after
+another, each with its waves, events, boss and where things are. Its arena is a ScapeRune recipe
+with a hall for each room's waves and its boss room cut from the cache (`maps/theatreOfBlood.ts`),
+which exports where everything is. `waves` and `events` on the `MapDef` are every room's, for what
+bakes and checks a map's enemies; the sim goes by the rooms. Its bosses go in a file of their own
+(`theatre.ts`); one that's also on a campaign map is a copy with a raid id, so the campaign stays
+as it was. Expert mode's rules are fields on the enemies (`onlyStyle`, `expertAs`, `colours`,
+`stare`, `expert` on an attack) and do nothing off a raid's expert mode.
+
 ## Adventurer
 
 Add it to `CHARACTERS` in `characters.ts`, with a `style`, `startingWeapon`, `equipment`, `bonus`

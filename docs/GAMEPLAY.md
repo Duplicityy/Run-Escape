@@ -171,6 +171,7 @@ version and how to run it.
     | Prifddinas     | Crystal bow, Crystal armour                      | Crystal staff (surviving 10 minutes)                                                                 |
     | Inferno        |                                                  | Toktz-mej-tal (JalTok-Jad)                                                                           |
     | Hallowed Night |                                                  | Inquisitor's mace and Volatile Nightmare staff (The Nightmare)                                       |
+    | ToB (raid)     | Ghrazi rapier; on hard, Holy Scythe of Vitur     |                                                                                                      |
 
 - **Fun maps**: the Grand Exchange, East Varrock, Falador, Last Man Standing, Castle Wars and Pest
   Control are open from the start and always endless. They have no final boss: a new round starts
@@ -295,6 +296,21 @@ version and how to run it.
     - **Hallowed Night** (seasonal, open from the start): crypt rats and ghasts, revenants, the
       afflicted, zombies, skeletons and ghouls, shades and ghosts, the Ankou, mummies and feral
       vampyres.
+- **Raids**: the Theatre of Blood, open from the start. Six rooms one after another: each has five
+  waves in a hall, and at the next five minute mark of the run (Verzik at thirty) the party's taken
+  into the boss's real room from OSRS, cut out of the cache. Killing it gives raid points (for
+  clearing it, killing the boss fast and taking little damage), coins for them, and a supply chest
+  between rooms that sells food and potions for points. The last boss's chest rolls for a purple,
+  more likely the more points you earned: the Theatre's uniques for the Collection log, and Lil'
+  Zik now and then. The bosses pray against missiles and magic, so melee hits hardest.
+    - **Beaten once**: the Ghrazi rapier, hard mode, and two teleports a raid, from the portal in
+      each hall, to skip straight to that room's boss.
+    - **Beaten on hard**: the Holy Scythe of Vitur, and **expert mode**: hard mode with more of the
+      real raid. The Nylocas only take their own style (grey melee, green ranged, blue magic),
+      Nylocas Vasilias changes colour, the Maiden's Matomenos crawl to her and heal her, Xarpus
+      stares one way and hurts whoever hits him from in front, and Verzik's spider throws a ball
+      that kills anyone outside its glowing circle. Twice the coins, and one of Lil' Zik's looks
+      each clear.
 - **Bosses** turn up during a run, each fighting the way it does in OSRS, and always drop an
   elite casket (now and then a master one). Big hits are wound up first, with a red circle
   showing where they'll land, and projectiles fly where you stood, so keep moving.
@@ -359,6 +375,10 @@ version and how to run it.
       onto it or 25 seconds pass, then bites, flings candy that brings its Third Age minions, and
       stomps, hurting more the longer you stay under it. It drops a real master casket.
       At 15:00, **The Nightmare**.
+    - **The Theatre of Blood**: the **Maiden of Sugadinti**, the **Pestilent Bloat** (who only
+      really takes damage while he's down), **Nylocas Vasilias**, **Sotetseg** and his maze,
+      **Xarpus** and his acid, and **Verzik Vitur** in her three forms, each a bullet hell in its
+      own room.
 - **Gear** goes in the OSRS equipment slots (head, cape, neck, body, shield, legs, hands, feet,
   ring) and shows on your character: about ten pieces a slot, from Rune and Mystic to the
   Barrows brothers' armour, Armadyl, Ancestral, the Infernal cape, Pegasian boots and an Avernic

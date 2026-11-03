@@ -385,7 +385,8 @@ src/game/
             of gear upgrades into), power-ups and thralls, random events, characters, shop, maps
             (arena, spawn, difficulty) and their waves: plain data with cache ids; unlocks
             (what each map's tasks bring in); quests (what each asks for and pays); hard (hard
-            mode's numbers)
+            mode's numbers); raids (a raid's rooms, points, supply chest, teleporters) and theatre
+            (the Theatre of Blood's bosses)
     fun/    the fun maps (endless, random bosses) and their players: outfits, chat, shots
   core/     the game in plain TypeScript (no DOM), tested with vitest
     Sim.ts            fixed 20ms tick: movement, enemies, spawning, weapons, pickups, power-ups,
@@ -451,6 +452,27 @@ A boss's fight is in its `BossDef` and `BossAttackDef`, with no boss named in `S
   `quarters`, `surge` and `mark`, and `phases` on an attack for when it's used.
 - `Sim.bossArena` is the square all this goes by: `MapDef.bossArena`, or the whole map. Nothing's
   sized by hand, so she fights on any square.
+- The Theatre of Blood's bosses (`content/theatre.ts`) add: patterns `wall` (a row with a gap
+  somewhere new each volley) and `closing` (a ring round the player, coming in), ground marks that
+  `lingers` and hurt while you stand in them, and `safe` marks a projectile spares you in;
+  `EnemyDef.protects` (a share of ranged or magic weapons' damage); `BossDef.naps` (the Bloat: up
+  and guarded, then down and open, then a stomp); and for a raid's expert mode `EnemyDef.onlyStyle`,
+  `BossDef.colours`, `BossDef.stare`, `EnemyDef.expertAs` and `BossAttackDef.expert`.
+
+### Raids
+
+`MapDef.raid` makes a map a raid: rooms in `content/raids.ts`, each with its waves, its boss and
+where things are. `Sim.stepRaid` runs them: a room's waves until its boss is due (`RaidRoomDef.at`,
+a run second, as a campaign boss's), then the party's moved into its boss room (`startRaidBoss`,
+`moveParty`), and once the boss is down the room's scored (`scoreRaidRoom`), each player gets the
+supply chest (`openNextRaidShop`, an event offer paid in raid points) and the next room starts.
+The last room's boss is the final boss, and its chest (`openRaidChest`) goes on the result.
+Raid wins are kept by the save like a campaign map's; hard opens after one, endless never does, and
+expert mode (`SimOptions.expert`, solo only for now) after a hard one. A hall's teleporter
+(`stepTeleporter`) asks before skipping to its boss, `SimOptions.raidTeleports` times a raid.
+
+`?raidtest` (dev server only) puts a raid's rooms two minutes apart and every level up's pick at
+its max; `?raidtest=short` does only the first.
 
 The curse is applied to the input in `stepPlayer`, so keys and the touch stick go the same way.
 
@@ -547,7 +569,7 @@ request (without the game's cache, so `generator.test.ts` skips its long map che
 
 URL flags: `?room=ABCDE` joins a co-op room (the invite link), `?autostart=wizard` starts a run right away, `?stress=300` adds 300 goblins, `?viewer=1`
 opens the original map viewer (loaded only then), `?bgtick` (dev only) keeps the game running in a
-browser tab that isn't being painted, `?notice` shows the notice even after it's been closed. F3
+browser tab that isn't being painted, `?notice` shows the notice even after it's been closed, `?raidtest` (dev only) speeds up a raid (see Raids). F3
 shows collision and stats.
 
 ### Co-op

@@ -23,7 +23,7 @@ const STANCES: (PlayerStance & { objIds: number[] })[] = [
     // Dinh's bulwarks
     { idle: 7508, run: 7509, objIds: [21015, 28682] },
     // Scythes
-    { idle: 8057, run: 824, objIds: [22325, 25739] },
+    { idle: 8057, run: 824, objIds: [22325, 25739, 25736] },
     // Ivandis and Blisterwood flails
     { idle: 8009, run: 8016, objIds: [22398, 24699] },
     // Abyssal whip
