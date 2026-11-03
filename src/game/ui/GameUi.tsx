@@ -42,7 +42,7 @@ import {
 } from "../content/maps";
 import { RARITIES } from "../content/rarity";
 import { SHOP_UPGRADES } from "../content/shop";
-import { COLLECTION_LOG_OBJ, TITLE_TAB_SPRITES } from "../content/titleIcons";
+import { COLLECTION_LOG_OBJ, REFUND_SPRITE, TITLE_TAB_SPRITES } from "../content/titleIcons";
 import { TROPHY_BY_ID } from "../content/trophies";
 import { CharacterDef, CombatStyle, MapDef } from "../content/types";
 import { MapReward, describeUnlockTask, getMapRewards } from "../content/unlocks";
@@ -53,6 +53,7 @@ import {
     NewerSaveError,
     SaveData,
     getNextUpgradeCost,
+    getSkillCoins,
     importSave,
     isEndlessUnlocked,
     isExpertUnlocked,
@@ -1287,39 +1288,121 @@ function MapTasks({ save, mapId }: { save: SaveData; mapId: string }): JSX.Eleme
 
 function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
     const save = ui.save;
+    const [style, setStyle] = useState<CombatStyle>(() => getCharacter(ui.characterId).style);
+    const page = save.skillPages[style];
+    const coins = getSkillCoins(save, style);
     return (
         <div className="ui-fill ui-center">
             <div className="ui-panel rs-border rs-background ui-shop">
                 <h2>Skills</h2>
                 <p className="ui-subtle">Coins found in runs train your skills for good.</p>
-                <div className="ui-shop-grid">
+                <div
+                    className="ui-row ui-shop-tabs"
+                    role="tablist"
+                    aria-label="Class skills"
+                    onKeyDown={(event) => {
+                        const index = STYLES.indexOf(style);
+                        const next =
+                            event.key === "ArrowRight"
+                                ? STYLES[(index + 1) % STYLES.length]
+                                : event.key === "ArrowLeft"
+                                  ? STYLES[(index + STYLES.length - 1) % STYLES.length]
+                                  : event.key === "Home"
+                                    ? STYLES[0]
+                                    : event.key === "End"
+                                      ? STYLES[STYLES.length - 1]
+                                      : undefined;
+                        if (next) {
+                            event.preventDefault();
+                            setStyle(next);
+                            event.currentTarget
+                                .querySelector<HTMLButtonElement>(`#skills-tab-${next}`)
+                                ?.focus();
+                        }
+                    }}
+                >
+                    {STYLES.map((tab) => (
+                        <button
+                            key={tab}
+                            id={`skills-tab-${tab}`}
+                            className="ui-button"
+                            role="tab"
+                            tabIndex={style === tab ? 0 : -1}
+                            aria-selected={style === tab}
+                            aria-controls="skills-page"
+                            onClick={() => setStyle(tab)}
+                        >
+                            {STYLE_NAMES[tab]}
+                        </button>
+                    ))}
+                </div>
+                <div
+                    className="ui-shop-grid"
+                    id="skills-page"
+                    role="tabpanel"
+                    aria-labelledby={`skills-tab-${style}`}
+                >
                     {SHOP_UPGRADES.map((upgrade) => {
-                        const rank = save.upgrades[upgrade.id] ?? 0;
-                        const cost = getNextUpgradeCost(save, upgrade.id);
-                        const affordable = cost !== undefined && save.coins >= cost;
+                        const rank = page.upgrades[upgrade.id] ?? 0;
+                        const cost = getNextUpgradeCost(save, upgrade.id, style);
+                        const affordable = cost !== undefined && coins >= cost;
                         return (
-                            <button
-                                key={upgrade.id}
-                                className={
-                                    "ui-card ui-shop-card" + (affordable ? "" : " ui-card-dim")
-                                }
-                                disabled={cost === undefined}
-                                onClick={() => client.buyUpgrade(upgrade.id)}
-                            >
-                                <div className="ui-card-title">{upgrade.name}</div>
-                                <div className="ui-card-text">{upgrade.description}</div>
-                                <div className="ui-pips">
-                                    {Array.from({ length: upgrade.maxRank }, (_, i) => (
-                                        <span
-                                            key={i}
-                                            className={i < rank ? "ui-pip ui-pip-on" : "ui-pip"}
-                                        />
-                                    ))}
-                                </div>
-                                <div className="ui-card-cost">
-                                    {cost === undefined ? "Maxed" : <Coins amount={cost} />}
-                                </div>
-                            </button>
+                            <div key={upgrade.id} className="ui-shop-entry">
+                                <button
+                                    className={
+                                        "ui-card ui-shop-card" + (affordable ? "" : " ui-card-dim")
+                                    }
+                                    aria-disabled={!affordable}
+                                    title={
+                                        rank > 0 && !isCoarsePointer
+                                            ? "Right-click to refund one rank"
+                                            : undefined
+                                    }
+                                    onClick={() => {
+                                        if (affordable) {
+                                            client.buyUpgrade(upgrade.id, style);
+                                        }
+                                    }}
+                                    onContextMenu={(event) => {
+                                        if (rank > 0) {
+                                            event.preventDefault();
+                                            if (!isCoarsePointer) {
+                                                client.refundUpgrade(upgrade.id, style);
+                                            }
+                                        }
+                                    }}
+                                >
+                                    <div className="ui-card-title">{upgrade.name}</div>
+                                    <div className="ui-card-text">{upgrade.description}</div>
+                                    <div className="ui-pips">
+                                        {Array.from({ length: upgrade.maxRank }, (_, i) => (
+                                            <span
+                                                key={i}
+                                                className={i < rank ? "ui-pip ui-pip-on" : "ui-pip"}
+                                            />
+                                        ))}
+                                    </div>
+                                    <div className="ui-card-cost">
+                                        {cost === undefined ? "Maxed" : <Coins amount={cost} />}
+                                    </div>
+                                </button>
+                                {rank > 0 && (
+                                    <button
+                                        className="ui-shop-refund"
+                                        aria-label={`Refund one ${upgrade.name} rank`}
+                                        title={`Refund one ${upgrade.name} rank`}
+                                        onClick={() => client.refundUpgrade(upgrade.id, style)}
+                                    >
+                                        <span className="ui-shop-refund-icon" aria-hidden="true">
+                                            <ItemIcon
+                                                objId={-1}
+                                                spriteId={REFUND_SPRITE}
+                                                size={21}
+                                            />
+                                        </span>
+                                    </button>
+                                )}
+                            </div>
                         );
                     })}
                 </div>
@@ -1327,11 +1410,11 @@ function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
                     <button className="ui-button" onClick={() => client.showScreen("title")}>
                         Back
                     </button>
-                    <Coins amount={save.coins} />
+                    <Coins amount={coins} />
                     <button
                         className="ui-button"
-                        disabled={save.upgradesSpent === 0}
-                        onClick={() => client.refundUpgrades()}
+                        disabled={page.upgradesSpent === 0}
+                        onClick={() => client.refundUpgrades(style)}
                     >
                         Refund all
                     </button>

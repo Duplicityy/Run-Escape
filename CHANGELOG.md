@@ -57,6 +57,9 @@ the version in the corner).
   to get back to the boss you're learning quicker.
 - Beat the raid on hard for expert mode, with more of the real raid's mechanics, twice the coins
   and Lil' Zik's looks.
+- Each class's skill page can spend the full gold budget without taking gold from the other pages.
+- Separate Melee, Ranged and Magic skill pages, kept in exported saves, with refunds limited to the selected class.
+- Refund a skill rank with its arrow button, or right-click on desktop, without resetting the rest.
 
 ### Changed
 
@@ -78,6 +81,9 @@ the version in the corner).
   around the map.
 - The Nightmare's charge wind-up and sleepwalker animations tore her model apart, on Hallowed
   Night as well: they belonged to her other form.
+- Class skill tabs stay grouped on the left, with the selected page pressed in and green immediately, even while hovered.
+- Coin icons stay visible while a changed stack size loads after buying or refunding skills.
+- Maxed skills no longer look buyable, and touch long presses no longer refund ranks by accident.
 
 ## 0.23.0 - 2026-11-02
 

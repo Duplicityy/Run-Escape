@@ -1,7 +1,49 @@
 // @vitest-environment jsdom
-import { IconCache } from "./ItemIcon";
+import { act, cleanup, render } from "@testing-library/react";
+
+import { IconCache, ItemIcon, iconCache } from "./ItemIcon";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe("ItemIcon", () => {
+    afterEach(() => {
+        cleanup();
+        vi.restoreAllMocks();
+    });
+
+    test("keeps the coin icon visible while a new stack size loads", () => {
+        expect.hasAssertions();
+        const previous = "data:image/png;base64,previous";
+        const next = "data:image/png;base64,next";
+        vi.spyOn(iconCache, "get").mockImplementation((objId, count) =>
+            objId === 995 && count === 1 ? previous : undefined,
+        );
+        let loaded: ((url: string) => void) | undefined;
+        vi.spyOn(iconCache, "request").mockImplementation((_objId, count, callback) => {
+            if (count === 1000) {
+                loaded = callback;
+            }
+        });
+        const { container, rerender } = render(<ItemIcon objId={995} count={1} />);
+        expect(container.querySelector("img")).toHaveAttribute("src", previous);
+        rerender(<ItemIcon objId={995} count={1000} />);
+        expect(container.querySelector("img")).toHaveAttribute("src", previous);
+        act(() => loaded!(next));
+        expect(container.querySelector("img")).toHaveAttribute("src", next);
+    });
+
+    test("does not keep a coin icon when the item changes", () => {
+        expect.hasAssertions();
+        vi.spyOn(iconCache, "get").mockImplementation((objId) =>
+            objId === 995 ? "data:image/png;base64,coins" : undefined,
+        );
+        vi.spyOn(iconCache, "request").mockImplementation(() => {});
+        const { container, rerender } = render(<ItemIcon objId={995} />);
+        expect(container.querySelector("img")).not.toBeNull();
+        rerender(<ItemIcon objId={4151} />);
+        expect(container.querySelector("img")).toBeNull();
+    });
+});
 
 describe("IconCache", () => {
     test("icons whose load failed are asked for again next time", async () => {
