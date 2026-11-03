@@ -76,6 +76,13 @@ function getMaxAnisotropy(mode: TextureFilterMode): number {
     }
 }
 
+function isSameArea(a: ArrayLike<number> | undefined, b: ArrayLike<number> | undefined): boolean {
+    if (!a || !b) {
+        return a === b;
+    }
+    return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
+}
+
 function optimizeAssumingFlatsHaveSameFirstAndLastData(gl: WebGL2RenderingContext) {
     const epv = gl.getExtension("WEBGL_provoking_vertex");
     if (epv) {
@@ -151,6 +158,9 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
     // World tiles (x0, y0, x1, y1) past which the world fades into the sky.
     // Unbounded unless set.
     playArea: vec4 = vec4.fromValues(-1e6, -1e6, 1e6, 1e6);
+    // World tiles (x0, y0, x1, y1) of the world that map squares keep, see
+    // SdMapLoaderInput.keepArea. Unset keeps it all.
+    keepArea?: vec4;
 
     brightness: number = 1.0;
     colorBanding: number = 255;
@@ -682,6 +692,7 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             minimizeDrawCalls: !this.hasMultiDraw,
             cullCellSize: this.cullCellSize,
             skipMinimap: this.skipMinimap,
+            keepArea: this.keepArea && Array.from(this.keepArea),
             loadedTextureIds: this.loadedTextureIds,
         });
 
@@ -751,8 +762,17 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             mapData.loadObjs === this.loadObjs &&
             mapData.loadNpcs === this.loadNpcs &&
             mapData.smoothTerrain === this.smoothTerrain &&
-            mapData.cullCellSize === this.cullCellSize
+            mapData.cullCellSize === this.cullCellSize &&
+            isSameArea(mapData.keepArea, this.keepArea)
         );
+    }
+
+    setKeepArea(area: vec4 | undefined): void {
+        if (isSameArea(this.keepArea, area)) {
+            return;
+        }
+        this.keepArea = area && vec4.clone(area);
+        this.mapManager.setLoadArea(area);
     }
 
     clearMaps(): void {

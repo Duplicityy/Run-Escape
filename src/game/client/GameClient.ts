@@ -57,8 +57,8 @@ import {
     refundUpgrades,
 } from "../core/save";
 import { ArenaGrid } from "../core/world/ArenaGrid";
-import { CameraRig } from "../render/CameraRig";
-import { GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer";
+import { CameraRig, MAX_CAMERA_DISTANCE, getGroundReach } from "../render/CameraRig";
+import { CameraReach, GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer";
 import { installRecipe } from "../scaperune/squares";
 import { DamageMeter } from "./DamageMeter";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
@@ -140,6 +140,31 @@ const CAMERA_GROUND_EASE = 110;
 // window does, and the player stays big enough to see
 const PHONE_RUN_DISTANCE = 15;
 const PHONE_MAX_HEIGHT = 520;
+
+// How far past the arena the camera can get: a run's is behind the player, zoomed
+// all the way out, and the title screen's circles them
+const CAMERA_REACH: CameraReach = {
+    behind: getGroundReach(RUN_PITCH, MAX_CAMERA_DISTANCE),
+    around: getGroundReach(ATTRACT_PITCH, ATTRACT_DISTANCE),
+};
+
+// The world fades out past the arena's edge. A ScapeRune map's world carries on: it
+// has scenery there (scaperune/CLAUDE.md).
+function setPlayArea(
+    renderer: GameWebGLRenderer,
+    arena: { baseX: number; baseY: number; sizeX: number; sizeY: number },
+    scaperune: boolean,
+): void {
+    const { baseX, baseY, sizeX, sizeY } = arena;
+    const open = scaperune ? OPEN_WORLD_MARGIN : 0;
+    renderer.setPlayArea(
+        baseX - open,
+        baseY - open,
+        baseX + sizeX + open,
+        baseY + sizeY + open,
+        CAMERA_REACH,
+    );
+}
 
 // The level up's rewards, as the UI shows them
 // What a new endless round brings, for its toast
@@ -274,6 +299,8 @@ export class GameClient implements GameFrameHandler {
         saveLock: SaveLock,
         options: GameClientOptions,
     ): Promise<GameClient> {
+        // Before the first map squares load, so they're only what the title screen needs
+        setPlayArea(renderer, getArenaRegion(TITLE_MAP), false);
         const workerPool = mapViewer.workerPool;
         const regionPromise = workerPool.queueLoad<RegionDataInput, RegionData, RegionDataLoader>(
             new RegionDataLoader(),
@@ -1564,16 +1591,7 @@ export class GameClient implements GameFrameHandler {
         }
         this.store.expireToasts();
 
-        // The world fades out past the edge of the map
-        const { baseX, baseY, sizeX, sizeY } = this.grid;
-        // The world fades out past the arena's edge. A ScapeRune map's world carries on: it
-        // has scenery there (scaperune/CLAUDE.md).
-        const open = this.sim?.map.scaperune === true ? OPEN_WORLD_MARGIN : 0;
-        const playArea = this.renderer.playArea;
-        playArea[0] = baseX - open;
-        playArea[1] = baseY - open;
-        playArea[2] = baseX + sizeX + open;
-        playArea[3] = baseY + sizeY + open;
+        setPlayArea(this.renderer, this.grid, this.sim?.map.scaperune === true);
 
         const sim = this.sim;
         if (!sim) {

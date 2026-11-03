@@ -475,6 +475,18 @@ to where the shader puts things needs one there too. `render-stats.ts --cull=8` 
 Actors are culled as spheres in `ActorRenderer.draw`, by `ActorModel.reach`: the furthest any vertex
 gets from the model's origin in any frame of any animation, so bosses' big swings count.
 
+Map squares keep only the world that can be seen. Past the play area the world fades into the sky
+over 6 tiles (`PLAY_AREA_FADE` in `fog.glsl`), and a ray from the camera only gets further from the
+play area once it's left it, so what's past the fade and further out than the camera can get is
+never in front of anything but the sky. `GameWebGLRenderer.setPlayArea` works that keep area out
+from `CAMERA_REACH` in `GameClient` (a run's camera can be 15 tiles south of the player, zoomed all
+the way out; the title screen's circles closer in). The worker leaves out terrain, scenery and
+animated scenery wholly outside it (`SdMapLoaderInput.keepArea`), and `MapManager` doesn't load a
+square that's all outside. That's around half of the world's geometry on a real map. Collision
+doesn't come from these squares (it's `RegionDataLoader`'s), so it isn't touched. If the camera's
+pitch or zoom changes, `CAMERA_REACH` has to follow it, or the hole where something was left out
+can show.
+
 The game has no hover menus, so its frames have no interact buffer, and with no multisampling
 they're drawn straight into the texture the screen quad reads.
 
