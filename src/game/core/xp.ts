@@ -52,12 +52,25 @@ export function runLevelForXp(xp: number): number {
 }
 
 // Endless runs' levels: the run's table up to level 40 (about where the first
-// round ends), then each level needs only a little more XP than the one
-// before, so levels keep coming as the rounds go by (the OSRS table triples
-// every ten levels and would stop them)
+// round ends), then each level needs a little more XP than the one before (6%
+// more), so levels keep coming as the rounds go by: about 29 a round, as a
+// round's bones are worth ROUND_XP (4) times the last's, with bigger crowds.
+//
+// Past level 120 (about round 4) each needs 14% more, which makes it about 11
+// a round. A player who puts half of them into one weapon (15% or more each,
+// compounding) then grows a little slower than the rounds' hitpoints (3.3
+// times a round), so a long run gets harder and ends. At 29 a round that
+// weapon outgrew the rounds many times over, to numbers past 10^24 by round 13.
 const ENDLESS_STEEP_LEVELS = 40;
-const ENDLESS_LATE_GROWTH = 1.06;
+const ENDLESS_GROWTH = 1.06;
+const ENDLESS_LATE_LEVELS = 120;
+const ENDLESS_LATE_GROWTH = 1.14;
 const MAX_ENDLESS_LEVEL = 9999;
+
+// XP for `levels` levels past one that took `step`, each taking `growth` times the last
+function geometric(step: number, growth: number, levels: number): number {
+    return (step * growth * (fm.pow(growth, levels) - 1)) / (growth - 1);
+}
 
 export function endlessXpForLevel(level: number): number {
     if (level <= ENDLESS_STEEP_LEVELS) {
@@ -65,9 +78,14 @@ export function endlessXpForLevel(level: number): number {
     }
     const top = runXpForLevel(ENDLESS_STEEP_LEVELS);
     const step = top - runXpForLevel(ENDLESS_STEEP_LEVELS - 1);
-    const g = ENDLESS_LATE_GROWTH;
-    const levels = Math.min(level, MAX_ENDLESS_LEVEL) - ENDLESS_STEEP_LEVELS;
-    return Math.floor(top + (step * g * (fm.pow(g, levels) - 1)) / (g - 1));
+    const capped = Math.min(level, MAX_ENDLESS_LEVEL);
+    const early = Math.min(capped, ENDLESS_LATE_LEVELS) - ENDLESS_STEEP_LEVELS;
+    let xp = top + geometric(step, ENDLESS_GROWTH, early);
+    if (capped > ENDLESS_LATE_LEVELS) {
+        const lateStep = step * fm.pow(ENDLESS_GROWTH, early);
+        xp += geometric(lateStep, ENDLESS_LATE_GROWTH, capped - ENDLESS_LATE_LEVELS);
+    }
+    return Math.floor(xp);
 }
 
 // Counts up from the level the player is at (endless levels have no top to

@@ -1,3 +1,4 @@
+import { ROUND_XP } from "../content/endless";
 import {
     endlessLevelForXp,
     endlessXpForLevel,
@@ -46,15 +47,25 @@ describe("endless levels", () => {
             expect(endlessXpForLevel(level)).toBe(runXpForLevel(level));
         }
         const step = (level: number) => endlessXpForLevel(level + 1) - endlessXpForLevel(level);
-        for (const level of [41, 60, 120, 300]) {
+        for (const level of [41, 60, 119]) {
             expect(step(level) / step(level - 1)).toBeCloseTo(1.06, 2);
         }
-        // Far cheaper than the run's table, which triples every ten levels
-        expect(endlessXpForLevel(80)).toBeLessThan(runXpForLevel(80) / 4);
+        for (const level of [122, 160, 300]) {
+            expect(step(level) / step(level - 1)).toBeCloseTo(1.14, 2);
+        }
+        // A round's bones are worth ROUND_XP times the last's. Early on that buys plenty of
+        // levels; past 120 about 11, so a weapon given half of them (15% more damage each) grows
+        // a little slower than the rounds' hitpoints (3.3 times) rather than outgrowing them
+        expect(endlessLevelForXp(endlessXpForLevel(60) * ROUND_XP, 60) - 60).toBeGreaterThan(20);
+        for (const level of [130, 200, 300]) {
+            const gained = endlessLevelForXp(endlessXpForLevel(level) * ROUND_XP, level) - level;
+            expect(gained).toBeGreaterThanOrEqual(10);
+            expect(gained).toBeLessThanOrEqual(12);
+        }
     });
 
     test("go on past the run's top level, counting from wherever the player is", () => {
-        for (const level of [2, 39, 40, 41, 99, 126, 127, 400]) {
+        for (const level of [2, 39, 40, 41, 99, 126, 127, 160]) {
             const xp = endlessXpForLevel(level);
             expect(endlessLevelForXp(xp)).toBe(level);
             expect(endlessLevelForXp(xp + 1, 1)).toBe(level);

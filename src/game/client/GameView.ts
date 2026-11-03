@@ -33,6 +33,7 @@ import {
     Thrall,
     Visitor,
 } from "../core/entities";
+import { formatCompact } from "../ui/formatCompact";
 import { BossFightView } from "./BossFightView";
 import {
     CANNON_MODEL_KEY,
@@ -1678,6 +1679,12 @@ function drawReviveBar(
 
 // A hitsplat: the client's sprite with the number on it in white. If the
 // sprite didn't load, a blob of its colour stands in.
+// A hitsplat's digits: in full, as OSRS shows them, till an endless run's hits
+// get too long for a splat. drawHitsplatImage sizes its canvas from the same.
+function hitsplatText(amount: number): string {
+    return amount < 100_000 ? String(amount) : formatCompact(amount);
+}
+
 function drawHitsplat(
     ctx: CanvasRenderingContext2D,
     sprite: HTMLCanvasElement | undefined,
@@ -1690,7 +1697,7 @@ function drawHitsplat(
     // The digits themselves (not the space around them) on whole pixels so
     // they stay sharp, and the splat (scaled, so smoothed anyway) centred on
     // them
-    const text = String(amount);
+    const text = hitsplatText(amount);
     const ink = ctx.measureText(text);
     const inkWidth = ink.actualBoundingBoxLeft + ink.actualBoundingBoxRight;
     const inkHeight = ink.actualBoundingBoxAscent + ink.actualBoundingBoxDescent;
@@ -1743,7 +1750,9 @@ class HitsplatImages {
             this.images.clear();
             this.font = font;
         }
-        const key = hitsplat.kind + hitsplat.amount;
+        // By what's drawn, so an endless run's huge hits that show the same
+        // ("1.2Qa") share one image
+        const key = hitsplat.kind + hitsplatText(hitsplat.amount);
         let image = this.images.get(key);
         if (image && image.sprite === sprite) {
             // Most recently used last, for dropping the oldest
@@ -1770,7 +1779,7 @@ function drawHitsplatImage(
     const canvas = document.createElement("canvas");
     let ctx = canvas.getContext("2d")!;
     ctx.font = font;
-    const ink = ctx.measureText(String(amount));
+    const ink = ctx.measureText(hitsplatText(amount));
     const inkWidth = ink.actualBoundingBoxLeft + ink.actualBoundingBoxRight;
     const inkHeight = ink.actualBoundingBoxAscent + ink.actualBoundingBoxDescent;
     const width = sprite.width * pixel * HITSPLAT_SPRITE_SCALE;
