@@ -76,21 +76,15 @@ function getKeepBox(
     ];
 }
 
-// Leaves out the scene models wholly outside what the square keeps
-function keepSceneModels(sceneBuf: SceneBuffer, sceneModels: SceneModel[]): SceneModel[] {
+// The instances of one model the square keeps: the ones not wholly outside
+function keepInstances(sceneBuf: SceneBuffer, model: Model, instances: SceneModel[]): SceneModel[] {
     if (!sceneBuf.keepBox) {
-        return sceneModels;
+        return instances;
     }
-    const boundsByModel = new Map<Model, ModelBounds>();
-    return sceneModels.filter((sceneModel) => {
-        let bounds = boundsByModel.get(sceneModel.model);
-        if (!bounds) {
-            bounds = getModelBounds(sceneModel.model);
-            boundsByModel.set(sceneModel.model, bounds);
-        }
-        const { sceneX: x, sceneZ: z } = sceneModel;
-        return sceneBuf.keeps(x + bounds.minX, z + bounds.minZ, x + bounds.maxX, z + bounds.maxZ);
-    });
+    const bounds = getModelBounds(model);
+    return instances.filter(({ sceneX: x, sceneZ: z }) =>
+        sceneBuf.keeps(x + bounds.minX, z + bounds.minZ, x + bounds.maxX, z + bounds.maxZ),
+    );
 }
 
 function loadHeightMapTextureData(scene: Scene): Int16Array {
@@ -313,9 +307,17 @@ function addSceneModels(
         // mergeOpaque = false;
         // mergeTransparent = false;
 
+        // Whether to merge goes by every instance, kept or not, so that what the
+        // square keeps is drawn just as it would be. Merged models are cut by
+        // the triangle (SceneBuffer.keepBox); these by the instance.
+        const keptModels =
+            mergeOpaque && mergeTransparent
+                ? sceneModels
+                : keepInstances(sceneBuf, model, sceneModels);
+
         if (mergeOpaque) {
             createModelGroups(modelGroupMap, instancedModels, false, keepLowDetail);
-        } else if (opaqueFaces.length > 0) {
+        } else if (opaqueFaces.length > 0 && keptModels.length > 0) {
             const indexOffset = sceneBuf.indexByteOffset();
             sceneBuf.addModel(model, opaqueFaces);
             const elementCount = (sceneBuf.indexByteOffset() - indexOffset) / 4;
@@ -327,7 +329,7 @@ function addSceneModels(
                     model,
                     indexOffset,
                     elementCount,
-                    sceneModels,
+                    keptModels,
                 );
             } else {
                 const drawCommand: DrawCommand = {
@@ -352,7 +354,7 @@ function addSceneModels(
 
         if (mergeTransparent && transparentFaces.length > 0) {
             createModelGroups(modelGroupMap, instancedModels, true, keepLowDetail);
-        } else if (transparentFaces.length > 0) {
+        } else if (transparentFaces.length > 0 && keptModels.length > 0) {
             const indexOffset = sceneBuf.indexByteOffset();
             sceneBuf.addModel(model, transparentFaces);
             const elementCount = (sceneBuf.indexByteOffset() - indexOffset) / 4;
@@ -364,7 +366,7 @@ function addSceneModels(
                     model,
                     indexOffset,
                     elementCount,
-                    sceneModels,
+                    keptModels,
                 );
             } else {
                 const drawCommand: DrawCommand = {
@@ -760,7 +762,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         sceneBuf.addTerrain(scene, borderSize, minLevel, maxLevel);
 
         const sceneLocs = getSceneLocs(locTypeLoader, scene, borderSize, minLevel, maxLevel);
-        let sceneModels = sceneLocs.locs;
+        const sceneModels = sceneLocs.locs;
 
         // Create loc animated groups and add transformed locs
         const locAnimatedGroups = addLocEntities(
@@ -778,7 +780,6 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             createObjSceneModels(objModelLoader, sceneModels, scene, borderSize, objSpawns);
         }
 
-        sceneModels = keepSceneModels(sceneBuf, sceneModels);
         addSceneModels(this.modelHashBuf!, textureLoader, sceneBuf, sceneModels, minimizeDrawCalls);
 
         // Animated locs
