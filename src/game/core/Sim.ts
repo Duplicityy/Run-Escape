@@ -717,8 +717,8 @@ export class Sim {
     private flightGrid: FlightGrid | undefined;
     // Enemy id -> the tick the next of its kind can go (EnemyBlinksDef.gap)
     private readonly blinkGapEnd = new Map<string, number>();
-    private readonly enemyHash = new SpatialHash<Enemy>(2);
-    private readonly pileHash = new SpatialHash<Pickup>(PILE_RADIUS);
+    private readonly enemyHash: SpatialHash<Enemy>;
+    private readonly pileHash: SpatialHash<Pickup>;
     private nextUid = 1;
     // Enemies that have died or vanished so far, for Enemy.deathSeq
     private enemyDeaths = 0;
@@ -971,6 +971,8 @@ export class Sim {
 
     constructor(options: SimOptions) {
         this.grid = options.grid;
+        this.enemyHash = new SpatialHash(2, this.grid);
+        this.pileHash = new SpatialHash(PILE_RADIUS, this.grid);
         this.map = getMap(options.mapId ?? "lumbridge");
         this.rng = new Rng(options.seed);
         // Building it takes a while, so it's done here, with the map, rather
