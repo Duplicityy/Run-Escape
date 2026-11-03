@@ -200,8 +200,8 @@ export class MovementPrediction {
             tick: sim.tick,
             sledEndTick: hero.sledEndTick,
             sledSpeed: hero.sledSpeed,
-            frozen: player.frozen > 0,
-            held: !!hero.hold,
+            frozen: player.frozen > 0 || sim.introHolds,
+            held: !!hero.hold || sim.introHolds,
             curse: hero.curse,
             arena: sim.map.bossArena && sim.shownBoss?.def.boss?.phases ? sim.bossArena : undefined,
         };

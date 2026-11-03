@@ -4,6 +4,7 @@ import { SANCTUARY_BOSS_ARENA, SISTERHOOD_SANCTUARY } from "../scaperune/maps/si
 import { MapRecipe, getRecipeArena, getRecipeWorldTile } from "../scaperune/recipe";
 import { getEnemy } from "./enemies";
 import { FUN_MAPS } from "./fun/maps";
+import { PHOSANI_START_DISTANCE } from "./phosani";
 import { MapDef } from "./types";
 import {
     BARROWS_EVENTS,
@@ -338,16 +339,17 @@ export const MAPS: MapDef[] = [
         // The Inquisitor's great helm
         iconObjId: 24419,
         arena: getRecipeArena(SISTERHOOD_SANCTUARY),
-        // The middle of the arena, where her entrance puts the player anyway
+        // South of the arena's middle, where her entrance stands the player
+        // anyway: she rises at the middle itself
         spawn: {
             x: SANCTUARY_BOSS_ARENA.baseX + SANCTUARY_BOSS_ARENA.size / 2,
-            y: SANCTUARY_BOSS_ARENA.baseY + SANCTUARY_BOSS_ARENA.size / 2,
+            y: SANCTUARY_BOSS_ARENA.baseY + SANCTUARY_BOSS_ARENA.size / 2 - PHOSANI_START_DISTANCE,
         },
         // Her hitpoints come from the event: a run here has the Inquisitor's
         // crossbow and nothing more, not fifteen minutes of levels. Her hits are
         // tuned to the Inquisitor's hitpoints too: a big one takes about half,
         // as hers do on Hallowed Night with a whole run's behind you
-        difficulty: { hp: 1, damage: 0.9 },
+        difficulty: { hp: 1, damage: 1 },
         hard: { hp: 1.3, damage: 1.3 },
         waves: [],
         events: [{ at: 0, kind: "finalBoss", enemyId: "phosanis_nightmare", hp: 6000 }],

@@ -11,10 +11,14 @@ import {
     PARASITE,
     PARASITE_SEQ,
     RANGED_SEQ,
+    RISE_SEQ,
+    SINK_SEQ,
     SPAWN_SEQ,
     SPORES_SEQ,
     SUMMON_SEQ,
     SURGE_SEQ,
+    TOTEM,
+    TOTEM_SCROLL_YAW,
     WALK_SEQ,
 } from "./nightmare";
 import { BossAttackDef, EnemyDef } from "./types";
@@ -32,8 +36,83 @@ import { BossAttackDef, EnemyDef } from "./types";
 
 const PHOSANI_HITPOINTS = 12000;
 
+// Tiles south of her the player stands as she rises (BossIntroDef.distance),
+// and where the map starts them, so there's no jump when she does
+export const PHOSANI_START_DISTANCE = 7;
+
 // What her parasites heal: her, and a totem that's being charged
-const PHOSANI_PARASITE_TARGETS = ["phosanis_nightmare", "nightmare_totem_charging"];
+const PHOSANI_PARASITE_TARGETS = ["phosanis_nightmare", "phosani_totem_charging"];
+// Quick on their feet, and each heal a big one: a parasite left alone is a
+// good part of her shield back, or of a totem's charge undone, every couple
+// of seconds, from wherever it finds them
+const PARASITE_SPEED = 3.5;
+const PHOSANI_PARASITE_HEALS = {
+    ...PARASITE.heals,
+    fraction: 0.15,
+    interval: 2,
+    seek: 999,
+    targets: PHOSANI_PARASITE_TARGETS,
+};
+
+// Her totems: The Nightmare's, grown to be seen across her square, with a
+// wider mark to hit for it
+const PHOSANI_TOTEM = { ...TOTEM, scale: 2.5, radius: 0.9 };
+
+// Her claws' hands are the whole of each mark: still as the warning, then
+// up out of the ground in full as it lands, for the length of their
+// animation, as wide as the mark they hit (about a tile and a half, near
+// the real fight's one-tile hands), so what's seen is what's hit
+// The hands are under the ground for the first half second of their 2.4s and
+// gone again from 1.9s: that's when the mark hurts
+const CLAW_GRAB = { seconds: 2.4, fit: 1, up: { from: 0.5, to: 1.9 } };
+// Her claws are her punctuation, not the fight: picked a little more often
+// than a pattern (those are 3), and not back for a while, since each round's
+// hands are up for seconds and there's nothing to do but stand clear of them
+const CLAW_WEIGHT = 4;
+
+// What a petal takes, of the Inquisitor's 30 hitpoints: seven of them, with
+// barely a third of a second between one landing and the next being able to
+// (bulletGrace), so standing in a pattern is what kills
+const PETAL = 4;
+const PETAL_GRACE = 0.3;
+
+// Her rings and spirals hold her for this long only: the rest of the pattern
+// keeps coming while she winds up the next thing through it. Her aimed shots
+// (the spreads) hold her for their length, as they go where she faces.
+const PETAL_CHANNEL = 0.5;
+
+// Her red shot (spot 1766) is a streak, long the way it flies and thin across,
+// so it hits no wider than it's drawn: a sidestep that looks clear is clear
+const BALL_HIT = 0.25;
+
+// Her sweeps' needles: thin, and fired in bursts with half a second between,
+// so each arm is short solid pieces with holes along them (seven tiles at
+// their speed, passing by in half a second) to run through as they come
+const NEEDLE_HIT = 0.3;
+const NEEDLE_BURST = { count: 6, pause: 0.5 };
+
+// How far off the player can be for her petals, shots and claws: about as far
+// as they fly. Further than that she doesn't stand firing at nothing, she
+// walks after them, or charges (her charge and her summons reach anywhere),
+// and from well off she sinks and comes up by them (the leash)
+const REACH = 18;
+
+// Her charge is the answer to a player who keeps away, so it's picked more
+// than anything
+const SURGE_WEIGHT = 9;
+
+// Her husks: a few bolts each, running as quick as the Inquisitor
+// so they're shot down or they arrive, and then a hold that only their death
+// ends (the seconds are a long stop)
+const PHOSANI_HUSK = {
+    ...HUSK,
+    hp: 150,
+    speed: 4,
+    stationary: false,
+    holds: 30,
+    solid: true,
+    healthBar: true,
+};
 
 // Every phase
 const STANDARD_ATTACKS: BossAttackDef[] = [
@@ -44,10 +123,10 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
         sound: 4323,
         hitSound: 4219,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 4,
-        range: 40,
+        range: REACH,
         weight: 4,
         seq: RANGED_SEQ,
         // A wider fan than hers, closer together, and a volley more
@@ -58,7 +137,7 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
             interval: 0.4,
             speed: 9,
             range: 22,
-            radius: 0.4,
+            radius: BALL_HIT,
             arc: 1.25,
             scale: 2,
             bright: 0.5,
@@ -71,10 +150,10 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
         sound: 4297,
         hitSound: 4258,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 6,
-        range: 40,
+        range: REACH,
         weight: 4,
         seq: MAGIC_SEQ,
         // Six arms to her five, turning quicker
@@ -91,8 +170,9 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
         },
     },
     {
-        // One arm of petals, aimed at you and then swept round widdershins for
-        // three seconds: step the other way and it never reaches you
+        // One arm of needles, aimed at you and then swept round widdershins:
+        // step the other way and it never reaches you, or run through one of
+        // the holes its bursts leave along it
         name: "Sweep",
         spotAnim: 1764,
         windupSound: 4293,
@@ -102,22 +182,23 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
         damage: 4,
         windup: 1.5,
         cooldown: 12,
-        range: 40,
+        range: REACH,
         weight: 3,
         seq: MAGIC_SEQ,
         message: "She sweeps the field! Step against the turn!",
         pattern: {
             shape: "spread",
             count: 1,
-            volleys: 50,
+            volleys: 30,
             interval: 0.06,
             speed: 14,
             range: 22,
-            radius: 0.45,
+            radius: NEEDLE_HIT,
             arc: 0,
-            turn: 0.05,
+            turn: 0.08,
             scale: 1.6,
             bright: 0.5,
+            burst: NEEDLE_BURST,
         },
     },
     {
@@ -143,57 +224,59 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
         kind: "ground",
         damage: 12,
         windup: 1.6,
-        cooldown: 8,
-        range: 40,
-        weight: 3,
+        cooldown: 12,
+        range: REACH,
+        weight: CLAW_WEIGHT,
         seq: CLAWS_SEQ,
-        // A ring further out than hers, so there's less room to stand off in
+        // A ring further out than hers, so there's less room to stand off in;
+        // the marks are the size of the hands, so more of them to each ring
         ground: {
             spots: [
                 { shape: "under" },
-                { shape: "ring", count: 8, distance: 4.5 },
-                { shape: "ring", count: 12, distance: 8 },
-                { shape: "ring", count: 16, distance: 11.5 },
+                { shape: "ring", count: 12, distance: 4.5 },
+                { shape: "ring", count: 18, distance: 8 },
+                { shape: "ring", count: 24, distance: 11.5 },
             ],
-            radius: 1.4,
-            spotAnim: 1759,
+            radius: 0.75,
             middleSpotAnim: 1761,
+            grab: CLAW_GRAB,
         },
     },
     {
         // Claws at random round the player, three times over with barely a
         // second each: there's always ground between them, but it's never the
-        // same ground
+        // same ground (two dozen, at the hands' size)
         name: "Grasping Claws (random)",
         windupSound: 4274,
         hitSound: 4256,
         kind: "ground",
         damage: 12,
         windup: 1.1,
-        cooldown: 12,
-        range: 40,
-        weight: 3,
+        cooldown: 14,
+        range: REACH,
+        weight: CLAW_WEIGHT,
         seq: CLAWS_SEQ,
-        chain: { times: 2, windup: 0.9 },
+        chain: { times: 1, windup: 0.9 },
         ground: {
-            spots: [{ shape: "scatter", count: 16, spread: 11 }],
-            radius: 1.3,
-            spotAnim: 1759,
+            spots: [{ shape: "scatter", count: 24, spread: 11 }],
+            radius: 0.75,
             middleSpotAnim: 1761,
+            grab: CLAW_GRAB,
         },
     },
     {
         // From the first phase, not only her last, and three times over: each
-        // lane's picked afresh from where the player is
+        // lane's picked afresh from where the player is. Often, and from any
+        // distance: past her reach it's most of what she has
         name: "Surge",
         windupSound: 4240,
         sound: 4283,
         kind: "surge",
         damage: 15,
         windup: 1.9,
-        cooldown: 14,
+        cooldown: 10,
         range: 999,
-        weight: 4,
+        weight: SURGE_WEIGHT,
         seq: SURGE_SEQ,
         radius: 2.8,
         speed: 45,
@@ -201,17 +284,18 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
         message: "She's going to charge, again and again! Keep out of the lanes!",
     },
     {
-        // A ring with one way through, which turns with each volley
+        // A ring with one way through, opening on the player's side and
+        // turning on with each volley
         name: "Closing ring",
         spotAnim: 1764,
         windupSound: 4293,
         sound: 4297,
         hitSound: 4258,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 9,
-        range: 40,
+        range: REACH,
         weight: 3,
         seq: MAGIC_SEQ,
         pattern: {
@@ -224,21 +308,23 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
             radius: 0.4,
             turn: 1.1,
             gap: 1,
+            gapAt: "player",
         },
     },
     {
-        // A slow, dense spiral with one doorway, which walks round her: keep
-        // walking with it (the bullet hell's negative space)
+        // A slow, dense spiral with one doorway, opening on the player's side
+        // and walking round her: keep walking with it (the bullet hell's
+        // negative space)
         name: "Turning wall",
         spotAnim: 1764,
         windupSound: 4293,
         sound: 4297,
         hitSound: 4258,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 14,
-        range: 40,
+        range: REACH,
         weight: 3,
         seq: MAGIC_SEQ,
         message: "A wall of petals turns about her! Walk with the gap!",
@@ -252,6 +338,7 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
             radius: 0.4,
             turn: 0.08,
             gap: 1.3,
+            gapAt: "player",
         },
     },
     {
@@ -263,10 +350,10 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
         sound: 4297,
         hitSound: 4258,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 10,
-        range: 40,
+        range: REACH,
         weight: 3,
         seq: MAGIC_SEQ,
         pattern: {
@@ -282,8 +369,9 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
         },
     },
     {
-        // She throws out eggs round the player: break them before they hatch,
-        // or parasites come out to heal her, or undo the charge on a totem
+        // She flings eggs out of herself across the square, each its own way:
+        // chase them down and break them before they hatch, or parasites come
+        // out to heal her, or undo the charge on a totem
         name: "Eggs",
         windupSound: 4233,
         kind: "summon",
@@ -292,16 +380,16 @@ const STANDARD_ATTACKS: BossAttackDef[] = [
         cooldown: 26,
         range: 40,
         weight: 3,
-        seq: PARASITE_SEQ,
-        message: "She throws out eggs! Break them before they hatch!",
-        summon: { enemyId: "phosani_egg", count: 3, beside: true, distance: 6 },
+        seq: MAGIC_SEQ,
+        message: "She flings out eggs! Chase them down before they hatch!",
+        summon: { enemyId: "phosani_egg", count: 3, distance: 11, thrown: { seconds: 1 } },
     },
 ];
 
 const PHASE_ONE_ATTACKS: BossAttackDef[] = [
     {
-        // Hers come for you from wherever they turn up, and hold you once they
-        // arrive: there's time to shoot them down first
+        // Hers run for you from wherever they turn up, and hold you where you
+        // stand once they arrive until they're dead: shoot them down on the way
         name: "Husks",
         windupSound: 4341,
         kind: "summon",
@@ -311,8 +399,7 @@ const PHASE_ONE_ATTACKS: BossAttackDef[] = [
         range: 40,
         weight: 3,
         seq: SUMMON_SEQ,
-        phases: [1],
-        message: "Husks come for you! Kill them before they hold you!",
+        message: "Husks run for you! Shoot them down before they hold you!",
         summon: {
             enemyId: "phosani_husk_magic",
             count: 1,
@@ -328,7 +415,9 @@ const PHASE_ONE_ATTACKS: BossAttackDef[] = [
         kind: "quarters",
         damage: 2,
         windup: 3,
-        cooldown: 24,
+        // Long: each one is a run to the right quarter, and it shouldn't be
+        // the next thing again
+        cooldown: 60,
         range: 40,
         weight: 3,
         seq: FLOWERS_SEQ,
@@ -384,7 +473,7 @@ const PHASE_TWO_ATTACKS: BossAttackDef[] = [
         seq: CURSE_SEQ,
         phases: [2, 3],
         message: "Phosani's Nightmare curses you! Your feet won't obey!",
-        effect: { kind: "curse", attacks: 7 },
+        effect: { kind: "curse", attacks: 3 },
     },
     {
         name: "Parasites",
@@ -413,10 +502,10 @@ const PHASE_TWO_ATTACKS: BossAttackDef[] = [
         sound: 4297,
         hitSound: 4258,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 8,
-        range: 40,
+        range: REACH,
         weight: 3,
         phases: [2, 3],
         seq: MAGIC_SEQ,
@@ -439,10 +528,10 @@ const PHASE_TWO_ATTACKS: BossAttackDef[] = [
         sound: 4297,
         hitSound: 4258,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 10,
-        range: 40,
+        range: REACH,
         weight: 3,
         phases: [2, 3],
         seq: MAGIC_SEQ,
@@ -458,28 +547,31 @@ const PHASE_TWO_ATTACKS: BossAttackDef[] = [
         },
     },
     {
-        // A stream of shots that follows the player: keep stepping across it
+        // A stream of shots that follows the player: keep stepping across it.
+        // Each is aimed where they are as it's fired, so it flies at under
+        // twice their pace with a step's worth of time between shots, or
+        // there's no stepping out of it
         name: "Barrage",
         spotAnim: 1766,
         windupSound: 4230,
         sound: 4323,
         hitSound: 4219,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.4,
         cooldown: 9,
-        range: 40,
+        range: REACH,
         weight: 3,
         phases: [2, 3],
         seq: RANGED_SEQ,
         pattern: {
             shape: "spread",
             count: 1,
-            volleys: 14,
-            interval: 0.12,
-            speed: 13,
+            volleys: 10,
+            interval: 0.2,
+            speed: 7,
             range: 22,
-            radius: 0.4,
+            radius: BALL_HIT,
             arc: 0,
             track: true,
             scale: 2,
@@ -519,7 +611,7 @@ const PHASE_TWO_ATTACKS: BossAttackDef[] = [
     },
     {
         // Her sweep with two arms, a bar through her that turns: there's half
-        // the room to stay ahead of it in
+        // the room to stay ahead of it in, and the same holes to run through
         name: "Double sweep",
         spotAnim: 1764,
         windupSound: 4293,
@@ -529,7 +621,7 @@ const PHASE_TWO_ATTACKS: BossAttackDef[] = [
         damage: 4,
         windup: 1.5,
         cooldown: 14,
-        range: 40,
+        range: REACH,
         weight: 3,
         phases: [2, 3],
         seq: MAGIC_SEQ,
@@ -537,15 +629,16 @@ const PHASE_TWO_ATTACKS: BossAttackDef[] = [
         pattern: {
             shape: "spread",
             count: 2,
-            volleys: 50,
+            volleys: 30,
             interval: 0.06,
             speed: 14,
             range: 22,
-            radius: 0.45,
+            radius: NEEDLE_HIT,
             arc: Math.PI,
-            turn: 0.035,
+            turn: 0.06,
             scale: 1.6,
             bright: 0.5,
+            burst: NEEDLE_BURST,
         },
     },
     {
@@ -557,10 +650,10 @@ const PHASE_TWO_ATTACKS: BossAttackDef[] = [
         sound: 4297,
         hitSound: 4258,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 10,
-        range: 40,
+        range: REACH,
         weight: 3,
         phases: [2, 3],
         seq: MAGIC_SEQ,
@@ -585,10 +678,10 @@ const PHASE_TWO_ATTACKS: BossAttackDef[] = [
         sound: 4297,
         hitSound: 4258,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 10,
-        range: 40,
+        range: REACH,
         weight: 3,
         phases: [2, 3],
         seq: MAGIC_SEQ,
@@ -616,10 +709,10 @@ const PHASE_TWO_ATTACKS: BossAttackDef[] = [
         sound: 4297,
         hitSound: 4258,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 11,
-        range: 40,
+        range: REACH,
         weight: 3,
         phases: [2, 3],
         seq: MAGIC_SEQ,
@@ -645,10 +738,10 @@ const PHASE_TWO_ATTACKS: BossAttackDef[] = [
         sound: 4297,
         hitSound: 4258,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 13,
-        range: 40,
+        range: REACH,
         weight: 3,
         phases: [2, 3],
         seq: MAGIC_SEQ,
@@ -662,28 +755,6 @@ const PHASE_TWO_ATTACKS: BossAttackDef[] = [
             speed: 3,
             range: 16,
             radius: 0.4,
-        },
-    },
-    {
-        // Husks rooted where they turn up, round the player, shooting until
-        // they're shot down; they don't hold
-        name: "Rooted husks",
-        windupSound: 4341,
-        kind: "summon",
-        damage: 0,
-        windup: 1.2,
-        cooldown: 22,
-        range: 40,
-        weight: 3,
-        seq: SUMMON_SEQ,
-        phases: [2, 3],
-        message: "Husks root round you! Shoot them down!",
-        summon: {
-            enemyId: "phosani_husk_rooted_magic",
-            count: 1,
-            alsoId: "phosani_husk_rooted_ranged",
-            beside: true,
-            distance: 5,
         },
     },
 ];
@@ -710,8 +781,8 @@ const PHASE_THREE_ATTACKS: BossAttackDef[] = [
         },
     },
     {
-        // Slow shots that turn after the player: outrun them, or step aside as
-        // they close
+        // Shots that turn after the player, though not sharply, and give up
+        // after a few seconds: step aside as they close
         name: "Hunting orbs",
         spotAnim: 1766,
         windupSound: 4230,
@@ -721,39 +792,45 @@ const PHASE_THREE_ATTACKS: BossAttackDef[] = [
         damage: 4,
         windup: 1.3,
         cooldown: 9,
-        range: 40,
+        range: REACH,
         weight: 3,
         phases: [3],
         seq: RANGED_SEQ,
         count: 3,
         spread: 0.5,
         speed: 6,
-        homing: 1.2,
+        homing: 0.8,
+        radius: BALL_HIT,
     },
     {
-        // A claw on the tile you stand on, with a ring round it, and barely a
-        // second to get clear
+        // A claw on the tile you stand on, with a ring of them round you, and
+        // barely a second to slip out between them. Her hardest claw, so not
+        // as often as the rest: it also follows her parted petals
         name: "Grasping Claws (on you)",
         windupSound: 4274,
         hitSound: 4256,
         kind: "ground",
         damage: 13,
         windup: 1.1,
-        cooldown: 9,
-        range: 40,
+        cooldown: 12,
+        range: REACH,
         weight: 3,
         seq: CLAWS_SEQ,
         phases: [3],
         ground: {
-            spots: [{ shape: "player" }, { shape: "ring", count: 6, distance: 3 }],
-            radius: 1.6,
-            spotAnim: 1759,
+            spots: [
+                { shape: "player" },
+                { shape: "ring", count: 8, distance: 3, around: "player" },
+            ],
+            radius: 0.75,
             middleSpotAnim: 1761,
+            grab: CLAW_GRAB,
         },
     },
     {
         // Two arms that open from where you stand and sweep round opposite
-        // ways: stay ahead of one, or get in close where it's slower
+        // ways: stay ahead of one, get in close where it's slower, or run
+        // through a hole
         name: "Scissors",
         spotAnim: 1764,
         windupSound: 4293,
@@ -763,7 +840,7 @@ const PHASE_THREE_ATTACKS: BossAttackDef[] = [
         damage: 4,
         windup: 1.5,
         cooldown: 13,
-        range: 40,
+        range: REACH,
         weight: 3,
         phases: [3],
         seq: MAGIC_SEQ,
@@ -771,16 +848,17 @@ const PHASE_THREE_ATTACKS: BossAttackDef[] = [
         pattern: {
             shape: "spread",
             count: 1,
-            volleys: 60,
+            volleys: 30,
             interval: 0.06,
             speed: 14,
             range: 22,
-            radius: 0.45,
+            radius: NEEDLE_HIT,
             arc: 0,
-            turn: 0.03,
+            turn: 0.05,
             mirror: true,
             scale: 1.6,
             bright: 0.5,
+            burst: NEEDLE_BURST,
         },
     },
     {
@@ -792,10 +870,10 @@ const PHASE_THREE_ATTACKS: BossAttackDef[] = [
         sound: 4323,
         hitSound: 4219,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 12,
-        range: 40,
+        range: REACH,
         weight: 3,
         phases: [3],
         seq: RANGED_SEQ,
@@ -808,7 +886,7 @@ const PHASE_THREE_ATTACKS: BossAttackDef[] = [
             interval: 0.45,
             speed: 9,
             range: 22,
-            radius: 0.4,
+            radius: BALL_HIT,
             arc: 1.5,
             scale: 2,
             bright: 0.5,
@@ -823,10 +901,10 @@ const PHASE_THREE_ATTACKS: BossAttackDef[] = [
         sound: 4297,
         hitSound: 4258,
         kind: "pattern",
-        damage: 3,
+        damage: PETAL,
         windup: 1.6,
         cooldown: 12,
-        range: 40,
+        range: REACH,
         weight: 3,
         phases: [3],
         seq: MAGIC_SEQ,
@@ -846,6 +924,87 @@ const PHASE_THREE_ATTACKS: BossAttackDef[] = [
     },
 ];
 
+for (const attack of [
+    ...STANDARD_ATTACKS,
+    ...PHASE_ONE_ATTACKS,
+    ...PHASE_TWO_ATTACKS,
+    ...PHASE_THREE_ATTACKS,
+]) {
+    const pattern = attack.pattern;
+    if (pattern && pattern.shape !== "spread" && pattern.channel === undefined) {
+        pattern.channel = PETAL_CHANNEL;
+    }
+}
+
+// The dream itself: a pattern each phase that she keeps up under everything
+// else, on its own timer (BossPhasesDef ambient), so nothing of hers is ever
+// dodged on its own. Each is slow and sparse enough to be walked through with
+// care (petals 1.8 tiles apart along an arm, against the 1.5 the Inquisitor
+// needs), and runs for half a minute before it's seeded afresh: the floor the
+// fight's danced on. Never picked on their own (weight 0, no phases).
+const DREAM = {
+    spotAnim: 1764,
+    kind: "pattern" as const,
+    damage: PETAL,
+    windup: 0,
+    cooldown: 0,
+    range: 999,
+    weight: 0,
+    phases: [],
+    seq: MAGIC_SEQ,
+};
+const DREAM_SECONDS = 30;
+const DREAM_ATTACKS: BossAttackDef[] = [
+    {
+        // Five arms turning slowly, each a line of petals to step between
+        ...DREAM,
+        name: "The dream's spiral",
+        pattern: {
+            shape: "spiral",
+            count: 5,
+            volleys: 50,
+            interval: 0.6,
+            speed: 3,
+            range: 28,
+            radius: 0.4,
+            turn: 0.12,
+        },
+    },
+    {
+        // A slow ring every couple of seconds, each a half-step round from the
+        // last, so the rings make a lattice to weave
+        ...DREAM,
+        name: "The dream's rings",
+        pattern: {
+            shape: "ring",
+            count: 20,
+            volleys: 12,
+            interval: 2.5,
+            speed: 3.5,
+            range: 28,
+            radius: 0.4,
+            turn: Math.PI / 20,
+        },
+    },
+    {
+        // Two arms wound against their mirror image: a lattice that opens and
+        // closes as it turns
+        ...DREAM,
+        name: "The dream's lattice",
+        pattern: {
+            shape: "spiral",
+            count: 2,
+            volleys: 60,
+            interval: 0.5,
+            speed: 3.5,
+            range: 28,
+            radius: 0.4,
+            turn: 0.22,
+            mirror: true,
+        },
+    },
+];
+
 export const PHOSANI_ENEMIES: EnemyDef[] = [
     {
         id: "phosanis_nightmare",
@@ -857,25 +1016,41 @@ export const PHOSANI_ENEMIES: EnemyDef[] = [
         deathSeq: DEATH_SEQ,
         hp: PHOSANI_HITPOINTS,
         damage: 0,
-        speed: 1.7,
+        // Three quarters of the Inquisitor's pace, and quicker by the phase:
+        // she runs after them, and only sinks and comes up by them when
+        // they've got well away
+        speed: 3,
         radius: 0.9,
         xp: 6000,
         knockbackResist: 1,
         scale: 1.6,
+        solid: true,
         sounds: { attack: -1, hit: 4281, death: 4295 },
         spawnMessage: "Phosani's Nightmare rises!",
         boss: {
             attackInterval: 2.6,
             keepDistance: 6,
             enrage: { message: "Phosani's Nightmare is furious!" },
-            surgeSeq: MELEE_SEQ,
-            leash: { distance: 16, keep: 10 },
+            // Floating forward, as she walks: her claws-out melee stretches across the
+            // screen at a charge's speed
+            surgeSeq: WALK_SEQ,
+            // Down into the ground and up out of it, rather than just being there
+            leash: {
+                distance: 20,
+                keep: 8,
+                jump: { downSeq: SINK_SEQ, upSeq: RISE_SEQ, seconds: 1.2 },
+            },
             attacks: [
                 ...STANDARD_ATTACKS,
                 ...PHASE_ONE_ATTACKS,
                 ...PHASE_TWO_ATTACKS,
                 ...PHASE_THREE_ATTACKS,
+                ...DREAM_ATTACKS,
             ],
+            bulletGrace: PETAL_GRACE,
+            // She falls, and the dream goes with her, before the screen says so:
+            // her death (seq 8612) is 5.4 seconds long
+            fallSeconds: 5.4,
             intro: {
                 seconds: 6,
                 riseAt: 1.5,
@@ -884,20 +1059,56 @@ export const PHOSANI_ENEMIES: EnemyDef[] = [
                 sound: 4262,
                 title: "Phosani's Nightmare",
                 subtitle: "The Inquisitor's bane",
-                distance: 7,
+                distance: PHOSANI_START_DISTANCE,
                 alone: true,
+                // She rises at the middle of her square, with the player stood
+                // south of her, rooted until she's up
+                atMiddle: true,
+                holds: true,
             },
             phases: {
+                // Each phase a gear up: quicker between attacks and on her
+                // petals' windups, quicker on her feet, and the dream under it
+                // thicker
                 phases: [
-                    { shield: 0.3 },
-                    { shield: 0.3, opener: "Sleepwalkers" },
-                    { shield: 0.3, opener: "Sleepwalkers (more)" },
+                    {
+                        shield: 0.3,
+                        ambient: { attack: "The dream's spiral", interval: DREAM_SECONDS },
+                    },
+                    {
+                        shield: 0.3,
+                        opener: "Sleepwalkers",
+                        ambient: { attack: "The dream's rings", interval: DREAM_SECONDS },
+                        tempo: 0.8,
+                        speed: 1.15,
+                    },
+                    {
+                        shield: 0.3,
+                        opener: "Sleepwalkers (more)",
+                        ambient: { attack: "The dream's lattice", interval: DREAM_SECONDS },
+                        tempo: 0.65,
+                        speed: 1.3,
+                    },
                 ],
-                blastHeal: 0.35,
+                // Her desperation phase, as the real fight has: the last blast
+                // leaves her standing a while longer, untouchable, with her
+                // sleepwalkers walking in and her claws on the player all the
+                // while, and the lattice doubled under it
+                finale: {
+                    seconds: 12,
+                    opener: "Sleepwalkers (more)",
+                    attacks: ["Grasping Claws (on you)", "Grasping Claws (random)"],
+                    interval: 0.5,
+                    ambient: { attack: "The dream's lattice", interval: DREAM_SECONDS / 2 },
+                    message: "She's falling! Stay on your feet!",
+                },
+                // A blast's a breath, not a bar: nothing heals in the dream
+                blastHeal: 0.15,
                 totems: {
-                    idleId: "nightmare_totem",
-                    chargingId: "nightmare_totem_charging",
-                    chargedId: "nightmare_totem_charged",
+                    idleId: "phosani_totem",
+                    chargingId: "phosani_totem_charging",
+                    chargedId: "phosani_totem_charged",
+                    yawOffset: TOTEM_SCROLL_YAW,
                     charge: 0.06,
                     margin: 6,
                     blastSpotAnim: 1782,
@@ -909,29 +1120,13 @@ export const PHOSANI_ENEMIES: EnemyDef[] = [
             },
         },
     },
-    // Up and walking, unlike hers, with the hold on arriving instead of at once
-    {
-        ...HUSK,
-        id: "phosani_husk_magic",
-        name: "Husk",
-        npcId: 9454,
-        hp: 400,
-        speed: 2,
-        stationary: false,
-        holds: 5,
-        shot: { range: 8, interval: 1.8, speed: 7, spotAnim: 1776, sound: 4302 },
-    },
-    {
-        ...HUSK,
-        id: "phosani_husk_ranged",
-        name: "Husk",
-        npcId: 9455,
-        hp: 400,
-        speed: 2,
-        stationary: false,
-        holds: 5,
-        shot: { range: 8, interval: 1.8, speed: 9, spotAnim: 1771, sound: 4264 },
-    },
+    { ...PHOSANI_TOTEM, id: "phosani_totem", name: "Totem", npcId: 9434 },
+    { ...PHOSANI_TOTEM, id: "phosani_totem_charging", name: "Totem", npcId: 9435 },
+    { ...PHOSANI_TOTEM, id: "phosani_totem_charged", name: "Totem", npcId: 9436, idleSeq: 8589 },
+    // Up and running, unlike hers, as quick as the Inquisitor, and nothing
+    // thrown: they hold on arriving, for as long as they stand
+    { ...PHOSANI_HUSK, id: "phosani_husk_magic", name: "Husk", npcId: 9454 },
+    { ...PHOSANI_HUSK, id: "phosani_husk_ranged", name: "Husk", npcId: 9455 },
     {
         id: "phosani_sleepwalker",
         name: "Sleepwalker",
@@ -946,28 +1141,15 @@ export const PHOSANI_ENEMIES: EnemyDef[] = [
         radius: 0.4,
         xp: 0,
         knockbackResist: 1,
+        solid: true,
         sounds: { attack: -1, hit: 4263, death: 4235 },
     },
-    // Rooted where they turn up, as hers are, shooting; they don't hold
-    {
-        ...HUSK,
-        id: "phosani_husk_rooted_magic",
-        name: "Husk",
-        npcId: 9454,
-        hp: 300,
-        shot: { range: 9, interval: 1.6, speed: 7, spotAnim: 1776, sound: 4302 },
-    },
-    {
-        ...HUSK,
-        id: "phosani_husk_rooted_ranged",
-        name: "Husk",
-        npcId: 9455,
-        hp: 300,
-        shot: { range: 9, interval: 1.6, speed: 9, spotAnim: 1771, sound: 4264 },
-    },
-    // Thrown out round the player and still until broken: the Parasitic egg,
-    // the pet's item, a little bigger than it lies on the ground, as the fight
-    // has no egg of its own. Left standing, a parasite comes out of it.
+    // Flung out of her across the square and still until broken: the
+    // Parasitic egg, the pet's item, a little bigger than it lies on the
+    // ground, as the fight has no egg of its own. Left standing, a parasite
+    // comes out of it. Its hitpoints are a few of the crossbow's bolts, so
+    // the three can be run down in their time with her still at you, and
+    // its bar shows how many are left.
     {
         id: "phosani_egg",
         name: "Parasitic egg",
@@ -977,7 +1159,7 @@ export const PHOSANI_ENEMIES: EnemyDef[] = [
         walkSeq: -1,
         attackSeq: -1,
         deathSeq: -1,
-        hp: 300,
+        hp: 100,
         damage: 0,
         speed: 0,
         radius: 0.5,
@@ -985,30 +1167,40 @@ export const PHOSANI_ENEMIES: EnemyDef[] = [
         knockbackResist: 1,
         scale: 1.5,
         stationary: true,
+        healthBar: true,
+        hintArrow: true,
         sounds: { attack: -1, hit: 4296, death: 4261 },
         hatches: {
-            seconds: 9,
+            seconds: 15,
             into: "phosani_parasite_weak",
             count: 1,
             spotAnim: 1770,
             sound: 4265,
         },
     },
-    // Her parasites heal her, or put the charge back into a totem the player's
-    // working on, as in the real fight
+    // Her parasites run for her, or for a totem the player is working on, and
+    // heal her shield or undo its charge a good deal at a time, as in the real
+    // fight: a dozen bolts' worth each, with a bar to watch them go, so they
+    // are shot down on the way or they cost the fight dearly
     {
         ...PARASITE,
         id: "phosani_parasite",
         name: "Parasite",
-        hp: 1000,
-        heals: { ...PARASITE.heals, fraction: 0.04, targets: PHOSANI_PARASITE_TARGETS },
+        hp: 400,
+        solid: true,
+        healthBar: true,
+        speed: PARASITE_SPEED,
+        heals: PHOSANI_PARASITE_HEALS,
     },
     {
         ...PARASITE,
         id: "phosani_parasite_weak",
         name: "Parasite",
         npcId: 9453,
-        hp: 500,
-        heals: { ...PARASITE.heals, fraction: 0.04, targets: PHOSANI_PARASITE_TARGETS },
+        hp: 200,
+        solid: true,
+        healthBar: true,
+        speed: PARASITE_SPEED,
+        heals: PHOSANI_PARASITE_HEALS,
     },
 ];

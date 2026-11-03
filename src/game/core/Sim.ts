@@ -77,6 +77,7 @@ import {
     BoltProcDef,
     BossAttackDef,
     BossPhasesDef,
+    BulletPatternDef,
     CasketTier,
     CombatStyle,
     EnemyBlinksDef,
@@ -132,6 +133,7 @@ import {
     BossIntro,
     BossPhase,
     BossQuarters,
+    BossState,
     BossSurge,
     BossWalkers,
     BossWindup,
@@ -144,6 +146,7 @@ import {
     Encounter,
     Enemy,
     EnemyAbilities,
+    EnemyFlung,
     EnemyLeaving,
     EnemyProjectile,
     EventOffer,
@@ -293,7 +296,12 @@ const LEAVE_MIN_SCALE = 2;
 const LEAVE_MARGIN_TICKS = 25;
 // Ticks an armed spot takes to go off once it's stepped on
 const HAZARD_FUSE_TICKS = 15;
-const BULLET_GRACE_TICKS = 50;
+// How long a strike's fitted impact plays out (WeaponDef.impactFit): the
+// Nightmare's hands take 2.4 seconds to come up and sink again
+const STRIKE_FIT_TICKS = 120;
+// Seconds after a boss's bullet hits before another can, unless the boss says
+// otherwise (BossDef.bulletGrace)
+const BULLET_GRACE = 1;
 // Tiles from the player that what holds them turns up
 const SUMMON_BESIDE = 1.8;
 // Tiles from a boss that what's walking to it is absorbed
@@ -567,6 +575,9 @@ export type Hero = {
     killsBySource: Record<string, number>;
     casketsOpened: number;
     damageTaken: number;
+    // Of that, what each of a boss's attacks did, by name: for tuning a fight
+    // (the balance bot prints it, and it's there in the console)
+    damageByAttack: Record<string, number>;
     healed: number;
     highestHit: number;
     weaponSince: Record<string, number>;
@@ -632,6 +643,10 @@ export class Sim {
     tick = 0;
     // Tick the run ended, -1 while it's going
     endTick = -1;
+    // The final boss has fallen: when the run's won (BossDef.fallSeconds), and
+    // when it fell
+    private victoryAt = -1;
+    private fellTick = -1;
     state: SimState = "playing";
 
     // Everyone in the run, one on your own. The fields below that are a
@@ -884,6 +899,9 @@ export class Sim {
     get damageTaken(): number {
         return this.hero.damageTaken;
     }
+    get damageByAttack(): Record<string, number> {
+        return this.hero.damageByAttack;
+    }
     set damageTaken(amount: number) {
         this.hero.damageTaken = amount;
     }
@@ -1087,6 +1105,7 @@ export class Sim {
             killsBySource: {},
             casketsOpened: 0,
             damageTaken: 0,
+            damageByAttack: {},
             healed: 0,
             highestHit: 0,
             weaponSince: {},
@@ -2005,6 +2024,12 @@ export class Sim {
             return;
         }
         this.tick++;
+        // The final boss has fallen (BossDef.fallSeconds): its death plays out,
+        // and then the run's won, from when it fell
+        if (this.victoryAt >= 0 && this.tick >= this.victoryAt) {
+            this.endRun("victory", this.fellTick);
+            return;
+        }
         for (const hero of this.heroes) {
             hero.recentDamage[this.tick % DPS_WINDOW_TICKS] = 0;
             if (!hero.left) {
@@ -2099,6 +2124,8 @@ export class Sim {
         if (frozen) {
             player.frozen--;
         }
+        // Watching a boss rise: rooted like a hold, and turning like one
+        const held = !!this.hold || this.introHolds;
         const moving = movePlayer(this.grid, player, moveX, moveY, {
             radius: player.radius,
             baseSpeed: PLAYER_SPEED,
@@ -2106,8 +2133,8 @@ export class Sim {
             tick: this.tick,
             sledEndTick: this.sledEndTick,
             sledSpeed: this.sledSpeed,
-            frozen,
-            held: !!this.hold,
+            frozen: frozen || this.introHolds,
+            held,
             curse: this.curse,
             arena:
                 this.map.bossArena && this.shownBoss?.def.boss?.phases ? this.bossArena : undefined,
@@ -2751,6 +2778,10 @@ export class Sim {
                 this.stepJump(enemy);
                 continue;
             }
+            if (enemy.flung) {
+                this.stepFlung(enemy, enemy.flung);
+                continue;
+            }
 
             let dx = player.x - enemy.x;
             let dy = player.y - enemy.y;
@@ -2826,14 +2857,20 @@ export class Sim {
                 const bossState = enemy.bossState;
                 if (bossState) {
                     const keep = enemy.def.boss?.keepDistance;
-                    if (bossState.windup || bossState.surge || bossState.walkers) {
+                    if (
+                        bossState.windup ||
+                        bossState.surge ||
+                        bossState.walkers ||
+                        bossState.leap
+                    ) {
                         // Stands still winding up, so a swing can be stepped away from
                         dirX = dirY = 0;
                     } else if (this.tick < bossState.channelEnd) {
                         // And while its volleys go out, so a spiral stays a spiral
                         dirX = dirY = 0;
-                    } else if (this.flowersDuring(enemy)) {
-                        // And among its flowers, where it's taken its stand
+                    } else if (this.keepsTo(enemy)) {
+                        // And among its flowers, or in its finale, where it's
+                        // taken its stand
                         dirX = dirY = 0;
                     } else if (keep !== undefined && distance < keep) {
                         // Ranged bosses stop once they're in range (and stand their
@@ -2946,12 +2983,17 @@ export class Sim {
                 moveX += sepX * 0.25;
                 moveY += sepY * 0.25;
 
+                const lane = bossState?.windup?.lane ?? bossState?.surge?.lane;
                 if (fleeing || lapping) {
                     // Looking where it's running, not back at the player
                     enemy.yaw = yawFromVector(dirX, dirY);
+                } else if (lane) {
+                    // Down its lane, from the moment it's picked until the
+                    // charge is done, not round at the player as it goes by
+                    enemy.yaw = yawFromVector(lane.toX - lane.fromX, lane.toY - lane.fromY);
                 } else if (fighting) {
                     enemy.yaw = yawFromVector(fighting.x - enemy.x, fighting.y - enemy.y);
-                } else if (dirX !== 0 || dirY !== 0 || bossState) {
+                } else if ((dirX !== 0 || dirY !== 0 || bossState) && !enemy.totemOf) {
                     enemy.yaw = yawFromVector(dx, dy);
                 }
 
@@ -2987,7 +3029,7 @@ export class Sim {
             }
 
             // Crowd round the player rather than standing inside them (and
-            // the player can't walk into what doesn't move)
+            // the player can't walk into what doesn't move, or what's solid)
             const ox = enemy.x - player.x;
             const oy = enemy.y - player.y;
             const minDist = enemy.radius + player.radius;
@@ -2995,7 +3037,7 @@ export class Sim {
             if (distSq < minDist * minDist && distSq > 1e-6) {
                 const d = Math.sqrt(distSq);
                 const push = Math.min((minDist - d) / d, 0.5);
-                if (stationary) {
+                if (stationary || enemy.def.solid) {
                     moveCircle(grid, player, -ox * push, -oy * push, player.radius);
                 } else if (enemy.def.ghost) {
                     enemy.x += ox * push;
@@ -3015,6 +3057,7 @@ export class Sim {
                 this.tick - enemy.animStart > 30 &&
                 !enemy.bossState?.windup &&
                 !enemy.bossState?.surge &&
+                !enemy.bossState?.leap &&
                 (enemy.abilities?.blinkLand ?? -1) === -1
             ) {
                 enemy.anim = "walk";
@@ -3080,6 +3123,19 @@ export class Sim {
             enemy.vx = enemy.vy = 0;
             enemy.anim = "walk";
             enemy.animStart = this.tick;
+        }
+    }
+
+    // Through the air from where it was thrown to where it lands, at a steady
+    // pace (the arc's the view's); on the ground again, it's in the fight
+    private stepFlung(enemy: Enemy, flung: EnemyFlung): void {
+        const span = Math.max(1, flung.endTick - flung.startTick);
+        const f = Math.min(1, (this.tick - flung.startTick) / span);
+        enemy.x = flung.fromX + (flung.toX - flung.fromX) * f;
+        enemy.y = flung.fromY + (flung.toY - flung.fromY) * f;
+        if (f >= 1) {
+            enemy.flung = undefined;
+            enemy.vx = enemy.vy = 0;
         }
     }
 
@@ -3192,7 +3248,7 @@ export class Sim {
         const player = this.player;
         // Once the run's over nothing more lands, so a win can't turn into a
         // death (or spend a revive) later in the tick it's won
-        if (this.runOver || this.hero.down || this.isImmune(this.hero)) {
+        if (this.runOver || this.victoryAt >= 0 || this.hero.down || this.isImmune(this.hero)) {
             return 0;
         }
         const armor = ignoreArmor ? 0 : this.stats.armor;
@@ -3818,6 +3874,7 @@ export class Sim {
             enemy.bossState.surge = undefined;
             enemy.bossState.chain = undefined;
             enemy.bossState.follow = undefined;
+            enemy.bossState.leap = undefined;
         }
     }
 
@@ -3849,6 +3906,12 @@ export class Sim {
         }
     }
 
+    // Whether an entrance has the players standing still to watch it
+    // (BossIntroDef.holds): the movement rules take it like a hold
+    get introHolds(): boolean {
+        return this.intro?.def.boss?.intro?.holds === true;
+    }
+
     // Up it comes beside the player, on the arena's side of them, so it's on the
     // screen wherever they are
     private riseBoss(intro: BossIntro): void {
@@ -3858,24 +3921,34 @@ export class Sim {
         this.useSpawnHero();
         const player = this.player;
         const arena = this.bossArena;
+        const middleX = (arena.minX + arena.maxX) / 2;
+        const middleY = (arena.minY + arena.maxY) / 2;
+        const atMiddle = rise.atMiddle === true && this.map.bossArena !== undefined;
         // A fight in a set square starts in the middle of it, under the dark,
-        // a party side by side north to south
+        // a party side by side north to south; or, with the boss rising at the
+        // middle itself, south of it, side by side east to west
         if (this.map.bossArena) {
             const up = this.heroes.filter((hero) => this.heroes.length === 1 || this.isUp(hero));
             up.forEach((hero, i) => {
                 const one = hero.player;
-                one.x = one.prevX = (arena.minX + arena.maxX) / 2;
-                one.y = one.prevY = (arena.minY + arena.maxY) / 2 + (i - (up.length - 1) / 2) * 1.5;
+                const along = (i - (up.length - 1) / 2) * 1.5;
+                one.x = one.prevX = middleX + (atMiddle ? along : 0);
+                one.y = one.prevY = atMiddle ? middleY - rise.distance : middleY + along;
             });
         }
-        // East or west, as the screen's wider than it's tall and she's tall
-        // herself: north of the player, she'd be off the top of it
-        const x = player.x + (player.x > (arena.minX + arena.maxX) / 2 ? -1 : 1) * rise.distance;
-        const y = player.y;
-        const at = this.canTurnUpAt(def, x, y)
-            ? { x, y }
-            : (this.findSpotNear(player.x, player.y, rise.distance, def.radius) ??
-              findFreeSpot(this.grid, x, y, def.radius));
+        let at: { x: number; y: number };
+        if (atMiddle) {
+            at = findFreeSpot(this.grid, middleX, middleY, def.radius);
+        } else {
+            // East or west, as the screen's wider than it's tall and she's tall
+            // herself: north of the player, she'd be off the top of it
+            const x = player.x + (player.x > middleX ? -1 : 1) * rise.distance;
+            const y = player.y;
+            at = this.canTurnUpAt(def, x, y)
+                ? { x, y }
+                : (this.findSpotNear(player.x, player.y, rise.distance, def.radius) ??
+                  findFreeSpot(this.grid, x, y, def.radius));
+        }
         const boss = this.spawnBoss(def, intro.type, intro.hp, at);
         if (!boss) {
             return;
@@ -3887,7 +3960,10 @@ export class Sim {
         boss.attackSeq = rise.seq ?? def.idleSeq;
         boss.animStart = this.tick;
         boss.yaw = yawFromVector(player.x - boss.x, player.y - boss.y);
-        boss.attackCooldown = intro.endTick - this.tick + TICKS_PER_SECOND;
+        // The cooldown only counts once it's up (stepEnemies skips what's
+        // rising), so this is the grace after its entrance: none when the
+        // player's stood rooted through it, which was the grace
+        boss.attackCooldown = rise.holds ? 0 : intro.endTick - this.tick + TICKS_PER_SECOND;
         if (rise.spotAnim !== undefined) {
             this.addEffect(rise.spotAnim, boss.x, boss.y, 0, intro.endTick - this.tick);
         }
@@ -3919,6 +3995,14 @@ export class Sim {
                 );
                 const totem = this.spawnEnemy(idle, "normal", spot);
                 if (totem) {
+                    // Turned to the arena's middle, and it stays turned
+                    totem.yaw =
+                        (yawFromVector(
+                            (arena.minX + arena.maxX) / 2 - spot.x,
+                            (arena.minY + arena.maxY) / 2 - spot.y,
+                        ) +
+                            (phases.totems.yawOffset ?? 0)) &
+                        2047;
                     totem.totemOf = boss;
                     totem.hp = totem.maxHp = charge;
                     totem.xp = 0;
@@ -3928,7 +4012,15 @@ export class Sim {
                 }
             }
         }
-        boss.bossState!.phase = { index: 0, stage: "shield", shield: shieldMax, shieldMax, totems };
+        boss.speed *= phases.phases[0].speed ?? 1;
+        boss.bossState!.phase = {
+            index: 0,
+            stage: "shield",
+            shield: shieldMax,
+            shieldMax,
+            totems,
+            ambientNext: 0,
+        };
     }
 
     // Down comes the shield: nothing can touch it now, and the totems wake
@@ -3937,6 +4029,12 @@ export class Sim {
         phase.stage = "totems";
         phase.shield = 0;
         boss.shieldEnd = Infinity;
+        // Whatever was steering for it flies straight from here
+        for (const projectile of this.projectiles) {
+            if (projectile.targetUid === boss.uid) {
+                projectile.targetUid = 0;
+            }
+        }
         const charging = getEnemy(phases.totems.chargingId);
         for (const totem of phase.totems) {
             totem.def = charging;
@@ -3990,14 +4088,33 @@ export class Sim {
         );
         const next = phases.phases[phase.index + 1];
         if (!next) {
-            boss.shieldEnd = 0;
-            boss.bossState!.windup = undefined;
-            this.killEnemy(boss);
+            const finale = phases.finale;
+            if (!finale) {
+                boss.shieldEnd = 0;
+                boss.bossState!.windup = undefined;
+                this.killEnemy(boss);
+                return;
+            }
+            // Its last stand: untouchable, at its finale's attacks at once,
+            // and gone when the time's up (stepPhase)
+            phase.stage = "finale";
+            phase.shield = 0;
+            phase.finaleEnd = this.tick + secondsToTicks(finale.seconds);
+            phase.ambientNext = this.tick;
+            phase.opener = finale.opener
+                ? boss.def.boss!.attacks.find((a) => a.name === finale.opener)
+                : undefined;
+            boss.attackCooldown = 0;
+            this.pushStage(boss, phase, finale.message);
             return;
         }
         boss.hp -= Math.round(boss.maxHp / phases.phases.length);
+        // Quicker on its feet with each phase (BossPhasesDef speed)
+        boss.speed *= (next.speed ?? 1) / (phases.phases[phase.index].speed ?? 1);
         phase.index++;
         phase.stage = "shield";
+        // The new phase's dream from its first tick (the old one's bullets fly on)
+        phase.ambientNext = this.tick;
         phase.shieldMax = phase.shield = Math.round(boss.maxHp * next.shield);
         phase.opener = next.opener
             ? boss.def.boss!.attacks.find((a) => a.name === next.opener)
@@ -4072,9 +4189,49 @@ export class Sim {
             this.addEffect(leash.spotAnim, enemy.x, enemy.y, 0, 40);
             this.addEffect(leash.spotAnim, spot.x, spot.y, 0, 40);
         }
+        const jump = leash.jump;
+        if (jump && enemy.bossState) {
+            // Down into the ground here, then up out of it there (stepLeap)
+            const ticks = secondsToTicks(jump.seconds);
+            enemy.bossState.leap = {
+                toX: spot.x,
+                toY: spot.y,
+                switchTick: this.tick + ticks,
+                endTick: this.tick + ticks * 2,
+            };
+            enemy.anim = "attack";
+            enemy.attackSeq = jump.downSeq;
+            enemy.animStart = this.tick;
+            enemy.vx = enemy.vy = 0;
+            return;
+        }
         enemy.x = enemy.prevX = spot.x;
         enemy.y = enemy.prevY = spot.y;
         enemy.vx = enemy.vy = 0;
+    }
+
+    // A leash's jump: it goes down where it was, comes up where it's going,
+    // and does nothing else meanwhile
+    private stepLeap(enemy: Enemy, leap: NonNullable<BossState["leap"]>): void {
+        const jump = enemy.def.boss!.leash!.jump!;
+        if (this.tick === leap.switchTick) {
+            enemy.x = enemy.prevX = leap.toX;
+            enemy.y = enemy.prevY = leap.toY;
+            enemy.anim = "attack";
+            enemy.attackSeq = jump.upSeq;
+            enemy.animStart = this.tick;
+        }
+        if (this.tick >= leap.endTick) {
+            const state = enemy.bossState!;
+            state.leap = undefined;
+            // On with whatever it jumped there to do (toMiddle), or its walk
+            const windup = state.windup;
+            enemy.anim = windup ? "attack" : "walk";
+            enemy.animStart = this.tick;
+            if (windup) {
+                enemy.attackSeq = windup.attack.seq ?? enemy.def.attackSeq;
+            }
+        }
     }
 
     // Whether the player's in a cone swing's wedge, or right under the boss
@@ -4116,6 +4273,8 @@ export class Sim {
                 endTick: armed ? landTick + secondsToTicks(ground.armed!) : landTick,
                 armed,
                 fuseTick: -1,
+                grabEnd: ground.grab ? landTick + secondsToTicks(ground.grab.up.to) : 0,
+                hit: [],
             });
         };
         for (const spots of ground.spots) {
@@ -4126,15 +4285,17 @@ export class Sim {
                 case "player":
                     add(player.x, player.y);
                     break;
-                case "ring":
+                case "ring": {
+                    const middle = spots.around === "player" ? player : enemy;
                     for (let i = 0; i < spots.count; i++) {
                         const angle = (i / spots.count) * Math.PI * 2;
                         add(
-                            enemy.x + fm.cos(angle) * spots.distance,
-                            enemy.y + fm.sin(angle) * spots.distance,
+                            middle.x + fm.cos(angle) * spots.distance,
+                            middle.y + fm.sin(angle) * spots.distance,
                         );
                     }
                     break;
+                }
                 case "grid": {
                     const half = (spots.size - 1) / 2;
                     for (let i = 0; i < spots.size; i++) {
@@ -4175,12 +4336,18 @@ export class Sim {
 
     // The lines cross close enough to the player that the safe quarter's
     // always in reach, wherever in the arena they are
-    private growQuarters(enemy: Enemy, attack: BossAttackDef, hurtTick: number): void {
+    // at: where the boss is going to stand (toMiddle), when it isn't there yet
+    private growQuarters(
+        enemy: Enemy,
+        attack: BossAttackDef,
+        hurtTick: number,
+        at?: { x: number; y: number },
+    ): void {
         const quarters = attack.quarters;
         if (!quarters) {
             return;
         }
-        const middle = attack.toMiddle ? enemy : this.partyMiddle();
+        const middle = at ?? (attack.toMiddle ? enemy : this.partyMiddle());
         const arena = this.bossArena;
         const margin = quarters.offset * 2;
         const offset = () => this.rng.range(-quarters.offset, quarters.offset);
@@ -4305,7 +4472,14 @@ export class Sim {
         }
     }
 
-    private startPattern(enemy: Enemy, attack: BossAttackDef, windup: BossWindup): void {
+    // channel: whether the boss stands still for it (not for an ambient
+    // pattern, which goes on under whatever else it does)
+    private startPattern(
+        enemy: Enemy,
+        attack: BossAttackDef,
+        windup: BossWindup,
+        channel = true,
+    ): void {
         const pattern = attack.pattern;
         if (!pattern) {
             return;
@@ -4340,9 +4514,81 @@ export class Sim {
             angle,
             aim,
             damage: this.getBossDamage(enemy, attack),
+            ambient: !channel,
         });
-        enemy.bossState!.channelEnd =
-            this.tick + secondsToTicks(pattern.volleys * pattern.interval);
+        // Still until its volleys are out, or for as long as the pattern says
+        // (BulletPatternDef.channel), the rest going on behind its next attack
+        if (channel) {
+            const state = enemy.bossState!;
+            state.channelEnd = Math.max(
+                state.channelEnd,
+                this.tick + secondsToTicks(pattern.channel ?? patternSeconds(pattern)),
+            );
+        }
+    }
+
+    // What a phased boss keeps up by itself: a finale's end, when it falls, and
+    // the phase's ambient pattern (BossPhasesDef ambient), begun again on its
+    // own timer under whatever else it's doing, unless it's under the ground
+    private stepPhase(boss: Enemy, phase: BossPhase): void {
+        const phases = boss.def.boss!.phases!;
+        const state = boss.bossState!;
+        if (phase.stage === "finale" && this.tick >= (phase.finaleEnd ?? 0)) {
+            boss.shieldEnd = 0;
+            state.windup = undefined;
+            this.killEnemy(boss);
+            return;
+        }
+        const ambient =
+            phase.stage === "finale" ? phases.finale?.ambient : phases.phases[phase.index].ambient;
+        if (!ambient || this.intro || state.leap) {
+            return;
+        }
+        // Nothing of hers while her sleepwalkers walk in: the player's up by her
+        // shooting them down, where a ring can't be stepped through. The dream
+        // picks up again as soon as they're done.
+        if (state.walkers && phase.stage !== "finale") {
+            if (this.emitters.some((e) => e.ambient && e.enemyUid === boss.uid)) {
+                this.emitters = this.emitters.filter(
+                    (e) => !(e.ambient && e.enemyUid === boss.uid),
+                );
+            }
+            phase.ambientNext = this.tick;
+            return;
+        }
+        if (this.tick < phase.ambientNext) {
+            return;
+        }
+        const attack = boss.def.boss!.attacks.find((a) => a.name === ambient.attack);
+        if (!attack?.pattern) {
+            return;
+        }
+        phase.ambientNext = this.tick + secondsToTicks(ambient.interval);
+        const target = this.nearestHero(boss.x, boss.y).player;
+        const toPlayer = Math.max(0.001, fm.hypot(target.x - boss.x, target.y - boss.y));
+        this.startPattern(
+            boss,
+            attack,
+            {
+                attack,
+                startTick: this.tick,
+                landTick: this.tick,
+                targets: [],
+                dirX: (target.x - boss.x) / toPlayer,
+                dirY: (target.y - boss.y) / toPlayer,
+            },
+            false,
+        );
+    }
+
+    // The tempo of the phase a boss is in (BossPhasesDef tempo): what its
+    // interval and its patterns' windups are multiplied by
+    private phaseTempo(enemy: Enemy): number {
+        const phase = enemy.bossState?.phase;
+        if (!phase || phase.stage === "finale") {
+            return 1;
+        }
+        return enemy.def.boss?.phases?.phases[phase.index]?.tempo ?? 1;
     }
 
     // Frees the slots of dead bosses, once no bullet or volley of theirs is
@@ -4471,7 +4717,12 @@ export class Sim {
             }
             this.fireVolley(emitter, boss);
             emitter.volleysLeft--;
-            emitter.nextTick = this.tick + secondsToTicks(emitter.attack.pattern!.interval);
+            const pattern = emitter.attack.pattern!;
+            // A pause after each burst's last volley (BulletPatternDef.burst)
+            const burst = pattern.burst;
+            const fired = pattern.volleys - emitter.volleysLeft;
+            const pause = burst && fired % burst.count === 0 ? burst.pause : 0;
+            emitter.nextTick = this.tick + secondsToTicks(pattern.interval + pause);
             spent ||= emitter.volleysLeft <= 0;
         }
         if (spent) {
@@ -4506,7 +4757,8 @@ export class Sim {
             this.use(this.heroes[i]);
             // A bullet in the air keeps its source's slot (freeBulletSources)
             const { attack, enemy } = this.bulletSources[bullets.source[hit]]!;
-            this.bulletGraceEnd = this.tick + BULLET_GRACE_TICKS;
+            this.bulletGraceEnd =
+                this.tick + secondsToTicks(enemy.def.boss?.bulletGrace ?? BULLET_GRACE);
             this.bossHit(enemy.def.id, enemy, attack, bullets.damage[hit]);
         });
         this.use(current);
@@ -4544,9 +4796,27 @@ export class Sim {
             if (tick < (hazard.armed ? hazard.fuseTick : hazard.landTick)) {
                 continue;
             }
-            hazard.endTick = -1;
-            spent = true;
-            this.landHazard(hazard, landed);
+            if (hazard.grabEnd !== 0) {
+                // Up for a while once it's landed, and hurting anyone who steps
+                // in meanwhile, once each
+                if (tick >= hazard.grabEnd) {
+                    hazard.endTick = -1;
+                    spent = true;
+                    continue;
+                }
+                // What comes up starts as it lands, and hurts once it's in sight
+                const up = hazard.attack.ground!.grab!.up;
+                this.landHazard(
+                    hazard,
+                    landed,
+                    tick === hazard.landTick,
+                    tick >= hazard.landTick + secondsToTicks(up.from),
+                );
+            } else {
+                hazard.endTick = -1;
+                spent = true;
+                this.landHazard(hazard, landed, true);
+            }
             if (this.runOver) {
                 return;
             }
@@ -4558,12 +4828,32 @@ export class Sim {
 
     // landed: the heroes something's landed on this tick, by index, who it
     // passes by; it adds whoever it hits
-    private landHazard(hazard: GroundHazard, landed: boolean[]): void {
+    // show: what's shown as it lands, the first time it does; hit: whether it
+    // hurts this tick (a grab's hands, only once they're up)
+    private landHazard(hazard: GroundHazard, landed: boolean[], show: boolean, hit = true): void {
         const { attack, x, y, radius } = hazard;
-        if (attack.impactSpotAnim !== undefined) {
+        const grab = attack.ground?.grab;
+        if (!show) {
+            // Nothing to show again
+        } else if (attack.impactSpotAnim !== undefined) {
             this.addEffect(attack.impactSpotAnim, x, y, 0, 40);
+        } else if (grab && attack.ground?.middleSpotAnim !== undefined) {
+            // What was in the middle of the mark comes up in full, as big as it
+            const effect = this.addEffect(
+                attack.ground.middleSpotAnim,
+                x,
+                y,
+                0,
+                secondsToTicks(grab.seconds),
+            );
+            if (effect) {
+                effect.fitRadius = radius * grab.fit;
+            }
         } else if (!attack.ground?.spotAnim) {
             this.emit({ type: "bossSwing", x, y, radius });
+        }
+        if (!hit) {
+            return;
         }
         this.forEachHeroInReach(() => {
             const player = this.player;
@@ -4571,11 +4861,13 @@ export class Sim {
             if (
                 this.runOver ||
                 fm.hypot(player.x - x, player.y - y) > radius + player.radius ||
-                landed[index]
+                landed[index] ||
+                hazard.hit.includes(index)
             ) {
                 return;
             }
             landed[index] = true;
+            hazard.hit.push(index);
             const enemy = this.enemies.find((e) => e.uid === hazard.enemyUid);
             if (hazard.damage > 0) {
                 this.bossHit(enemy?.def.id ?? "", enemy, attack, hazard.damage, false);
@@ -4737,11 +5029,24 @@ export class Sim {
                 state.cooldowns[i]--;
             }
         }
+        const phase = state.phase;
+        if (phase) {
+            this.stepPhase(enemy, phase);
+            if (enemy.dead) {
+                return;
+            }
+        }
         if (state.surge) {
             this.stepSurge(enemy, state.surge);
             return;
         }
-        if (state.walkers && this.stepWalkers(enemy, state.walkers)) {
+        if (state.leap) {
+            this.stepLeap(enemy, state.leap);
+            return;
+        }
+        // Its sleepwalkers walk in while it does nothing else, except in a
+        // finale, where its claws keep coming as they do
+        if (state.walkers && this.stepWalkers(enemy, state.walkers) && phase?.stage !== "finale") {
             return;
         }
         const windup = state.windup;
@@ -4752,7 +5057,10 @@ export class Sim {
             }
             return;
         }
-        if (def.leash && distance > def.leash.distance) {
+        // Not between a chain's links or before what follows: a charge ends at
+        // the far edge and the next lane's picked from there, and a leash
+        // meanwhile would have it sink, come up by the player and snap back
+        if (def.leash && distance > def.leash.distance && !state.chain && !state.follow) {
             this.leashBoss(enemy, def.leash);
         }
         // The same again, straight after (BossAttackDef.chain)
@@ -4787,15 +5095,15 @@ export class Sim {
         if (enemy.attackCooldown > 0 || this.hold || this.tick < state.channelEnd) {
             return;
         }
-        const phase = state.phase;
         const opener = phase?.opener;
         if (opener) {
             phase.opener = undefined;
             this.startBossAttack(enemy, opener);
             return;
         }
-        // Among its flowers it keeps to the attacks they call for (QuartersDef.during)
-        const during = this.flowersDuring(enemy);
+        // Among its flowers, or in its finale, it keeps to the attacks they
+        // call for (QuartersDef.during, BossPhasesDef.finale)
+        const during = this.keepsTo(enemy);
         if (during) {
             const choices = during.attacks
                 .map((name) => def.attacks.find((a) => a.name === name))
@@ -4830,8 +5138,13 @@ export class Sim {
         this.startBossAttack(enemy, attack);
     }
 
-    // The flowers a boss is standing among, if they say what it does meanwhile
-    private flowersDuring(enemy: Enemy): QuartersDef["during"] | undefined {
+    // What a boss keeps to, standing where it is: the attacks the flowers it's
+    // among call for, or its finale's
+    private keepsTo(enemy: Enemy): QuartersDef["during"] | undefined {
+        const phase = enemy.bossState?.phase;
+        if (phase?.stage === "finale") {
+            return enemy.def.boss?.phases?.finale;
+        }
         const quarters = this.quarters;
         if (!quarters || quarters.enemyUid !== enemy.uid || this.tick >= quarters.endTick) {
             return undefined;
@@ -4850,12 +5163,20 @@ export class Sim {
     ): void {
         const state = enemy.bossState!;
         const def = enemy.def.boss!;
-        if (attack.toMiddle) {
-            this.leapToMiddle(enemy, attack);
+        // Its windup runs from when it's there
+        const middle = attack.toMiddle ? this.leapToMiddle(enemy, attack) : undefined;
+        // Each phase a gear up: its patterns wound up quicker (the big hits
+        // keep their warnings), and less of a rest after everything
+        const tempo = this.phaseTempo(enemy);
+        if (attack.kind === "pattern") {
+            windupSeconds *= tempo;
         }
         const player = this.player;
         const startTick = this.tick;
-        const landTick = startTick + Math.max(1, Math.round(windupSeconds * TICKS_PER_SECOND));
+        const landTick =
+            startTick +
+            Math.max(1, Math.round(windupSeconds * TICKS_PER_SECOND)) +
+            (middle?.ticks ?? 0);
         const toPlayer = Math.max(0.001, fm.hypot(player.x - enemy.x, player.y - enemy.y));
         const windup: BossWindup = {
             attack,
@@ -4868,21 +5189,34 @@ export class Sim {
         state.windup = windup;
         if (attack.kind === "ground") {
             this.markGround(enemy, attack, landTick);
+            // What comes up out of the marks plays out before anything else:
+            // the next round of claws waits for the hands
+            const grab = attack.ground?.grab;
+            if (grab) {
+                state.channelEnd = Math.max(
+                    state.channelEnd,
+                    landTick + secondsToTicks(grab.seconds),
+                );
+            }
         } else if (attack.kind === "quarters") {
-            this.growQuarters(enemy, attack, landTick);
+            this.growQuarters(enemy, attack, landTick, middle);
         } else if (attack.kind === "surge") {
             windup.lane = this.pickLane(enemy, attack);
         }
         const drowsy = this.tick < this.drowsyEndTick ? this.drowsyInterval : 1;
         const usual =
             def.attackInterval *
+            tempo *
             (state.enraged ? ENRAGED_INTERVAL : 1) *
             (this.hard ? HARD_BOSS_INTERVAL : 1) *
             drowsy;
         enemy.attackCooldown = Math.round((interval ?? usual) * TICKS_PER_SECOND);
-        enemy.anim = "attack";
-        enemy.animStart = this.tick;
-        enemy.attackSeq = attack.seq ?? enemy.def.attackSeq;
+        // Its windup's animation, once it's there (stepLeap plays it after a jump)
+        if (!state.leap) {
+            enemy.anim = "attack";
+            enemy.animStart = this.tick;
+            enemy.attackSeq = attack.seq ?? enemy.def.attackSeq;
+        }
         if (attack.windupSound !== undefined) {
             this.emit({
                 type: "bossAttack",
@@ -5072,7 +5406,7 @@ export class Sim {
                 speed,
                 homing: (attack.homing ?? 0) / TICKS_PER_SECOND,
                 life: Math.ceil((attack.range + 6) / speed),
-                radius: ENEMY_PROJECTILE_RADIUS,
+                radius: attack.radius ?? ENEMY_PROJECTILE_RADIUS,
                 damage,
                 yaw: yawFromVector(vx, vy),
                 startTick: this.tick,
@@ -5101,7 +5435,9 @@ export class Sim {
             // Scattered: anywhere a wave's enemy would turn up, from the player
             const one = summon.scatter
                 ? this.spawnEnemy(which, "normal")
-                : this.spawnNear(around, which, radius, i, total, attempts);
+                : summon.thrown
+                  ? this.throwSummon(enemy, which, radius, summon.thrown.seconds)
+                  : this.spawnNear(around, which, radius, i, total, attempts);
             if (one) {
                 spawned.push(one);
             }
@@ -5109,7 +5445,7 @@ export class Sim {
         // What's part of the fight isn't a farm, though Sleepwalkers count for
         // their quest, which noDrops wouldn't
         for (const one of spawned) {
-            one.noDrops = summon.beside ?? false;
+            one.noDrops = summon.beside === true || summon.thrown !== undefined;
             one.bonesOnly = summon.walkTo !== undefined;
         }
         if (spawned.length === 0) {
@@ -5129,6 +5465,43 @@ export class Sim {
                 perAbsorbed: summon.walkTo.perAbsorbed,
             };
         }
+    }
+
+    // Out of the boss and through the air to a spot about distance tiles off
+    // in some direction (summon.thrown): it can't be hit until it lands, and
+    // what hatches counts its time from then
+    private throwSummon(
+        boss: Enemy,
+        def: EnemyDef,
+        distance: number,
+        seconds: number,
+    ): Enemy | undefined {
+        const spot =
+            this.findSpotNear(boss.x, boss.y, distance, def.radius) ??
+            this.findSpotNear(boss.x, boss.y, distance / 2, def.radius);
+        if (!spot) {
+            return undefined;
+        }
+        const one = this.spawnEnemy(def, "normal", { x: boss.x, y: boss.y });
+        if (!one) {
+            return undefined;
+        }
+        const ticks = Math.max(1, secondsToTicks(seconds));
+        const endTick = this.tick + ticks;
+        one.flung = {
+            fromX: boss.x,
+            fromY: boss.y,
+            toX: spot.x,
+            toY: spot.y,
+            startTick: this.tick,
+            endTick,
+        };
+        one.shieldEnd = endTick;
+        one.yaw = yawFromVector(spot.x - boss.x, spot.y - boss.y);
+        if (one.hatchTick !== 0) {
+            one.hatchTick += ticks;
+        }
+        return one;
     }
 
     // A blockable attack's blow landing on the glyph instead of the player
@@ -5213,7 +5586,13 @@ export class Sim {
     }
 
     // To the middle of the arena, as she goes for her flowers
-    private leapToMiddle(enemy: Enemy, attack: BossAttackDef): void {
+    // To the arena's middle (BossAttackDef.toMiddle): with its leash's jump,
+    // down where it is and up at the middle, or else just there. Returns the
+    // spot it'll stand on, and how long it takes to get there.
+    private leapToMiddle(
+        enemy: Enemy,
+        attack: BossAttackDef,
+    ): { x: number; y: number; ticks: number } {
         const arena = this.bossArena;
         const spot = findFreeSpot(
             this.grid,
@@ -5224,9 +5603,26 @@ export class Sim {
         if (attack.castSpotAnim !== undefined) {
             this.addEffect(attack.castSpotAnim, enemy.x, enemy.y, 0, 40);
         }
+        const jump = enemy.def.boss?.leash?.jump;
+        const state = enemy.bossState;
+        if (jump && state) {
+            const ticks = secondsToTicks(jump.seconds);
+            state.leap = {
+                toX: spot.x,
+                toY: spot.y,
+                switchTick: this.tick + ticks,
+                endTick: this.tick + ticks * 2,
+            };
+            enemy.anim = "attack";
+            enemy.attackSeq = jump.downSeq;
+            enemy.animStart = this.tick;
+            enemy.vx = enemy.vy = 0;
+            return { x: spot.x, y: spot.y, ticks: ticks * 2 };
+        }
         enemy.x = enemy.prevX = spot.x;
         enemy.y = enemy.prevY = spot.y;
         enemy.vx = enemy.vy = 0;
+        return { x: spot.x, y: spot.y, ticks: 0 };
     }
 
     // Jumps onto a spot, if there's room for it there
@@ -5352,6 +5748,9 @@ export class Sim {
             attack.hitSound,
             attack.ignoreArmor,
         );
+        if (amount > 0) {
+            this.damageByAttack[attack.name] = (this.damageByAttack[attack.name] ?? 0) + amount;
+        }
         const lifesteal = enemy?.def.boss?.lifesteal ?? 0;
         if (enemy && lifesteal > 0 && !enemy.dead) {
             enemy.hp = Math.min(enemy.maxHp, enemy.hp + Math.round(amount * lifesteal));
@@ -5731,8 +6130,13 @@ export class Sim {
 
         // With the last of the final bosses (the Inferno has three)
         if (enemy.finalBoss && !this.finalBossLeft()) {
+            const fall = enemy.def.boss?.fallSeconds;
             if (this.endless) {
                 this.nextRound();
+            } else if (fall) {
+                // Its death first, with nothing landing meanwhile (stepRun)
+                this.victoryAt = this.tick + secondsToTicks(fall);
+                this.fellTick = this.tick;
             } else {
                 this.endRun("victory");
             }
@@ -5838,9 +6242,18 @@ export class Sim {
 
     // Bones, and now and then a casket, coins, food or a power-up
     private dropLoot(enemy: Enemy): void {
-        this.dropPickup("bones", enemy.x, enemy.y, enemy.xp);
         // Co-op: one of a boss's copies, whose loot comes with the last to fall
-        if (this.encounterLeft(enemy)) {
+        const last = !this.encounterLeft(enemy);
+        // A boss fight (MapDef.fight) drops nothing, from her or hers: no
+        // bones, caskets, coins, food or power-ups, only the collection log's
+        if (this.map.fight) {
+            if (last) {
+                this.rollBossTrophies(enemy);
+            }
+            return;
+        }
+        this.dropPickup("bones", enemy.x, enemy.y, enemy.xp);
+        if (!last) {
             return;
         }
         this.rollBossTrophies(enemy);
@@ -5894,7 +6307,9 @@ export class Sim {
         this.emit({ type: "roundStarted", round: this.round });
     }
 
-    private endRun(state: "dead" | "victory"): void {
+    // at: when it ended, for the run's time, when that's before now (a final
+    // boss's fall, with its death played out since)
+    private endRun(state: "dead" | "victory", at = this.tick): void {
         // A result stands, except that the final boss falling in the same tick
         // as the last player wins, whichever came first (weapons still fire in
         // that tick, see stepRun)
@@ -5913,7 +6328,7 @@ export class Sim {
                 }
             }
         }
-        this.endTick = this.tick;
+        this.endTick = at;
         this.state = state;
         // Everything stands still from here on; idle rather than walk on the spot
         for (const enemy of this.enemies) {
@@ -7037,7 +7452,19 @@ export class Sim {
             const target = candidates[index];
             candidates.splice(index, 1);
             if (level.impactSpotAnim !== undefined) {
-                this.addEffect(level.impactSpotAnim, target.x, target.y, 0, 30);
+                // Fitted to the strike and played out (WeaponDef.impactFit),
+                // or as it is for a moment
+                const fit = def.impactFit;
+                const effect = this.addEffect(
+                    level.impactSpotAnim,
+                    target.x,
+                    target.y,
+                    0,
+                    fit ? STRIKE_FIT_TICKS : 30,
+                );
+                if (effect && fit) {
+                    effect.fitRadius = radius * fit;
+                }
             }
             const tx = target.x;
             const ty = target.y;
@@ -7103,7 +7530,10 @@ export class Sim {
                     projectile.life <= 0 ||
                     enemy.dead ||
                     projectile.hit.has(enemy.uid) ||
-                    (only !== 0 && enemy.uid !== only)
+                    (only !== 0 && enemy.uid !== only) ||
+                    // A phased boss with its shield down isn't there to hit:
+                    // straight on through to the totems, with no blocked splat
+                    enemy.bossState?.phase?.stage === "totems"
                 ) {
                     return;
                 }
@@ -8717,7 +9147,7 @@ export class Sim {
 
     private cleanUp(): void {
         const tick = this.tick;
-        this.enemies = this.enemies.filter((e) => !e.dead || tick - e.deathTick < CORPSE_TICKS);
+        this.enemies = this.enemies.filter((e) => !e.dead || tick - e.deathTick < corpseTicks(e));
         this.projectiles = this.projectiles.filter((p) => p.life > 0);
         this.enemyProjectiles = this.enemyProjectiles.filter((p) => p.life > 0);
         this.effects = this.effects.filter((e) => tick < e.endTick);
@@ -8792,6 +9222,20 @@ function hurtFraction(enemy: Enemy): number {
 
 function secondsToTicks(seconds: number): number {
     return Math.round(seconds * TICKS_PER_SECOND);
+}
+
+// How long a dead enemy stays, for its death animation and then sinking: a
+// final boss whose fall the run waits for (BossDef.fallSeconds) plays all of it
+function corpseTicks(enemy: Enemy): number {
+    const fall = enemy.def.boss?.fallSeconds;
+    return fall ? secondsToTicks(fall) + DEATH_SINK_TICKS : CORPSE_TICKS;
+}
+
+// How long a pattern's volleys take to fire, pauses between bursts and all
+function patternSeconds(pattern: BulletPatternDef): number {
+    const burst = pattern.burst;
+    const pauses = burst ? Math.floor((pattern.volleys - 1) / burst.count) : 0;
+    return pattern.volleys * pattern.interval + pauses * (burst?.pause ?? 0);
 }
 
 // Timers for what an enemy does besides walking up and hitting, undefined if

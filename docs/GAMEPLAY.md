@@ -108,7 +108,7 @@ version and how to run it.
     | LMS sweat           | Magic       | Ice Burst              | Weapons 10% faster, 10% more area   | Killing the AGS specer in Last Man Standing             |
     | Castle Wars veteran | Melee       | Bronze 2h sword        | Bandages heal, 10% more hitpoints   | Killing the Flag carrier in Castle Wars                 |
     | Void knight         | Melee       | Bronze scimitar        | Hits 10% harder                     | Destroying the purple portal in Pest Control            |
-    | Inquisitor          | Ranged      | Armadyl crossbow       | 15% faster, 20% more hitpoints      | Killing Phosani's Nightmare (everyone plays them there) |
+    | Inquisitor          | Ranged      | Armadyl crossbow       | 20% faster, 20% more hitpoints      | Killing Phosani's Nightmare (everyone plays them there) |
 
 - **Class weapons**: every adventurer fights with Melee, Ranged or Magic, and only they can be
   offered their class's weapons. Each class has
@@ -152,7 +152,9 @@ version and how to run it.
       **Crystal staff** grows from basic to attuned (level 4) and perfected (level 7), and
       **Toktz-mej-tal** pulses obsidian heat around you that leaves the ground burning. The
       **Volatile Nightmare staff** casts Immolate at the toughest enemy in range, slow and heavier
-      the bigger the target.
+      the bigger the target. The **Nightmare staff**, Phosani's own, has her grasping claws come
+      up out of the ground under enemies around you every few seconds, hands and all, with bosses
+      and elites grabbed twice more.
 - **Unlocks**: from the Desert on, every map holds new things to find. Beating it, or killing
   one of its mid-run bosses, brings a weapon, a passive or a piece of gear into the game for
   every run after (a toast and the results screen say so). Until then it's never offered or
@@ -172,6 +174,7 @@ version and how to run it.
     | Prifddinas     | Crystal bow, Crystal armour                      | Crystal staff (surviving 10 minutes)                                                                 |
     | Inferno        |                                                  | Toktz-mej-tal (JalTok-Jad)                                                                           |
     | Hallowed Night |                                                  | Inquisitor's mace and Volatile Nightmare staff (The Nightmare)                                       |
+    | Phosani's      |                                                  | The Inquisitor and the Nightmare staff (Phosani's Nightmare)                                         |
 
 - **Fun maps**: the Grand Exchange, East Varrock, Falador, Last Man Standing, Castle Wars and Pest
   Control are open from the start and always endless. They have no final boss: a new round starts
@@ -306,8 +309,9 @@ version and how to run it.
       in the Sanctuary's stone, a gate north and south closed by its barrier, inside the Sisterhood Sanctuary's
       chamber under Slepe, with the Pool of Nightmares and Phosani's coffin beyond the north gate.
       There are no waves, no picks and no items: you play the Inquisitor with the
-      Armadyl crossbow at its third level and nothing more, start in the middle of the arena, and
-      she rises at once, to The Bane of Ashihama. Each of her totems' blasts heals you. It can't be endless; it has a hard mode
+      Armadyl crossbow at its third level and nothing more. She rises at the middle of the arena
+      with you stood south of her, rooted until she's up, to The Bane of Ashihama, and comes at
+      you the moment you're let go. Each of her totems' blasts heals you. It can't be endless; it has a hard mode
       once it's beaten.
 - **Bosses** turn up during a run, each fighting the way it does in OSRS, and always drop an
   elite casket (now and then a master one). Big hits are wound up first, with a red circle
@@ -375,19 +379,35 @@ version and how to run it.
       At 15:00, **The Nightmare**.
     - **Phosani's Nightmare**: The Nightmare's hard mode, from the start. Everything of hers, quicker
       and with more of it at once: her charge from the first phase, a wider fan of shots, a six-armed
-      spiral, farther-reaching Grasping Claws, husks that come for you from wherever they turn up
-      and hold you once they arrive (shoot them down first), tougher parasites, more sleepwalkers, and
-      her charge three times over, each lane picked afresh from where you are. Her claws come at
-      random round you, three rounds with barely a second each, sixteen at a time and never on
-      one another, with ground between them that's never the same ground. For her Corpse Flowers she takes the middle of the arena, the lines
-      cross there, and while the flowers stand she rains petals and claws. Then her own: a
-      **Sweep**, one arm of petals aimed at you and then swept round widdershins for three seconds
-      (step against the turn); a **Closing ring** with one way through that turns with each volley;
+      spiral, farther-reaching Grasping Claws, still hands on the ground that come up in full as
+      they land (about a tile and a half across, and that's exactly what they hit) and hurt anyone
+      who steps into them while they're up, with the next round waiting for them to go down,
+      husks that run for you as quick as you are from wherever they turn up and hold you where
+      you stand until they're dead (shoot them down on the way), parasites a dozen bolts each,
+      with bars over them and the husks both, more sleepwalkers, and
+      her charge three times over, each lane picked afresh from where you are and shown for a
+      second, then gone. Her claws are her punctuation, not the fight, a little more often than
+      any one pattern and a while between: they come at random round you, two rounds with barely
+      a second each, two dozen at a time and never on one another, with ground between them that's
+      never the same ground. For her Corpse Flowers she sinks into the ground and comes up at
+      the middle of the arena, the lines cross there and the flowers grow all the while she's
+      under, so there's her jump and their growth both to get to the right quarter in; as they
+      appear, the three quarters that will hurt flash red for a second. While her sleepwalkers
+      walk in she fires nothing, not even the dream, since you're up by her shooting them down
+      where a ring can't be stepped through. When she falls her death plays out before the
+      screen says so. While the flowers stand she
+      rains petals and claws; they're a minute apart, so it isn't a run to the right quarter
+      every other attack. Her curse lasts three of her attacks. Then her own: a
+      **Sweep**, one arm of white needles aimed at you and then swept round widdershins, fired in
+      bursts so the arm has holes along it to run through as they come (or step against the
+      turn); a **Closing ring** with one way through, on your side, that turns on
+      with each volley;
       **Weaving petals**, rings half a step apart to thread; a **Barrage**, a stream of shots that
       follows you (keep stepping across it); **Hunting orbs** that turn after you in her last
-      phase; and a claw on the tile you stand on with barely a second to get clear. Then the
-      bullet hells': a **Turning wall**, a slow dense spiral with one doorway that walks round her
-      (walk with it); **Pinwheels**, rings whose petals bend as they fly; a **Double sweep**, her
+      phase; and a claw on the tile you stand on, ringed by eight more, with barely a second to
+      slip out between them (her hardest claw, so her rarest). Then the
+      bullet hells': a **Turning wall**, a slow dense spiral with one doorway, opening on your side
+      and walking round her (walk with it); **Pinwheels**, rings whose petals bend as they fly; a **Double sweep**, her
       sweep with two arms; a **Counter-spiral** wound against its mirror image; a **Sealing ring**
       whose one gap is on you, and the next ring's further round; **Closing petals**, rings that
       each fly quicker than the last and pile up about nine tiles out (stay in close, or get well
@@ -395,13 +415,38 @@ version and how to run it.
       phase **Scissors**, two arms that open from where you stand and sweep opposite ways (stay
       ahead of one, or get in close); **Parted petals**, an even fan you're safest standing still
       in, and then her claw on your tile; and **The dream closes in**, a ring round you that flies
-      inwards with its way out towards her. She throws out **eggs** round you, the Parasitic egg,
-      which hatch a parasite each unless you break them in nine seconds, and **rooted husks** that
-      stand where they turn up and shoot until shot down (they don't hold). Her parasites heal
-      her, or put the charge back into a totem you're working on. Her warnings
+      inwards with its way out towards her. She flings **eggs** out of herself across the square,
+      the Parasitic egg, each its own way, with a bar over each and the game's hint arrow bobbing
+      over it (or pointing the way from the screen's edge): chase them down and break them within
+      fifteen seconds of landing (a few bolts each), or a parasite hatches. Her parasites run
+      for her, or for a totem you're working on, and each heal is a good part of her shield
+      back, or of the totem's charge undone, every couple of seconds: shoot them down on the
+      way. Nothing in the fight drops anything, not bones, caskets, coins, food or power-ups,
+      from her or hers. Her curse's pink pulses quicker on its last attack and flashes as it
+      lifts, so you know your feet are your own again. Her totems stand tall
+      enough to be seen across her square, each with its scroll turned to its middle, and she faces down her lane
+      as she charges. Neither she nor anything of hers can be pushed: walk into them and it's you
+      that gives. Her warnings
       on the ground are drawn faint, at a tenth, so they're read rather than stared at. Every hit is shown before it lands, and nothing heals
-      but her totems. Her hits are a little softer than on Hallowed Night, as a big one still
-      takes about half of the Inquisitor's hitpoints. Everyone plays the **Inquisitor** there,
+      but her totems, and those only a little: a blast is a breath, not a bar. A big hit takes
+      about half of the Inquisitor's hitpoints and a petal takes four, seven of them to die, with
+      barely a third of a second between one landing and the next being able to, so standing in a
+      pattern is what kills. **The dream** itself is under everything she does, a pattern each
+      phase that she keeps up on its own, through her holds and her rests, slow and sparse enough
+      to be walked through with care and seeded afresh every half minute: five arms turning in the
+      first phase, a slow ring every couple of seconds in the second, each a half-step round from
+      the last, and in the third two arms wound against their mirror image. Her rings and spirals
+      hold her for half a second only, so the next thing she does comes through them. Each phase
+      is a gear up: quicker between attacks and on her petals' windups (her big hits keep their
+      warnings), and quicker on her feet: she runs after you at most of your pace, and only sinks
+      and comes up by you once you've got well away. Her petals, shots and claws reach about as
+      far as they fly, eighteen tiles: further off than that she doesn't stand firing at nothing,
+      she comes after you, or charges, which she does as readily as she claws. Her red shots are
+      streaks, and hit no wider than they're drawn, and her barrage flies at under twice your
+      pace with a step's worth of time between shots, so it can be stepped across. And the last
+      blast doesn't end it: she stands twelve
+      seconds more, untouchable, with her sleepwalkers walking in, her claws on your tile and the
+      lattice doubled under them, and falls when it's up. Everyone plays the **Inquisitor** there,
       made for the fight; beating her brings them to every other map.
 - **Gear** goes in the OSRS equipment slots (head, cape, neck, body, shield, legs, hands, feet,
   ring) and shows on your character: about ten pieces a slot, from Rune and Mystic to the

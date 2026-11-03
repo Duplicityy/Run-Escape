@@ -64,6 +64,7 @@ import { DamageMeter } from "./DamageMeter";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
 import {
     GameAssets,
+    HINT_ARROW_SPRITE,
     HITSPLAT_SPRITES,
     getCharacterAppearance,
     getRunAppearance,
@@ -293,7 +294,10 @@ export class GameClient implements GameFrameHandler {
 
         const actors = await renderer.getActorRenderer();
         const assets = new GameAssets(workerPool, renderer, actors);
-        const spritesPromise = assets.loadSprites(Object.values(HITSPLAT_SPRITES));
+        const spritesPromise = assets.loadSprites([
+            ...Object.values(HITSPLAT_SPRITES),
+            HINT_ARROW_SPRITE,
+        ]);
         store.set({ loadingText: "Summoning monsters", loadingProgress: 10 });
         await assets.loadBase((done, total) => {
             store.set({ loadingProgress: 10 + Math.round((done / total) * 70) });
@@ -2004,7 +2008,12 @@ export class GameClient implements GameFrameHandler {
                 enraged: !shownBoss.dead && (shownBoss.bossState?.enraged ?? false),
             };
             if (phase && !shownBoss.dead) {
-                boss.fraction = phase.shield / phase.shieldMax;
+                const finale = shownBoss.def.boss?.phases?.finale;
+                boss.fraction =
+                    phase.stage === "finale" && finale
+                        ? Math.max(0, (phase.finaleEnd ?? 0) - sim.tick) /
+                          (finale.seconds * TICKS_PER_SECOND)
+                        : phase.shield / phase.shieldMax;
                 boss.fight = {
                     phase: phase.index + 1,
                     phases: shownBoss.def.boss?.phases?.phases.length ?? 1,

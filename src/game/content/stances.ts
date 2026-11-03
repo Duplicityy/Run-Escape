@@ -44,7 +44,7 @@ const STANCES: (PlayerStance & { objIds: number[] })[] = [
         ],
     },
     // Nightmare staves
-    { idle: 4504, run: 1210, objIds: [24423, 24424, 24425] },
+    { idle: 4504, run: 1210, objIds: [24422, 24423, 24424, 24425] },
     // Tumeken's shadows
     { idle: 9494, run: 1707, objIds: [27275, 28547] },
     // Crossbows

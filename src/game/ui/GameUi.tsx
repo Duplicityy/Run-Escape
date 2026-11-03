@@ -1464,7 +1464,9 @@ function Hud({
                         <div className="ui-boss-status">
                             {hud.boss.fight.stage === "totems"
                                 ? "Charge the totems!"
-                                : "Break her shield!"}
+                                : hud.boss.fight.stage === "finale"
+                                  ? "Stay on your feet!"
+                                  : "Break her shield!"}
                             {hud.boss.fight.curseAttacks !== undefined && (
                                 <span className="ui-boss-curse">
                                     {" "}

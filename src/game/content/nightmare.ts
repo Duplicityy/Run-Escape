@@ -27,10 +27,15 @@ export const FLOWERS_SEQ = 8601;
 export const SPORES_SEQ = 8605;
 // Curled up, as she throws a parasite
 export const PARASITE_SEQ = 8606;
-// Wings out in a burst, as she takes in her sleepwalkers
-export const ABSORB_SEQ = 8604;
-// Coming up out of a pit, wings out
-export const SURGE_SEQ = 8610;
+// The real absorb (8604, wings out in a burst) and pit rising (8610) are on
+// her other form's skeleton (npc 9431), and tear her model apart when played
+// on it: she summons as she takes in her sleepwalkers, and gathers herself
+// with her reach out before a charge (8594, 1.8s)
+export const ABSORB_SEQ = SUMMON_SEQ;
+export const SURGE_SEQ = 8594;
+// Down into the ground and up out of it, 1.2s each (npc 9432's)
+export const SINK_SEQ = 8607;
+export const RISE_SEQ = 8609;
 export const SPAWN_SEQ = 8611;
 export const DEATH_SEQ = 8612;
 
@@ -345,6 +350,10 @@ const PHASE_THREE_ATTACKS: BossAttackDef[] = [
     },
 ];
 
+// The totems' model has its scroll hanging three-quarters of the way round from
+// where its yaw points, so this is added to turn the scroll to the arena's middle
+export const TOTEM_SCROLL_YAW = 768;
+
 export const TOTEM = {
     idleSeq: NPC_IDLE_SEQ,
     walkSeq: -1,
@@ -445,6 +454,7 @@ export const NIGHTMARE_ENEMIES: EnemyDef[] = [
                     idleId: "nightmare_totem",
                     chargingId: "nightmare_totem_charging",
                     chargedId: "nightmare_totem_charged",
+                    yawOffset: TOTEM_SCROLL_YAW,
                     charge: 0.05,
                     margin: 6,
                     blastSpotAnim: 1782,

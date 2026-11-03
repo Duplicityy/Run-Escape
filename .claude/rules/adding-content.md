@@ -44,6 +44,8 @@ Add it to `WEAPONS` in `weapons.ts`.
 - `burns.locId` is scenery for the flames on burning ground. `getBaseRequests` bakes it with the
   loc's own animation (`animated` on a loc request); other locs are baked static. Not every loc's
   model moves with its animation: `scripts/cache/find-locs.ts` gives the seq, but check it flickers.
+- A strike's `impactFit` scales its impact spot animation to the strike's radius and plays it out
+  in full (the Nightmare staff's hands), instead of a moment of it as it is.
 - A swoosh colour goes in `SLASH_COLORS` in `client/GameView.ts`.
 - Check the player's animation (`playerSeq`) in the browser. A seq id existing doesn't mean it
   suits the weapon.
@@ -117,14 +119,28 @@ a map, or an enemy on that map, mentions it), so that needs nothing added.
 - A `blinks.surface` seq is baked like `blinks.seq`, and needs to be one the NPC's model can play.
 - `holds` has an enemy pin the player where they stand once it reaches them (Phosani's husks), and
   a boss's `summon.scatter` brings its summons on wherever a wave's enemy would, so there's time to
-  kill them on the way.
+  kill them on the way. `summon.thrown` flings them out of the boss to spots `distance` tiles off,
+  unhittable in the air, `healthBar` on an enemy keeps its bar over it from the start, and `solid`
+  means the player can't push it, and `hintArrow` puts the game's hint arrow over it. A ground
+  attack's `grab` plays its `middleSpotAnim` out in full where each mark lands, `fit` times the
+  mark's radius across, hurting whoever steps in while it's up, and a boss's `leash.jump` names
+  the down and up animations it leashes with. A phased boss's `totems.yawOffset` turns a totem model whose mark isn't on
+  its front towards the middle.
+- A boss's `intro` can rise it at the middle of the map's `bossArena` with the player south of it
+  (`atMiddle`), and root the player until it's over (`holds`), after which it attacks at once.
 - A boss attack's `chain` repeats it straight after (dashes back to back, claws in rounds),
-  `toMiddle` takes the boss to the arena's middle first, a quarters attack's `during` says what it
+  `toMiddle` takes the boss to the arena's middle first (with its leash's jump, if it has one,
+  the windup running from when it's there), a quarters attack's `during` says what it
   does among its flowers, and a pattern's `gap` and `track` make a ring with a way through and a
   stream that follows the player; `gapAt`, `mirror`, `speedUp` and `around` shape a ring further,
   and `follow` names the attack that comes after. An enemy with `hatches` turns into others
-  unless it's killed in time, and one with `objId` is drawn as an item (Phosani's eggs). Boss
-  fights as data in `docs/DEVELOPMENT.md` has the lot.
+  unless it's killed in time, and one with `objId` is drawn as an item (Phosani's eggs). A
+  pattern's `channel` is how long the boss stands still for it (the whole pattern unless set),
+  its `burst` fires so many volleys and then pauses (holes along a sweep's arm), a
+  boss's `bulletGrace` how long after a bullet hits before another can (a second), a final
+  boss's `fallSeconds` how long its death plays before the victory screen, and a phased boss's
+  phases each take an `ambient` pattern it keeps up on its own, a `tempo` and a `speed`, with a
+  `finale` after the last blast. Boss fights as data in `docs/DEVELOPMENT.md` has the lot.
 - In co-op a boss event spawns copies (`bossCopies` in `content/coop.ts`) that share one boss's
   hitpoints, experience and loot. One with `spawnAt` gets no more copies than it has free spots.
 
@@ -161,7 +177,8 @@ Add it to `MAPS` in `maps.ts` (fun maps go in `fun/maps.ts`), with its waves in 
   takes her swings: its numbers say how long the kit takes, not how a player fares. It's listed
   under Boss fights on the map screen, and can't be endless. Sim it with
   `FLAT=1 MAP=phosani DODGE=1`, which needs no cache, and go by how long the bot lasts and what
-  hits it: it can't dodge as a person does.
+  hits it (its `boss attacks that hit` line says which of the boss's attacks did it): it can't
+  dodge as a person does.
 - Check it in the browser: the minimap, the spawn, and that enemies can reach you. The sim's bot
   uses the real collision, so a sim also shows whether a map plays at all.
 - Fun maps don't count towards quests.

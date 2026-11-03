@@ -81,13 +81,18 @@ export type BossSurge = {
 export type BossPhase = {
     // Counts from 0
     index: number;
-    stage: "shield" | "totems";
+    // finale: after the last blast, its last stand (BossPhasesDef.finale)
+    stage: "shield" | "totems" | "finale";
     shield: number;
     shieldMax: number;
     // Its four totems
     totems: Enemy[];
     // The attack it's to open this phase with, until it has
     opener?: BossAttackDef;
+    // When its ambient pattern begins again (BossPhasesDef ambient)
+    ambientNext: number;
+    // When the finale's over and it falls
+    finaleEnd?: number;
 };
 
 // Enemies walking to a boss to be absorbed (BossAttackDef summon.walkTo)
@@ -118,6 +123,9 @@ export type BossState = {
     // An attack to begin at this tick, after the one it follows
     // (BossAttackDef.follow)
     follow?: { attack: BossAttackDef; atTick: number };
+    // Leashing back to the player with a jump (BossDef.leash.jump): down where
+    // it is until switchTick, then up at (toX, toY) until endTick
+    leap?: { toX: number; toY: number; switchTick: number; endTick: number };
     // It stands still until this tick, as its volleys go out
     channelEnd: number;
     // BossDef.stomp: hits since the player stepped under it, and the next one
@@ -162,6 +170,10 @@ export type GroundHazard = {
     endTick: number;
     armed: boolean;
     fuseTick: number;
+    // With a grab (GroundPatternDef.grab): it goes on hurting whoever steps
+    // in until this tick, once each (hit, by hero index); 0 without one
+    grabEnd: number;
+    hit: number[];
 };
 
 // A boss's corpse flowers (BossAttackDef quarters), crossing at (x, y). The
@@ -198,6 +210,8 @@ export type BulletEmitter = {
     // mirrored about (BulletPatternDef.mirror)
     aim: number;
     damage: number;
+    // A phase's own pattern (BossPhasesDef ambient), not an attack
+    ambient?: boolean;
 };
 
 // The player's controls shuffled (PlayerEffectDef curse): x and y of what's
@@ -239,6 +253,14 @@ export type EnemyAnim = "walk" | "idle" | "attack" | "death" | "jump";
 
 // Going over a ditch: from one side to the other, starting at tick start
 export type EnemyJump = { fromX: number; fromY: number; toX: number; toY: number; start: number };
+export type EnemyFlung = {
+    fromX: number;
+    fromY: number;
+    toX: number;
+    toY: number;
+    startTick: number;
+    endTick: number;
+};
 
 export type Enemy = {
     uid: number;
@@ -331,6 +353,10 @@ export type Enemy = {
     bonesOnly: boolean;
     // Hatches at this tick if it's still alive (EnemyDef.hatches); 0 for never
     hatchTick: number;
+    // Thrown out by a boss (BossAttackDef.summon.thrown): in the air from one
+    // spot to the other between these ticks, and nothing to the fight until
+    // it lands
+    flung?: EnemyFlung;
     abilities?: EnemyAbilities;
 };
 
@@ -520,6 +546,9 @@ export type Effect = {
     enemyUid: number;
     // Plays over and over until endTick (a shield), rather than once
     loop?: boolean;
+    // Scaled so the model's radius is this many tiles (a claw's hands, as
+    // wide as the spot they come up in), rather than drawn as it is
+    fitRadius?: number;
 };
 
 // A multicannon set up by a power-up
@@ -794,7 +823,7 @@ type SimEventBody =
           type: "bossStage";
           enemyId: string;
           phase: number;
-          stage: "shield" | "totems";
+          stage: BossPhase["stage"];
           message: string;
           x: number;
           y: number;

@@ -474,6 +474,13 @@ function runOnce(characterId: string, seed: number) {
                 `maxHp ${sim.player.maxHp}, armour ${sim.stats.armor}, ` +
                 `taken ${sim.damageTaken}, dps ${Math.round(sim.dps)}`,
         );
+        // Which of the boss's attacks did it, over the whole fight
+        const byAttack = Object.entries(sim.damageByAttack).sort((a, b) => b[1] - a[1]);
+        if (byAttack.length > 0) {
+            console.log(
+                "  boss attacks that hit: " + byAttack.map(([k, v]) => `${k} ${v}`).join(", "),
+            );
+        }
     }
     const result = sim.getResult();
     const ms = performance.now() - startTime;
