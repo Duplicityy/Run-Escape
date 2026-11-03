@@ -168,6 +168,71 @@ class InstanceList {
         this.alphaOffsets = growInt(this.alphaOffsets);
         this.alphaCounts = growInt(this.alphaCounts);
     }
+
+    // Puts the instances of each frame together, in the order they came, so
+    // that without multi draw each frame is one instanced draw: a crowd of one
+    // enemy shares a few frames
+    sortByFrame(): void {
+        const n = this.count;
+        if (n < 2) {
+            return;
+        }
+        if (sortOrder.length < n) {
+            sortOrder = new Int32Array(this.opaqueOffsets.length);
+        }
+        const order = sortOrder.subarray(0, n);
+        const { opaqueOffsets, opaqueCounts, alphaOffsets, alphaCounts } = this;
+        let sorted = true;
+        for (let i = 0; i < n; i++) {
+            order[i] = i;
+            if (i > 0 && compareFrames(this, i - 1, i) > 0) {
+                sorted = false;
+            }
+        }
+        if (sorted) {
+            return;
+        }
+        order.sort((a, b) => compareFrames(this, a, b) || a - b);
+
+        if (sortData.length < this.data.length) {
+            sortData = new Float32Array(this.data.length);
+            sortInts = new Int32Array(this.opaqueOffsets.length * 4);
+        }
+        const data = this.data;
+        for (let i = 0; i < n; i++) {
+            const from = order[i];
+            for (let f = 0; f < FLOATS_PER_INSTANCE; f++) {
+                sortData[i * FLOATS_PER_INSTANCE + f] = data[from * FLOATS_PER_INSTANCE + f];
+            }
+            sortInts[i * 4] = opaqueOffsets[from];
+            sortInts[i * 4 + 1] = opaqueCounts[from];
+            sortInts[i * 4 + 2] = alphaOffsets[from];
+            sortInts[i * 4 + 3] = alphaCounts[from];
+        }
+        for (let f = 0; f < n * FLOATS_PER_INSTANCE; f++) {
+            data[f] = sortData[f];
+        }
+        for (let i = 0; i < n; i++) {
+            opaqueOffsets[i] = sortInts[i * 4];
+            opaqueCounts[i] = sortInts[i * 4 + 1];
+            alphaOffsets[i] = sortInts[i * 4 + 2];
+            alphaCounts[i] = sortInts[i * 4 + 3];
+        }
+    }
+}
+
+// Scratch space for sorting, shared by every list
+let sortOrder = new Int32Array(64);
+let sortData = new Float32Array(64 * FLOATS_PER_INSTANCE);
+let sortInts = new Int32Array(64 * 4);
+
+function compareFrames(list: InstanceList, a: number, b: number): number {
+    return (
+        list.opaqueOffsets[a] - list.opaqueOffsets[b] ||
+        list.opaqueCounts[a] - list.opaqueCounts[b] ||
+        list.alphaOffsets[a] - list.alphaOffsets[b] ||
+        list.alphaCounts[a] - list.alphaCounts[b]
+    );
 }
 
 // The part of a page's vertices that its 16-bit indices reach, with a vertex
@@ -420,6 +485,9 @@ export class ActorRenderer {
         for (const page of this.pages) {
             for (const segment of page.segments) {
                 for (const list of segment.lists) {
+                    if (!this.hasMultiDraw) {
+                        list.sortByFrame();
+                    }
                     if (list.count > 0) {
                         this.dataArray.set(
                             list.data.subarray(0, list.count * FLOATS_PER_INSTANCE),
@@ -450,16 +518,27 @@ export class ActorRenderer {
             dc.numDraws = list.count;
             drawCall.draw();
         } else {
+            // A real draw call each, so a run of the same frame (sortByFrame) is
+            // one, instanced
             dc.numDraws = 1;
-            for (let i = 0; i < list.count; i++) {
-                if (counts[i] === 0) {
-                    continue;
+            let i = 0;
+            while (i < list.count) {
+                const offset = offsets[i];
+                const count = counts[i];
+                let end = i + 1;
+                while (end < list.count && offsets[end] === offset && counts[end] === count) {
+                    end++;
                 }
-                dc.offsets[0] = offsets[i];
-                dc.numElements[0] = counts[i];
-                drawCall.uniform("u_drawId", i);
-                drawCall.draw();
+                if (count > 0) {
+                    dc.offsets[0] = offset;
+                    dc.numElements[0] = count;
+                    dc.numInstances[0] = end - i;
+                    drawCall.uniform("u_drawId", i);
+                    drawCall.draw();
+                }
+                i = end;
             }
+            dc.numInstances[0] = 1;
         }
     }
 

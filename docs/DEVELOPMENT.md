@@ -420,7 +420,8 @@ src/game/
   client/GameTouch.ts, ui/TouchControls.tsx, ui/Mobile.css   touch screens (see Touch screens)
 server/     coop-relay.mjs: co-op's rooms, and passes each run's frames between its players
 src/mapviewer/webgl/actor/   actor renderer: baked animation frames drawn anywhere in the world,
-                             any number of them, one multi-draw per segment and pass
+                             any number of them, one multi-draw per segment and pass (without
+                             multi draw, one instanced draw per frame of an animation)
 src/mapviewer/worker/        RegionDataLoader (collision and heights for the whole arena in one
                              scene build), ItemIconLoader (inventory icons drawn like the client)
                              SoundLoader (sound effects synthesized off the main thread),
@@ -435,6 +436,13 @@ learned the rev 241 opcodes, the map loader can take extra map squares as plain 
 gives a ScapeRune map a loc a different model or size, and two bugs were fixed (floor collision missing on the edge of every
 map square, and a resize during loading leaving the 3D view in a corner). `?viewer=1` still loads
 map squares its own way (see below).
+
+The main thread and every worker decode the cache's tables for themselves, so they're kept small:
+an index's reference table is decoded the first time something reads the index, into flat arrays
+(`ReferenceTable`); a group's files stay in one array (`Archive`), so a file's data can be part of
+a bigger buffer (mind its `byteOffset`); and `MapViewer`'s loaders are made the first time they're
+used. The game's main thread only needs the textures, the seqs of animated scenery and the map
+index, plus the locs when a ScapeRune recipe runs.
 
 ### Boss fights as data
 
@@ -473,10 +481,29 @@ doesn't. The boxes follow what `main.vert.glsl` does to a vertex (`CullGrid.addI
 to where the shader puts things needs one there too. `render-stats.ts --cull=8` checks it.
 
 Actors are culled as spheres in `ActorRenderer.draw`, by `ActorModel.reach`: the furthest any vertex
-gets from the model's origin in any frame of any animation, so bosses' big swings count.
+gets from the model's origin in any frame of any animation, so bosses' big swings count. Without
+`WEBGL_multi_draw` (Safari, Firefox) every draw is a real draw call, so `InstanceList.sortByFrame`
+puts the actors on the same frame of the same animation together and each run of them is one
+instanced draw: a crowd of one enemy is a few draws, not hundreds. The shader finds an actor's data
+by `DRAW_ID + gl_InstanceID`.
 
-The game has no hover menus, so its frames have no interact buffer, and with no multisampling
-they're drawn straight into the texture the screen quad reads.
+Map squares keep only the world that can be seen. Past the play area the world fades into the sky
+over 6 tiles (`PLAY_AREA_FADE` in `fog.glsl`), and a ray from the camera only gets further from the
+play area once it's left it, so what's past the fade and further out than the camera can get is
+never in front of anything but the sky. `GameWebGLRenderer.setPlayArea` works that keep area out
+from `CAMERA_REACH` in `GameClient` (a run's camera can be 15 tiles south of the player, zoomed all
+the way out; the title screen's circles closer in). The worker leaves out terrain, scenery and
+animated scenery wholly outside it (`SdMapLoaderInput.keepArea`), and `MapManager` doesn't load a
+square that's all outside. Collision doesn't come from these squares (it's `RegionDataLoader`'s),
+so it isn't touched. If the camera's
+pitch or zoom changes, `CAMERA_REACH` has to follow it, or the hole where something was left out
+can show.
+
+The game has no hover menus, multisampling or FXAA, so its frames are drawn straight to the canvas
+(`drawsToCanvas`), with no framebuffer of their own and no screen quad to copy them across. The
+canvas has `alpha: false`: the page behind it is black, so there's nothing to blend it with. The
+map viewer keeps its framebuffer, for its hover menus. A script that reads a frame back reads the
+canvas, in the same task as the frame (there's no `preserveDrawingBuffer`).
 
 Enemies are baked when a run starts, for that map (`getMapEnemies`, `GameAssets.loadEnemies`), in
 place of the last map's: they're most of the actors' memory, and a map uses few of them. It goes by
@@ -519,6 +546,11 @@ starts there (`ActorSegment`), so a page is a draw per segment that has somethin
 model with more vertices in one frame than that has its whole bake fall back to 32-bit.
 `render-stats.ts --bake` shows each map's total and the heaviest actors, so a new boss can be
 checked against the other maps before a phone finds it.
+
+The overlay draws each hitsplat (its kind, number and size) once and copies it after, and the
+projectile glows likewise: text and gradients are the slowest things on a 2D canvas, and a big
+fight has a hundred splats. The effects it prunes each frame are pruned in place, and the enemies
+reuse one options object, to keep a phone's garbage collector quiet.
 
 `window.frameProbe` (dev only) counts what a frame sends to the GPU, at the GL calls:
 `await frameProbe.sample(60)` gives triangles, draws and CPU time, split into world and actors.
@@ -750,8 +782,9 @@ Everything touch only hangs off `pointer: coarse`, so a mouse and keyboard never
 - `ui/Mobile.css` lays the screens out again for a phone held sideways (`max-height: 520px`). The
   UI's zoom never goes below 1, as the pixel fonts don't survive it, so a new screen needs rules
   there too. Check it at 844x390 and 667x375. It's imported last, so it wins over the other CSS.
-- A touch screen also gets a pixel ratio capped at 1.5, 2 workers instead of 4, and a closer camera
-  on a phone.
+- A touch screen also gets a pixel ratio capped at 1.5 (2 elsewhere, `DeviceUtil.pixelRatio`), 2
+  workers instead of 4, textures at half size (64 a side, a quarter of the memory), and a closer
+  camera on a phone.
 - `public/manifest.webmanifest` lets a browser install the game to the home screen (HTTPS only,
   apart from localhost), opening full screen and sideways. `enterFullscreen` leaves an installed
   game alone. iOS ignores `orientation`, so an iPhone still gets the rotate notice, and it can give

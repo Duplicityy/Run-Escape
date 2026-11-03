@@ -1,5 +1,6 @@
 import {
     ActorAnim,
+    ActorDrawOptions,
     ActorModel,
     ActorRenderer,
     NO_TINT,
@@ -9,6 +10,7 @@ import { getEnemy } from "../content/enemies";
 import { CASKETS } from "../content/items";
 import { POWER_UP_BLINK, POWER_UP_COLOR, POWER_UP_LIFETIME, getPowerUp } from "../content/powerups";
 import { VISITOR_BLINK, VISITOR_COLOR } from "../content/randomEvents";
+import { EnemyDef } from "../content/types";
 import {
     DEATH_SINK_TICKS,
     Hero,
@@ -214,6 +216,8 @@ export class GameView {
     private readonly screen: ScreenPoint = { x: 0, y: 0, visible: false };
     private readonly screen2: ScreenPoint = { x: 0, y: 0, visible: false };
     private enemiesByUid = new Map<number, Enemy>();
+    private readonly hitsplatImages = new HitsplatImages();
+    private readonly glowImages = new Map<string, HTMLCanvasElement>();
     // The hero the camera's on: the focus, or in co-op while they're down, a
     // teammate (GameClient sets it)
     viewHero = 0;
@@ -780,7 +784,7 @@ export class GameView {
         // Drawn as its shielded version while it's shielded, if it has one
         const shielded = !enemy.dead && enemy.shieldEnd > tick ? def.shield?.look : undefined;
         const model = this.assets.get(
-            shielded ? getShieldedModelKey(def) : getEnemyModelKey(def, enemy.variant),
+            shielded ? getShieldedModelKey(def) : getCachedEnemyModelKey(def, enemy.variant),
         );
         if (!model) {
             this.assets.requestEnemy(def);
@@ -840,13 +844,13 @@ export class GameView {
         const fade = leaving ? Math.min(1, (leaving.endTick - tick) / LEAVING_FADE_TICKS) : 1;
         // The boss is hit all the time; a full flash would leave him white
         const flash = enemy.flash > 0 ? (enemy.boss ? 0.2 : 0.55) : 0;
-        actors.draw(model, anim, frame, x, height, y, enemy.yaw, {
-            scale: enemy.scale,
-            tint,
-            flash,
-            silhouette: enemy.boss,
-            alpha: Math.max(0, fade),
-        });
+        const options = enemyDrawOptions;
+        options.scale = enemy.scale;
+        options.tint = tint;
+        options.flash = flash;
+        options.silhouette = enemy.boss;
+        options.alpha = Math.max(0, fade);
+        actors.draw(model, anim, frame, x, height, y, enemy.yaw, options);
     }
 
     drawOverlay(overlay: Overlay, sim: Sim, alpha: number): void {
@@ -877,7 +881,7 @@ export class GameView {
             if (enemy.dead || enemy.hp >= enemy.maxHp || !enemy.elite) {
                 continue;
             }
-            const model = this.assets.get(getEnemyModelKey(enemy.def, enemy.variant));
+            const model = this.assets.get(getCachedEnemyModelKey(enemy.def, enemy.variant));
             const x = lerp(enemy.prevX, enemy.x, alpha);
             const y = lerp(enemy.prevY, enemy.y, alpha);
             const top =
@@ -929,7 +933,7 @@ export class GameView {
         scale: number,
     ): void {
         const ctx = overlay.ctx;
-        this.shouts = this.shouts.filter((s) => now - s.start < SHOUT_MS);
+        keepWhile(this.shouts, now, SHOUT_MS);
         const pixel = Math.max(1, Math.round(scale));
         ctx.font = `${16 * pixel}px "OSRS Bold", sans-serif`;
         ctx.textAlign = "center";
@@ -960,7 +964,7 @@ export class GameView {
                 if (!enemy || enemy.dead) {
                     continue;
                 }
-                const model = this.assets.get(getEnemyModelKey(enemy.def, enemy.variant));
+                const model = this.assets.get(getCachedEnemyModelKey(enemy.def, enemy.variant));
                 x = lerp(enemy.prevX, enemy.x, alpha);
                 y = lerp(enemy.prevY, enemy.y, alpha);
                 height = (model?.height ?? 200) * enemy.scale;
@@ -985,15 +989,19 @@ export class GameView {
         scale: number,
     ): void {
         const ctx = overlay.ctx;
-        this.hitsplats = this.hitsplats.filter((h) => now - h.start < HITSPLAT_MS);
+        keepWhile(this.hitsplats, now, HITSPLAT_MS);
         // The font at a whole number of screen pixels per font pixel, so the
         // numbers stay crisp; the client's splats scale along with it
         const pixel = Math.max(1, Math.round(scale));
+        const font = `${16 * pixel}px "OSRS Small", sans-serif`;
         ctx.textAlign = "left";
         ctx.textBaseline = "alphabetic";
-        ctx.font = `${16 * pixel}px "OSRS Small", sans-serif`;
+        ctx.font = font;
         // The splat is scaled down a little, so smooth it
         ctx.imageSmoothingQuality = "high";
+        // Drawn once each and copied, unless the font's still loading (its
+        // size would be the stand-in's)
+        const cache = document.fonts?.check(font) ?? true;
         for (const hitsplat of this.hitsplats) {
             const t = (now - hitsplat.start) / HITSPLAT_MS;
             if (t < 0) {
@@ -1016,7 +1024,16 @@ export class GameView {
             }
             ctx.globalAlpha = t > 0.7 ? (1 - t) / 0.3 : 1;
             const sprite = this.assets.getSprite(HITSPLAT_SPRITES[hitsplat.kind]);
-            drawHitsplat(ctx, sprite, p.x, p.y, pixel, hitsplat.amount, hitsplat.kind);
+            if (sprite && cache) {
+                const image = this.hitsplatImages.get(sprite, font, pixel, hitsplat);
+                ctx.drawImage(
+                    image.canvas,
+                    Math.round(p.x - image.inkWidth / 2) + image.left,
+                    Math.round(p.y - image.inkHeight / 2) + image.top,
+                );
+            } else {
+                drawHitsplat(ctx, sprite, p.x, p.y, pixel, hitsplat.amount, hitsplat.kind);
+            }
         }
         ctx.globalAlpha = 1;
     }
@@ -1144,7 +1161,7 @@ export class GameView {
     // A boss's swing landing
     private drawSwings(overlay: Overlay, sim: Sim, now: number, scale: number): void {
         const ctx = overlay.ctx;
-        this.swings = this.swings.filter((s) => now - s.start < SWING_MS);
+        keepWhile(this.swings, now, SWING_MS);
         for (const swing of this.swings) {
             const t = (now - swing.start) / SWING_MS;
             this.traceGroundCircle(overlay, sim, swing.x, swing.y, swing.radius * (0.7 + 0.3 * t));
@@ -1182,21 +1199,45 @@ export class GameView {
             const model = spotAnim !== undefined ? this.assets.get("spot:" + spotAnim) : undefined;
             const drawn = model !== undefined && hasGeometry(model);
             const radius = (drawn ? PROJECTILE_GLOW : 9) * scale;
-            const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
-            if (drawn) {
-                glow.addColorStop(0, "rgba(255, 170, 60, 0.5)");
-                glow.addColorStop(0.5, "rgba(255, 120, 20, 0.28)");
-                glow.addColorStop(1, "rgba(255, 90, 0, 0)");
-            } else {
-                glow.addColorStop(0, "rgba(255, 255, 220, 0.95)");
-                glow.addColorStop(0.4, "rgba(255, 140, 40, 0.8)");
-                glow.addColorStop(1, "rgba(255, 60, 0, 0)");
-            }
-            ctx.fillStyle = glow;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-            ctx.fill();
+            const glow = this.getGlowImage(drawn, radius);
+            ctx.drawImage(glow, p.x - glow.width / 2, p.y - glow.height / 2);
         }
+    }
+
+    // A glow drawn once for each look and size, rather than a gradient for
+    // every projectile every frame
+    private getGlowImage(drawn: boolean, radius: number): HTMLCanvasElement {
+        const key = `${drawn} ${radius}`;
+        let canvas = this.glowImages.get(key);
+        if (canvas) {
+            return canvas;
+        }
+        if (this.glowImages.size >= 8) {
+            // The screen was resized
+            this.glowImages.clear();
+        }
+        canvas = document.createElement("canvas");
+        const size = Math.ceil(radius) * 2 + 2;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d")!;
+        const c = size / 2;
+        const glow = ctx.createRadialGradient(c, c, 0, c, c, radius);
+        if (drawn) {
+            glow.addColorStop(0, "rgba(255, 170, 60, 0.5)");
+            glow.addColorStop(0.5, "rgba(255, 120, 20, 0.28)");
+            glow.addColorStop(1, "rgba(255, 90, 0, 0)");
+        } else {
+            glow.addColorStop(0, "rgba(255, 255, 220, 0.95)");
+            glow.addColorStop(0.4, "rgba(255, 140, 40, 0.8)");
+            glow.addColorStop(1, "rgba(255, 60, 0, 0)");
+        }
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(c, c, radius, 0, Math.PI * 2);
+        ctx.fill();
+        this.glowImages.set(key, canvas);
+        return canvas;
     }
 
     private drawSlashes(
@@ -1207,7 +1248,7 @@ export class GameView {
         scale: number,
     ): void {
         const ctx = overlay.ctx;
-        this.slashes = this.slashes.filter((s) => now - s.start < SLASH_MS);
+        keepWhile(this.slashes, now, SLASH_MS);
         for (const slash of this.slashes) {
             const t = (now - slash.start) / SLASH_MS;
             // Follows the player, like the weapon does
@@ -1265,7 +1306,7 @@ export class GameView {
 
     private drawAuras(overlay: Overlay, sim: Sim, alpha: number, now: number): void {
         const ctx = overlay.ctx;
-        this.auras = this.auras.filter((a) => now - a.start < AURA_MS);
+        keepWhile(this.auras, now, AURA_MS);
         for (const aura of this.auras) {
             const t = (now - aura.start) / AURA_MS;
             const radius = aura.radius * (0.5 + t * 0.5);
@@ -1282,7 +1323,7 @@ export class GameView {
     // Chinchompa explosions: a fiery ring racing out over the ground
     private drawBlasts(overlay: Overlay, sim: Sim, now: number, scale: number): void {
         const ctx = overlay.ctx;
-        this.blasts = this.blasts.filter((b) => now - b.start < BLAST_MS);
+        keepWhile(this.blasts, now, BLAST_MS);
         for (const blast of this.blasts) {
             const t = (now - blast.start) / BLAST_MS;
             const eased = 1 - (1 - t) * (1 - t);
@@ -1672,6 +1713,86 @@ function drawHitsplat(
     ctx.fillText(text, textX, textY);
 }
 
+// A hitsplat drawn once, as drawHitsplat would at a whole pixel, to be copied:
+// measuring and drawing its text for every one of a hundred splats each frame
+// is the slowest thing on the overlay. left and top are where the canvas goes
+// from the corner of the digits.
+type HitsplatImage = {
+    sprite: HTMLCanvasElement;
+    canvas: HTMLCanvasElement;
+    inkWidth: number;
+    inkHeight: number;
+    left: number;
+    top: number;
+};
+
+// Enough for every number in a busy fight
+const MAX_HITSPLAT_IMAGES = 160;
+
+class HitsplatImages {
+    private readonly images = new Map<string, HitsplatImage>();
+    private font = "";
+
+    get(
+        sprite: HTMLCanvasElement,
+        font: string,
+        pixel: number,
+        hitsplat: { kind: HitsplatKind; amount: number },
+    ): HitsplatImage {
+        if (font !== this.font) {
+            this.images.clear();
+            this.font = font;
+        }
+        const key = hitsplat.kind + hitsplat.amount;
+        let image = this.images.get(key);
+        if (image && image.sprite === sprite) {
+            // Most recently used last, for dropping the oldest
+            this.images.delete(key);
+            this.images.set(key, image);
+            return image;
+        }
+        if (this.images.size >= MAX_HITSPLAT_IMAGES) {
+            this.images.delete(this.images.keys().next().value!);
+        }
+        image = drawHitsplatImage(sprite, font, pixel, hitsplat.amount, hitsplat.kind);
+        this.images.set(key, image);
+        return image;
+    }
+}
+
+function drawHitsplatImage(
+    sprite: HTMLCanvasElement,
+    font: string,
+    pixel: number,
+    amount: number,
+    kind: HitsplatKind,
+): HitsplatImage {
+    const canvas = document.createElement("canvas");
+    let ctx = canvas.getContext("2d")!;
+    ctx.font = font;
+    const ink = ctx.measureText(String(amount));
+    const inkWidth = ink.actualBoundingBoxLeft + ink.actualBoundingBoxRight;
+    const inkHeight = ink.actualBoundingBoxAscent + ink.actualBoundingBoxDescent;
+    const width = sprite.width * pixel * HITSPLAT_SPRITE_SCALE;
+    const height = sprite.height * pixel * HITSPLAT_SPRITE_SCALE;
+    // Room for the splat and the digits' shadow, a pixel past each
+    const left = Math.floor(Math.min(0, inkWidth / 2 - width / 2)) - 1;
+    const top = Math.floor(Math.min(0, inkHeight / 2 - height / 2)) - 1;
+    const right = Math.ceil(Math.max(inkWidth + pixel, inkWidth / 2 + width / 2)) + 1;
+    const bottom = Math.ceil(Math.max(inkHeight + pixel, inkHeight / 2 + height / 2)) + 1;
+    canvas.width = right - left;
+    canvas.height = bottom - top;
+    // Sizing the canvas resets its context
+    ctx = canvas.getContext("2d")!;
+    ctx.font = font;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.imageSmoothingQuality = "high";
+    // As drawHitsplat, with the digits' corner at (-left, -top), a whole pixel
+    drawHitsplat(ctx, sprite, -left + inkWidth / 2, -top + inkHeight / 2, pixel, amount, kind);
+    return { sprite, canvas, inkWidth, inkHeight, left, top };
+}
+
 // Fill and edge of the blob that stands in for a splat that didn't load
 const HITSPLAT_BLOB_COLORS: Record<HitsplatKind, [string, string]> = {
     damage: ["#b0120c", "#3a0402"],
@@ -1705,6 +1826,35 @@ function drawHitsplatBlob(
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = HITSPLAT_BLOB_COLORS[kind][1];
     ctx.stroke();
+}
+
+// One for every enemy drawn, as there can be hundreds a frame (the renderer
+// only reads it while it's drawing)
+const enemyDrawOptions: ActorDrawOptions = {};
+
+// getEnemyModelKey, made once rather than for every enemy every frame
+const enemyModelKeys = new Map<EnemyDef, string[]>();
+
+function getCachedEnemyModelKey(def: EnemyDef, variant: number): string {
+    let keys = enemyModelKeys.get(def);
+    if (!keys) {
+        keys = [];
+        enemyModelKeys.set(def, keys);
+    }
+    return (keys[variant] ??= getEnemyModelKey(def, variant));
+}
+
+// Drops what's run its time, in place: the overlay's effects are pruned every
+// frame, and a new array each time is garbage for a phone to collect
+function keepWhile<T extends { start: number }>(list: T[], now: number, ms: number): void {
+    let kept = 0;
+    for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        if (now - item.start < ms) {
+            list[kept++] = item;
+        }
+    }
+    list.length = kept;
 }
 
 // Baked models are empty when the cache had nothing to draw

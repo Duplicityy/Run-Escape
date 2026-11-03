@@ -14,6 +14,37 @@ function getMapDistance(x: number, z: number, mapX: number, mapY: number): numbe
 
 type LoadMapFunction = (mapX: number, mapY: number) => void;
 
+// Tiles a square's geometry can reach past its edge (a model on the edge), for
+// whether a square loaded for one load area is the same for another
+const SQUARE_OVERHANG = 4;
+
+// Whether a square is wholly inside an area (world tiles, x0, z0, x1, z1)
+function isSquareInside(area: vec4 | undefined, mapX: number, mapY: number): boolean {
+    if (!area) {
+        return true;
+    }
+    const x = mapX * Scene.MAP_SQUARE_SIZE;
+    const z = mapY * Scene.MAP_SQUARE_SIZE;
+    const size = Scene.MAP_SQUARE_SIZE;
+    return (
+        area[0] <= x - SQUARE_OVERHANG &&
+        area[1] <= z - SQUARE_OVERHANG &&
+        area[2] >= x + size + SQUARE_OVERHANG &&
+        area[3] >= z + size + SQUARE_OVERHANG
+    );
+}
+
+// Whether any of a square is inside an area
+function isSquareTouching(area: vec4 | undefined, mapX: number, mapY: number): boolean {
+    if (!area) {
+        return true;
+    }
+    const x = mapX * Scene.MAP_SQUARE_SIZE;
+    const z = mapY * Scene.MAP_SQUARE_SIZE;
+    const size = Scene.MAP_SQUARE_SIZE;
+    return area[0] < x + size && area[2] > x && area[1] < z + size && area[3] > z;
+}
+
 export interface MapSquare {
     mapX: number;
     mapY: number;
@@ -44,6 +75,10 @@ export class MapManager<T extends MapSquare> {
     visibleMaps: T[] = [];
 
     mapSquares: Map<number, T> = new Map();
+
+    // World tiles (x0, z0, x1, z1) the squares are loaded for: one wholly
+    // outside isn't loaded at all. Unset loads everything in range.
+    loadArea?: vec4;
 
     constructor(
         readonly maxQueuedTasks: number,
@@ -103,12 +138,35 @@ export class MapManager<T extends MapSquare> {
         this.mapSquares.clear();
     }
 
+    // A square loaded for the last area that isn't wholly inside this one too is
+    // loaded again: what it leaves out depends on the area
+    setLoadArea(area: vec4 | undefined): void {
+        const last = this.loadArea;
+        if (last === area || (last && area && vec4.equals(last, area))) {
+            return;
+        }
+        this.loadArea = area && vec4.clone(area);
+        for (const map of Array.from(this.mapSquares.values())) {
+            if (
+                !isSquareInside(last, map.mapX, map.mapY) ||
+                !isSquareInside(area, map.mapX, map.mapY)
+            ) {
+                this.removeMap(map.mapX, map.mapY);
+            }
+        }
+        // What's on its way was asked for with the last area
+        this.loadingMapIds.clear();
+        this.renderBounds = vec4.fromValues(-1, -1, -1, -1);
+    }
+
     getMap(mapX: number, mapY: number): T | undefined {
         return this.mapSquares.get(getMapSquareId(mapX, mapY));
     }
 
     addMap(mapX: number, mapY: number, mapSquare: T): void {
         const mapId = getMapSquareId(mapX, mapY);
+        // Asked for twice (the load area changed meanwhile)
+        this.mapSquares.get(mapId)?.delete();
         this.loadingMapIds.delete(mapId);
         this.invalidMapIds.delete(mapId);
         this.mapSquares.set(mapId, mapSquare);
@@ -175,7 +233,7 @@ export class MapManager<T extends MapSquare> {
                         continue;
                     }
                     const mapId = getMapSquareId(x, y);
-                    if (this.invalidMapIds.has(mapId)) {
+                    if (this.invalidMapIds.has(mapId) || !isSquareTouching(this.loadArea, x, y)) {
                         continue;
                     }
 
@@ -192,7 +250,8 @@ export class MapManager<T extends MapSquare> {
                     mapX < mapStartX - unloadDistance ||
                     mapX > mapEndX + unloadDistance ||
                     mapY < mapStartY - unloadDistance ||
-                    mapY > mapEndY + unloadDistance
+                    mapY > mapEndY + unloadDistance ||
+                    !isSquareTouching(this.loadArea, mapX, mapY)
                 ) {
                     this.removeMap(mapX, mapY);
                 }

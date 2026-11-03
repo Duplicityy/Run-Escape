@@ -45,17 +45,58 @@ export class MapViewer {
     cacheSystem!: CacheSystem;
     loaderFactory!: CacheLoaderFactory;
 
-    textureLoader!: TextureLoader;
-    seqTypeLoader!: SeqTypeLoader;
-    seqFrameLoader!: SeqFrameLoader;
+    // The loaders below are each made the first time they're used: the game's
+    // main thread needs few of them (its workers load the world), and each one
+    // holds a decoded config group
+    private loaders = new Map<string, unknown>();
 
-    locTypeLoader!: LocTypeLoader;
-    objTypeLoader!: ObjTypeLoader;
-    npcTypeLoader!: NpcTypeLoader;
+    private getLoader<T>(name: string, create: () => T): T {
+        let loader = this.loaders.get(name) as T | undefined;
+        if (loader === undefined) {
+            loader = create();
+            this.loaders.set(name, loader);
+        }
+        return loader;
+    }
 
-    basTypeLoader!: BasTypeLoader;
+    get textureLoader(): TextureLoader {
+        return this.getLoader("texture", () => this.loaderFactory.getTextureLoader());
+    }
 
-    varManager!: VarManager;
+    get seqTypeLoader(): SeqTypeLoader {
+        return this.getLoader("seq", () => this.loaderFactory.getSeqTypeLoader());
+    }
+
+    get seqFrameLoader(): SeqFrameLoader {
+        return this.getLoader("seqFrame", () => this.loaderFactory.getSeqFrameLoader());
+    }
+
+    get locTypeLoader(): LocTypeLoader {
+        return this.getLoader("loc", () => this.loaderFactory.getLocTypeLoader());
+    }
+
+    get objTypeLoader(): ObjTypeLoader {
+        return this.getLoader("obj", () => this.loaderFactory.getObjTypeLoader());
+    }
+
+    get npcTypeLoader(): NpcTypeLoader {
+        return this.getLoader("npc", () => this.loaderFactory.getNpcTypeLoader());
+    }
+
+    get basTypeLoader(): BasTypeLoader {
+        return this.getLoader("bas", () => this.loaderFactory.getBasTypeLoader());
+    }
+
+    get varManager(): VarManager {
+        return this.getLoader("varManager", () => {
+            const varManager = new VarManager(this.loaderFactory.getVarBitTypeLoader());
+            const questTypeLoader = this.loaderFactory.getQuestTypeLoader();
+            if (questTypeLoader) {
+                varManager.setQuestsCompleted(questTypeLoader);
+            }
+            return varManager;
+        });
+    }
 
     mapFileLoader!: MapFileLoader;
     mapFileIndex!: MapFileIndex;
@@ -194,19 +235,7 @@ export class MapViewer {
         this.workerPool.initCache(cache, this.objSpawns, this.npcSpawns);
         this.clearMapImageUrls();
 
-        this.textureLoader = this.loaderFactory.getTextureLoader();
-        this.seqTypeLoader = this.loaderFactory.getSeqTypeLoader();
-        this.seqFrameLoader = this.loaderFactory.getSeqFrameLoader();
-        this.locTypeLoader = this.loaderFactory.getLocTypeLoader();
-        this.objTypeLoader = this.loaderFactory.getObjTypeLoader();
-        this.npcTypeLoader = this.loaderFactory.getNpcTypeLoader();
-        this.basTypeLoader = this.loaderFactory.getBasTypeLoader();
-
-        this.varManager = new VarManager(this.loaderFactory.getVarBitTypeLoader());
-        const questTypeLoader = this.loaderFactory.getQuestTypeLoader();
-        if (questTypeLoader) {
-            this.varManager.setQuestsCompleted(questTypeLoader);
-        }
+        this.loaders.clear();
 
         this.mapFileLoader = this.loaderFactory.getMapFileLoader();
         this.mapFileIndex = this.mapFileLoader.mapFileIndex;
