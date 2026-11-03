@@ -36,6 +36,7 @@ go stale. Add anything that cost you time to work out.
 | Co-op's numbers: the party's scaling, boss copies      | `src/game/content/coop.ts`                                          |
 | Caskets and the inventory                              | `src/game/core/Loot.ts`                                             |
 | Phosani's Nightmare, the one-fight map (its arena too) | `src/game/content/phosani.ts`, `scaperune/maps/inquisitorsField.ts` |
+| Her fight: its design and playtest record              | `docs/design/phosanis-nightmare.md`                                 |
 | Random events: who turns up, what they do              | `src/game/content/randomEvents.ts`                                  |
 | Save data and migrations                               | `src/game/core/save.ts`                                             |
 | One tab saving, newer saves, unreadable ones           | `docs/DEVELOPMENT.md`, Saves                                        |
