@@ -6,7 +6,9 @@ what was wrong, what was tried, what was kept and why. Written 2026-11-03 agains
 80 on the `phosanis-nightmare` branch. The numbers below are the ones the code had at the time;
 the data in `src/game/content/phosani.ts` is the truth if they drift. The plan the work followed
 is `docs/plans/phosani-harder.md`. Section 12 is the arena: where its pieces came from, what
-was tried, and what the player sent back.
+was tried, and what the player sent back. Section 13 is the session before the playtests: the
+research, which bullet hell each pattern came from, the tools built for them, the eggs and her
+track.
 
 ## 1. What the fight is
 
@@ -425,10 +427,23 @@ unlocked, never counted. The Inquisitor is Phosani's, and the staff is the whole
   view is the heaviest at about 68,000 world triangles against 34,000 in the middle.
 - **The sleepers from above**: a figure a tile and a half tall, lifted, reads as a pale elongated
   shape from the play camera, as it does in the real arena. Nothing better was found.
+- **Four pattern ideas from the research, not built** (section 13), each a new mechanism rather
+  than a data field: a **curtain**, a wall of petals from one arena edge to the other with
+  random holes, warned by a line on the ground (Hush's continuum, the classic wall); a
+  **bursting orb**, a slow projectile that pops into a ring where it lands, so the danger is
+  where you were going (the Dragun's rocket, Hush's splitting shots; a parasite egg in flight
+  would fit); **sleep petals**, bullets that hurt only while you're moving, which inverts the
+  survivors reflex and fits the spores' drowsiness (Undertale's blue attacks); and **darkness**,
+  a few seconds with her ground warnings undrawn and only their sounds left (the real fight
+  turns your prayer off in phase 3; Rumia's whole theme), risky on a phone, so short and rare.
+  The fifth idea, a desperation finale, is stage 3's `finale`.
 
 ## 11. Fields added
 
-For anyone building on this: `BossDef.bulletGrace`, `fallSeconds`; `BulletPatternDef.channel`,
+For anyone building on this. From the pattern session (section 13): `BulletPatternDef.gapAt`,
+`mirror`, `speedUp` and `around`; `BossAttackDef.follow`; `summon.distance`; `EnemyDef.objId`
+and `hatches` (`Enemy.hatchTick`); `BulletEmitter.aim`; `BossState.follow`. From the hardening:
+`BossDef.bulletGrace`, `fallSeconds`; `BulletPatternDef.channel`,
 `burst`; `BossPhasesDef.phases[i].ambient`, `tempo`, `speed` and `finale`; `around: "player"`
 on a ring of ground marks; `radius` on projectile attacks; `WeaponDef.impactFit`;
 `CharacterDef.only`; `Hero.damageByAttack`. From the second playtest: `BossIntroDef.atMiddle`
@@ -534,3 +549,81 @@ arena and the new.
 - The session's worktree needed its own `node_modules` and a copied cache to run the game, and
   the branch had to be moved to the main checkout for the player to see it; that move is what
   took the map off the menu once.
+
+## 13. Before the playtests: the patterns, the eggs and her track
+
+The session before the hardening took the fight from the kit that mirrored The Nightmare (fans,
+spiral, sweep, claws, charge, a gapped ring, lattice rings, a tracking barrage, hunting orbs) to
+the bullet hell it is now. It was asked for as research first: read how bullet hell bosses are
+built, then propose attacks. Everything below was built in that session; the hardening
+(section 5) and the second playtest (section 6) then retuned most of it, so the numbers here are
+the ones it began with.
+
+### The research
+
+Sparen's danmaku design guides, the Touhou wiki's pages on Rumia and Doremy Sweet, Enter the
+Gungeon's Beholster and High Dragun, The Binding of Isaac's Hush, and the OSRS wiki's own page on
+Phosani's Nightmare. Section 2's principles came out of it. Three more that shaped particular
+attacks: an even fan straddles the player and an odd one aims at them, so an even fan pins them
+in place for the next thing (Sparen); alternate direction each wave, so the habit the first wave
+teaches is what the second punishes (Doremy's spiral turns one way on odd waves and the other on
+even); and give the player something to shoot down mid-dodge (the Beholster's missiles, the
+Dragun's knives lodged in the walls).
+
+### Where each pattern came from
+
+| Attack              | From                                                                | Tool it needed        |
+| ------------------- | ------------------------------------------------------------------- | --------------------- |
+| Turning wall        | Sparen's negative space: the gap is the attack, and it moves        | none (`gap`, `turn`)  |
+| Pinwheel            | Touhou's curving suns: a straight line out walks into the hooks     | none (`curve`)        |
+| Double sweep        | The Beholster's beam, as a bar through her                          | none (two-bullet fan) |
+| Counter-spiral      | Doremy Sweet's spiral, odd waves one way and even the other         | `mirror`              |
+| Sealing ring        | Hush's tight ring with its gap at Isaac; the next gap further round | `gapAt`               |
+| Closing petals      | Sparen's stacks: same angle, several speeds, so they catch up       | `speedUp`             |
+| Rings, then shots   | Rumia's Demarcation: slow rings, then an aimed volley after a delay | `follow`              |
+| Scissors            | Two sweep arms opening from where you stand, one each way           | `mirror`              |
+| Parted petals       | Sparen's even fan, then her claw on the tile you held still on      | `follow`              |
+| The dream closes in | Doremy's Ochre Confusion: a ring round the player, flying in        | `around`, `gapAt`     |
+| Rooted husks        | The Dragun's knives: turrets to shoot down under fire               | `summon.distance`     |
+
+The rooted husks went in the second playtest (section 6, round 2): the player wanted husks that
+run and hold, not ones that stand and shoot.
+
+### The tools
+
+Each was a few lines in `fireVolley` or `startPattern` and opened several patterns, which is why
+they were built rather than the bigger ideas now in section 10: `gapAt` centres a ring's gap on
+the aim or its opposite instead of a random angle; `mirror` fires each volley again mirrored
+about the aim, so the second turns the other way (one emitter, no second state); `speedUp` adds
+to each volley's speed by its index, with each volley's life from its own speed; `around` spawns
+a ring's bullets on a circle round the nearest player, flying inward, recentred every volley so
+the gap is the way out rather than running; `follow` queues a named attack from the moment the
+first one fires and starts it at its delay through whatever is in the air, waiting only for a
+hold. For an `around` ring, `gapAt: "away"` is the side towards her, which is why the dream's
+way out is "run to her".
+
+### The eggs
+
+Asked for as the real fight's parasites, thrown out as eggs to break before they hatch, with the
+Parasitic egg as the model. The cache has no egg NPC or loc for the Nightmare: `find-npcs`,
+`find-objs` and `find-locs` over "egg", "parasit", "egg sac" and "larva" found only the pet's
+item, 25838. So an enemy can be drawn as an item's model (`EnemyDef.objId`, baked as an `obj`
+under the enemy's own key, one still frame that `getAnim` falls back to), and an enemy can
+hatch (`hatches`: gone at its time with its `into` out where it stood, unless killed first).
+They began at 300 hitpoints, three of them 6 tiles round the player, hatching at 9 s; the
+second playtest made them 100, flung out of her, 11 tiles off, hatching at 15 s. At three times
+scale they looked like boulders in the browser, so they're drawn at one and a half. Her
+parasites were given the charging totem as a second heal target then, which the hardening kept
+and made far stronger (section 5, round 7).
+
+### Her track
+
+The Bane of Ashihama is the OSRS Wiki's recording (5.2 MB, Ogg Vorbis, the same source and
+licence as Massacre: Jagex's copyright, used with permission). The map had named it a session
+earlier and the client already looked a track up by its file name, so adding the file was the
+whole change, and the README credits the wiki for recordings.
+
+### What the bot said
+
+Nothing, as section 3 found: the Inquisitor died in phase 1 at 0:42, 0:21 and 0:28 on three
+seeds before the patterns and 0:24, 0:29 and 0:42 after them.
