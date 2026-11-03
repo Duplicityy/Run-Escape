@@ -32,10 +32,10 @@ the version in the corner).
 - Firemaking, a new skill, by Okaeri: up to 3 banishes a run. Banish a weapon or passive on a level
   up (pick another instead), or a casket's item (it's alched), and it won't be offered again that
   run. Banishing a set's piece banishes the whole set.
-- Separate Melee, Ranged and Magic skill pages, by braiansmarzaro. Each can spend the full gold
+- Separate Melee, Ranged and Magic skill pages, by Deivid Smarzaro. Each can spend the full gold
   budget without taking gold from the others, refunds only touch the page you're on, and exported
   saves keep them.
-- Single rank refunds, by braiansmarzaro: refund a skill rank with its arrow button, or right-click
+- Single rank refunds, by Deivid Smarzaro: refund a skill rank with its arrow button, or right-click
   on desktop, without resetting the rest.
 - Multiplayer shows where players are from: each open room has its host's flag and each player in
   a room theirs, the world list's own flags (a country without one shows its letters). Turn off
@@ -73,11 +73,11 @@ the version in the corner).
 - A phone taking the graphics away mid-run pauses a solo run, and Reload ends it keeping its coins
   and quests.
 - Class skill tabs stay grouped on the left, with the selected page pressed in and green
-  immediately, even while hovered. Fixed by braiansmarzaro.
+  immediately, even while hovered. Fixed by Deivid Smarzaro.
 - Coin icons stay visible while a changed stack size loads after buying or refunding skills. Fixed
-  by braiansmarzaro.
+  by Deivid Smarzaro.
 - Maxed skills no longer look buyable, and touch long presses no longer refund ranks by accident.
-  Fixed by braiansmarzaro.
+  Fixed by Deivid Smarzaro.
 
 ## 0.23.0 - 2026-11-02
 
