@@ -173,6 +173,12 @@ Or build with `VITE_COOP_URL=wss://relay.example.com/coop npm run build` to poin
 else. `npm start` and `npm run preview` run a relay of their own at `/coop`
 (`npm run start:singleplayer`, or `MULTIPLAYER=off`, without).
 
+**On Cloudflare instead.** [server/cloudflare/](../server/cloudflare/README.md) is the same relay
+as a Cloudflare Worker with Durable Objects: a lobby for the rooms list and names, and each room its
+own object, started near its host, so a run's traffic doesn't cross the world to one server. There's
+no server to run, and it's at a `workers.dev` address with no domain needed. Its README has the
+setup, from `wrangler login` to the build, and what it costs. The game works with either relay.
+
 #### Optional multiplayer metrics
 
 A server that hosts the game (`npm run serve`, or the standalone relay) serves multiplayer metrics
@@ -425,6 +431,7 @@ src/game/
             formatCompact (short numbers like 9.5K and 1.2B, for the damage panel)
   client/GameTouch.ts, ui/TouchControls.tsx, ui/Mobile.css   touch screens (see Touch screens)
 server/     coop-relay.mjs: co-op's rooms, and passes each run's frames between its players
+  cloudflare/  the same relay on Cloudflare Durable Objects, each room near its host (README.md)
 src/mapviewer/webgl/actor/   actor renderer: baked animation frames drawn anywhere in the world,
                              any number of them, one multi-draw per segment and pass (without
                              multi draw, one instanced draw per frame of an animation)
@@ -817,6 +824,23 @@ ready state and loadout) and forwards `up` messages from guests to the host and 
 from the host to everyone else. The host leaving a run ends it for everyone; in the lobby the
 room goes to the next player. The balance bot plays a party with `PARTY=4`, each player on their
 own, so it can't show teamwork.
+
+The Cloudflare relay (`server/cloudflare/`) speaks the same protocol, with one more message: it
+answers `create` and `join` with a `goto` (a room code and a one-time ticket), and `CoopLobby`
+then makes or joins the room on that room's own connection, at `coop/room/<code>`. What's said in
+a room goes over that connection (`ROOM_MESSAGES` in `CoopLobby.ts`); pings, the list and
+making or joining go to the lobby's. The Node relay never sends `goto`, so with it there's only
+the one connection. Change the protocol in both relays.
+
+Cloudflare restarts its objects now and then, dropping their connections, so the Cloudflare relay's
+`room` message carries a `token`. `CoopLobby` reconnects to `coop/room/<code>?resume=<token>` for
+`RESUME_WINDOW_MS` when the room's connection drops, holding what's said meanwhile, and the room
+(kept in storage) holds the player's place a little longer. A guest that misses some of the host's
+frames sees it from `from` on the next `down` and asks for them with a `resend` up message; the
+host keeps 20 seconds of what it's sent (longer than the room holds a dropped player) and answers
+once a second at most, from the earliest frame asked for, to every guest; each takes only frames
+after the ones it has. That part works on either relay. The Node relay sends no
+token, so with it a dropped connection still ends a guest's run.
 
 The open rooms list comes a page at a time (8 rooms, the fullest first, then the ones waiting
 longest), worked out once after each change rather than for every request; the menu asks for its
