@@ -5222,7 +5222,9 @@ export class Sim {
             landed[index] = true;
             const enemy = this.enemies.find((e) => e.uid === hazard.enemyUid);
             if (hazard.damage > 0) {
-                const damage = Math.max(1, Math.round(hazard.damage * share));
+                // A full share (every map but the raid's) passes the damage through as it was
+                const damage =
+                    share === 1 ? hazard.damage : Math.max(1, Math.round(hazard.damage * share));
                 this.bossHit(enemy?.def.id ?? "", enemy, attack, damage, false);
             } else if (attack.effect && !this.reviving) {
                 this.applyPlayerEffect(attack.effect, enemy);

@@ -18,8 +18,9 @@ export const SLOW_SECONDS = 120;
 export const SAFE_POINTS = 50;
 
 // Coins for each raid point a room's cleared with (the party's average), and on hard mode this
-// many times as many. A clean clear of the Theatre comes to about 22,000, or 33,000 on hard.
-export const RAID_COINS_PER_POINT = 20;
+// many times as many. A clean clear of the Theatre comes to about 4,400, or 6,600 on hard: a little
+// more than a good campaign run, so clearing one room and dying doesn't out-earn one.
+export const RAID_COINS_PER_POINT = 4;
 export const HARD_RAID_COINS = 1.5;
 // Expert mode (hard mode with the Nylocas's colours): twice as many
 export const EXPERT_RAID_COINS = 2;

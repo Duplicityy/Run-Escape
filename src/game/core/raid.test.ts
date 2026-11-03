@@ -281,8 +281,8 @@ describe("raids", () => {
             (o) => o.kind === "supply" && o.supplyId === "divine_super_combat",
         );
         expect(sim.chooseEventOption(divine)).toBe(false);
-        // 200 points' worth: 20 coins each
-        expect(sim.coins).toBe(4000);
+        // 200 points' worth: 4 coins each
+        expect(sim.coins).toBe(800);
 
         sim.leaveEvent();
         expect(sim.state).toBe("playing");
@@ -588,8 +588,8 @@ describe("expert mode", () => {
         const sim = raid(true);
         toRoomSecond(sim, 31);
         killBosses(sim);
-        // 200 points' worth at 20 coins, twice over
-        expect(sim.coins).toBe(8000);
+        // 200 points' worth at 4 coins, twice over
+        expect(sim.coins).toBe(1600);
         Object.assign(sim, { map: getMap("theatre_of_blood") });
         sim.trophies.clear();
         sim["openRaidChest"]();
