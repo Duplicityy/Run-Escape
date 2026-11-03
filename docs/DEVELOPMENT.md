@@ -518,6 +518,11 @@ too much for a phone. `ActorBakeLoader` samples those every `SKELETAL_TICK_STEP`
 `render-stats.ts --bake` shows each map's total and the heaviest actors, so a new boss can be
 checked against the other maps before a phone finds it.
 
+The overlay draws each hitsplat (its kind, number and size) once and copies it after, and the
+projectile glows likewise: text and gradients are the slowest things on a 2D canvas, and a big
+fight has a hundred splats. The effects it prunes each frame are pruned in place, and the enemies
+reuse one options object, to keep a phone's garbage collector quiet.
+
 `window.frameProbe` (dev only) counts what a frame sends to the GPU, at the GL calls:
 `await frameProbe.sample(60)` gives triangles, draws and CPU time, split into world and actors.
 
