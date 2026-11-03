@@ -5,6 +5,17 @@ the version in the corner).
 
 ## Unreleased
 
+### Changed
+
+- Endless runs: after the first round, levels come about a dozen a round, not thirty, so a weapon
+  you pour everything into keeps up with the rounds rather than outgrowing them, and a long run
+  gets harder instead of its numbers running away.
+
+### Fixed
+
+- Huge numbers stay short: the damage panel, stats and hitsplats go on past trillions to Qa,
+  Qi, Sx and on, then powers of ten, rather than growing digit by digit.
+
 ## 0.23.0 - 2026-11-02
 
 ### Added

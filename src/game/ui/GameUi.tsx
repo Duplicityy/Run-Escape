@@ -1935,7 +1935,8 @@ function formatPerSecond(perSecond: number): string {
 }
 
 // Big numbers the way OSRS shows a stack: in full up to 99,999, then 100K,
-// then 10M, so an endless run's totals still fit
+// then 10M, so an endless run's totals still fit. Past what a stack can hold
+// (10,000M), the damage panel's short form: 12B, 4.6Qa.
 function formatBig(value: number): string {
     const n = Math.round(value);
     if (n < 100_000) {
@@ -1944,7 +1945,10 @@ function formatBig(value: number): string {
     if (n < 10_000_000) {
         return `${Math.floor(n / 1000).toLocaleString()}K`;
     }
-    return `${Math.floor(n / 1_000_000).toLocaleString()}M`;
+    if (n < 10_000_000_000) {
+        return `${Math.floor(n / 1_000_000).toLocaleString()}M`;
+    }
+    return formatCompact(n);
 }
 
 // A stat's number, shortened when it's big, in full when pointed at

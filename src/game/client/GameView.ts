@@ -31,6 +31,7 @@ import {
     Thrall,
     Visitor,
 } from "../core/entities";
+import { formatCompact } from "../ui/formatCompact";
 import { BossFightView } from "./BossFightView";
 import {
     CANNON_MODEL_KEY,
@@ -1649,7 +1650,9 @@ function drawHitsplat(
     // The digits themselves (not the space around them) on whole pixels so
     // they stay sharp, and the splat (scaled, so smoothed anyway) centred on
     // them
-    const text = String(amount);
+    // In full, as OSRS shows them, till an endless run's hits get too long
+    // for a splat
+    const text = amount < 100_000 ? String(amount) : formatCompact(amount);
     const ink = ctx.measureText(text);
     const inkWidth = ink.actualBoundingBoxLeft + ink.actualBoundingBoxRight;
     const inkHeight = ink.actualBoundingBoxAscent + ink.actualBoundingBoxDescent;
