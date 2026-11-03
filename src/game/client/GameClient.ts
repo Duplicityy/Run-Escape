@@ -34,7 +34,7 @@ import { formatWeaponBonus, formatWeaponStat, weaponStats } from "../content/wea
 import { getWeapon } from "../content/weapons";
 import { ChestAction } from "../core/Loot";
 import { Hero, HeroOptions, Sim, TICKS_PER_SECOND } from "../core/Sim";
-import { canEvolve, describeChoice, getEvolutionHint } from "../core/Upgrades";
+import { UpgradeChoice, canEvolve, describeChoice, getEvolutionHint } from "../core/Upgrades";
 import { SimEvent, WeaponState } from "../core/entities";
 import { usePortableMath } from "../core/fmath";
 import { CoopAction, applyAction, hasBadNumber } from "../core/lockstep";
@@ -65,8 +65,9 @@ import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./Dis
 import {
     GameAssets,
     HITSPLAT_SPRITES,
-    getCharacterAppearance,
+    getOfferedAttackSeqs,
     getRunAppearance,
+    getRunAttackSeqs,
 } from "./GameAssets";
 import { GameAudio } from "./GameAudio";
 import { GameInput } from "./GameInput";
@@ -291,7 +292,7 @@ export class GameClient implements GameFrameHandler {
             store.set({ loadingProgress: 10 + Math.round((done / total) * 70) });
         });
         store.set({ loadingText: "Dressing up", loadingProgress: 85 });
-        await assets.setPlayerAppearance(getCharacterAppearance(store.getSnapshot().characterId));
+        await assets.setCharacterLook(store.getSnapshot().characterId);
         store.set({ loadingText: `Building ${TITLE_MAP.name}`, loadingProgress: 95 });
         const grid = new ArenaGrid(await regionPromise);
         await soundsPromise;
@@ -346,6 +347,8 @@ export class GameClient implements GameFrameHandler {
     private readonly damageMeter = new DamageMeter();
     // Each hero's look, as last baked
     private appearanceVersions: number[] = [];
+    // Each hero's level-up choices their look was last baked for
+    private lookChoices: (UpgradeChoice[] | undefined)[] = [];
     // The casket Auto alch last sent off (a co-op one takes a frame to come
     // back, and shouldn't go twice)
     private autoAlchedUid = -1;
@@ -457,7 +460,7 @@ export class GameClient implements GameFrameHandler {
         }
         this.store.set({ characterId });
         if (!this.sim) {
-            this.assets.setPlayerAppearance(getCharacterAppearance(characterId));
+            this.assets.setCharacterLook(characterId);
         }
         this.coop.setMe({ characterId });
     }
@@ -947,6 +950,13 @@ export class GameClient implements GameFrameHandler {
                 RegionDataLoader
             >(new RegionDataLoader(), getArenaRegion(getMap(mapId)));
             grid = new ArenaGrid(region);
+            // Only the title screen's and this map's are kept: a phone needn't
+            // hold every map played
+            for (const id of this.grids.keys()) {
+                if (id !== TITLE_MAP.id) {
+                    this.grids.delete(id);
+                }
+            }
             this.grids.set(mapId, grid);
         }
         return grid;
@@ -1137,6 +1147,7 @@ export class GameClient implements GameFrameHandler {
         this.shownDpsTick = 0;
         this.damageMeter.reset();
         this.appearanceVersions = [];
+        this.lookChoices = [];
         this.decisionKey = "";
         this.autoAlchedUid = -1;
         this.coopStopped = false;
@@ -1379,9 +1390,7 @@ export class GameClient implements GameFrameHandler {
         this.view.reset();
         this.cameraRig.pitch = ATTRACT_PITCH;
         this.cameraRig.distance = ATTRACT_DISTANCE;
-        this.assets.setPlayerAppearance(
-            getCharacterAppearance(this.store.getSnapshot().characterId),
-        );
+        this.assets.setCharacterLook(this.store.getSnapshot().characterId);
         if (!show) {
             return;
         }
@@ -1602,9 +1611,20 @@ export class GameClient implements GameFrameHandler {
         }
 
         for (const hero of sim.heroes) {
-            if (hero.appearanceVersion !== this.appearanceVersions[hero.index]) {
+            // A level-up offering a weapon bakes its swing ahead of the pick
+            const choices = hero.choices.length > 0 ? hero.choices : undefined;
+            if (
+                hero.appearanceVersion !== this.appearanceVersions[hero.index] ||
+                choices !== this.lookChoices[hero.index]
+            ) {
                 this.appearanceVersions[hero.index] = hero.appearanceVersion;
-                this.assets.setPlayerAppearance(getRunAppearance(sim, hero.index), hero.index);
+                this.lookChoices[hero.index] = choices;
+                this.assets.setPlayerAppearance(
+                    getRunAppearance(sim, hero.index),
+                    hero.index,
+                    getRunAttackSeqs(sim, hero.index),
+                    getOfferedAttackSeqs(sim, hero.index),
+                );
             }
         }
 
