@@ -50,6 +50,20 @@ describe("enemy bakes", () => {
     });
 });
 
+describe("bake tasks", () => {
+    test("have every request once, an NPC or player model to a task", () => {
+        const requests = [...GameAssets.getBaseRequests(), ...GameAssets.getEnemyRequests(ENEMIES)];
+        const tasks = GameAssets.getBakeTasks(requests);
+        expect(tasks.flat()).toHaveLength(requests.length);
+        expect(new Set(tasks.flat())).toEqual(new Set(requests));
+        for (const task of tasks) {
+            if (task.some((r) => r.kind === "npc" || r.kind === "player")) {
+                expect(task).toHaveLength(1);
+            }
+        }
+    });
+});
+
 describe("power-ups in the cache", () => {
     test("a look puts its item in hand, takes the shield off and leaves the rest", () => {
         const appearance = createAppearance({

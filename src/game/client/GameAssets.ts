@@ -274,6 +274,10 @@ export function getCharacterAppearance(characterId: string): PlayerAppearance {
     return appearance;
 }
 
+// Spot animations, items and scenery baked in one task: small, and there are
+// hundreds of them in the base bake
+const SMALL_BAKE_BATCH = 64;
+
 // A player's model, with the stance and power-up looks baked along with it
 type PlayerBake = {
     key?: string;
@@ -300,6 +304,8 @@ export class GameAssets {
     // The current map's enemies
     private enemyPages: ActorPage[] = [];
     private readonly requestedEnemies = new Set<string>();
+    // Counts the times the enemies were dropped: a bake from before is stale
+    private enemyBakes = 0;
 
     constructor(
         readonly workerPool: RenderDataWorkerPool,
@@ -463,8 +469,7 @@ export class GameAssets {
     }
 
     async loadBase(onProgress?: (done: number, total: number) => void): Promise<void> {
-        const requests = GameAssets.getBaseRequests();
-        await this.bakeOverWorkers(requests, onProgress);
+        await this.bakeInTasks(GameAssets.getBaseRequests(), this.loadBake, onProgress);
     }
 
     hasEnemies(enemies: EnemyDef[]): boolean {
@@ -482,8 +487,8 @@ export class GameAssets {
         }
         const requests = GameAssets.getEnemyRequests(enemies);
         // Freed first, so the two lots aren't in memory together
-        this.dropEnemyPages();
-        this.enemyPages = await this.bakeOverWorkers(requests, onProgress);
+        this.dropEnemies();
+        await this.bakeEnemies(requests, onProgress);
     }
 
     // A model that isn't baked is baked now, for a run with an enemy the map's
@@ -494,12 +499,12 @@ export class GameAssets {
         }
         this.requestedEnemies.add(enemy.id);
         console.warn(`${enemy.id} isn't baked for this map`);
-        this.bakeOverWorkers(GameAssets.getEnemyRequests([enemy]))
-            .then((pages) => this.enemyPages.push(...pages))
-            .catch(console.error);
+        this.bakeEnemies(GameAssets.getEnemyRequests([enemy])).catch(console.error);
     }
 
-    private dropEnemyPages(): void {
+    // Frees the enemies' models (on a phone, at the title screen)
+    dropEnemies(): void {
+        this.enemyBakes++;
         for (const page of this.enemyPages) {
             this.actors.removePage(page);
         }
@@ -512,43 +517,71 @@ export class GameAssets {
         this.requestedEnemies.clear();
     }
 
-    // Splits a bake over the workers, one page each
-    private async bakeOverWorkers(
+    // What lands after the enemies are dropped is a dropped map's, and isn't kept
+    private async bakeEnemies(
         requests: BakeRequest[],
         onProgress?: (done: number, total: number) => void,
-    ): Promise<ActorPage[]> {
-        const chunks: BakeRequest[][] = [];
-        const chunkCount = this.workerPool.size;
-        for (let i = 0; i < chunkCount; i++) {
-            chunks.push([]);
-        }
-        requests.forEach((request, i) => chunks[i % chunkCount].push(request));
-        const filled = chunks.filter((chunk) => chunk.length > 0);
+    ): Promise<void> {
+        const bakes = this.enemyBakes;
+        const onBake = (bake: ActorBakeResult) => {
+            if (bakes === this.enemyBakes) {
+                const [model] = this.addBake(bake).values();
+                this.enemyPages.push(model.page);
+            }
+        };
+        await this.bakeInTasks(requests, onBake, onProgress);
+    }
+
+    private loadBake = (bake: ActorBakeResult): void => {
+        this.addBake(bake);
+    };
+
+    // A bake in small tasks, each put on the GPU as it lands, so the main
+    // thread never holds more than a few of them: baked in one go, a big map's
+    // enemies were hundreds of MB at once
+    private async bakeInTasks(
+        requests: BakeRequest[],
+        onBake: (bake: ActorBakeResult) => void,
+        onProgress?: (done: number, total: number) => void,
+    ): Promise<void> {
+        const tasks = GameAssets.getBakeTasks(requests);
         let done = 0;
+        let bytes = 0;
         const started = performance.now();
-        const bakes = await Promise.all(
-            filled.map(async (chunk) => {
-                const bake = await this.bake(chunk);
-                onProgress?.(++done, filled.length);
-                return bake;
+        await Promise.all(
+            tasks.map(async (task) => {
+                const bake = await this.bake(task);
+                bytes += bake.vertices.byteLength + bake.indices.byteLength;
+                onBake(bake);
+                onProgress?.(++done, tasks.length);
             }),
         );
-        let bytes = 0;
-        const pages: ActorPage[] = [];
-        for (const bake of bakes) {
-            bytes += bake.vertices.byteLength + bake.indices.byteLength;
-            const models = this.addBake(bake);
-            for (const model of models.values()) {
-                if (!pages.includes(model.page)) {
-                    pages.push(model.page);
-                }
-            }
-        }
         console.log(
             `baked ${requests.length} actor models in ${(performance.now() - started).toFixed(0)}ms, ` +
                 `${(bytes / 1024 / 1024).toFixed(1)}MB`,
         );
-        return pages;
+    }
+
+    // An NPC or player model to a task, the small ones (spot animations, items,
+    // scenery) a batch at a time
+    static getBakeTasks(requests: BakeRequest[]): BakeRequest[][] {
+        const tasks: BakeRequest[][] = [];
+        let small: BakeRequest[] = [];
+        for (const request of requests) {
+            if (request.kind === "npc" || request.kind === "player") {
+                tasks.push([request]);
+            } else {
+                small.push(request);
+                if (small.length === SMALL_BAKE_BATCH) {
+                    tasks.push(small);
+                    small = [];
+                }
+            }
+        }
+        if (small.length > 0) {
+            tasks.push(small);
+        }
+        return tasks;
     }
 
     async loadSprites(spriteIds: number[]): Promise<void> {
