@@ -599,7 +599,7 @@ version and how to run it.
       leaving ends it for everyone.
     - Teammates show with their names in green, an arrow at the edge of the screen when they're out
       of view, green dots on the minimap and their hitpoints down the left of the screen.
-    - **Movement prediction** (a trial, off by default, in Settings and the pause menu): a player who
+    - **Movement prediction** (on by default, in Settings and the pause menu): a player who
       joined a game sees their own character move as soon as they press, then correct to the host.
       It only changes what they see: hits and pickups still follow the host.
 - **Quests** (on the title screen) pay banked coins: each is named for an OSRS quest and asks

@@ -807,9 +807,11 @@ can't land on the next decision unseen. An action the host turns away counts as 
 the client checks what the sim would refuse before sending it (a reroll with none left, or
 during a hilt choice), or a refused action would hold up the real one.
 
-Guests can predict their own **displayed** movement in `client/coop/MovementPrediction.ts`. It's
-a trial for now: the `movePrediction` display setting (Settings and the pause menu) is off by
-default, and `CoopRun.setPrediction` applies it, mid-run too. Off, a guest has no prediction,
+Guests predict their own **displayed** movement in `client/coop/MovementPrediction.ts`. The
+`movePrediction` display setting (Settings and the pause menu) is on by default, and
+`CoopRun.setPrediction` applies it, mid-run too. Settings saved while it was a trial all say off,
+the default then, so an off only counts from a save marked `movePredictionDefaultOn` (every save
+since). Off, a guest has no prediction,
 sends no `moveSeq` and shows only what the host confirms; turned back on, it starts afresh. A local
 input sequence (`moveSeq`) rides on movement messages and is echoed in the host's frame event,
 including when queued moves are coalesced. The guest acknowledges it only after stepping that
@@ -821,10 +823,24 @@ Prediction covers the character's position, facing and movement animation, camer
 health bar, attached text, slashes and auras. `PlayerPose` is presentation state: never write it
 into `Sim`. Combat, pickups, world-space attack effects and all hashes still use confirmed
 positions. `core/PlayerMovement.ts` shares terrain collision, speed, sleds, curses, facing and
-boss arena limits with `Sim.stepPlayer`. Small errors ease toward the confirmed path; a wall
-blocking correction snaps the picture to its valid target instead of trapping it. Large
-confirmed displacements reset prediction. Death, known freezes, decisions and stale connections
-ease back to confirmed presentation, including the camera.
+boss arena limits with `Sim.stepPlayer`. Errors ease toward the confirmed path over about 80 ms
+(glides up to `GLIDE_DISTANCE`, a jump past it); a wall blocking correction snaps the picture to
+its valid target instead of trapping it. Confirmed jumps of over `SNAP_DISTANCE` in one frame
+(teleports) reset prediction. Death, known freezes and decisions ease back to confirmed
+presentation, including the camera.
+
+The camera follows the predicted pose, so the picture is kept steady:
+
+- The host echoes a held move every `MOVE_REFRESH_MS`, a tick early or late with jitter. An echo
+  of the move already applied only re-times the prediction's clock past `DRIFT_MS`; otherwise
+  every refresh nudged the camera by a tick. Only a pending _change_ of move holds the clock back.
+- Standing still, an error under `DEAD_ZONE` (a stop that reached the host a tick late) is left
+  alone; walking takes it out. While the host's frames haven't got the stop yet, there's no
+  correction at all: with a lead past the budget, the target falls short of where the stop lands.
+- When frames stop coming (`QUIET_MS`) with the lead at its budget, the picture holds where it
+  is, and from `STALE_MS` it stands still with no walk animation. Easing back to the last
+  confirmed spot would walk the hero backwards, then rush forward when a reconnect's resend
+  arrives; instead it glides to the resent position.
 
 `PREDICTION_MS` and `MAX_INPUT_HISTORY` bound replay work for one player. When the lead exceeds
 that window, replay uses the newest inputs so a stop or turn still takes effect. Long render
