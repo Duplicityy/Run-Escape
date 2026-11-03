@@ -235,7 +235,9 @@ export function ItemIcon({ objId, spriteId, size = 32, count = 1 }: Props): JSX.
     const [loaded, setLoaded] = useState(() => ({ key, url: cached() }));
     // When the item changes (a reroll), never the last item's icon while the
     // new one is drawn
-    const url = loaded.key === key ? loaded.url : cached();
+    const previousCoin =
+        key.startsWith("995:") && loaded.key.startsWith("995:") ? loaded.url : undefined;
+    const url = loaded.key === key ? loaded.url : (cached() ?? previousCoin);
     useEffect(() => {
         let cancelled = false;
         const callback = (url: string) => {
