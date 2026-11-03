@@ -161,7 +161,7 @@ test("the visible refund button refunds one bought rank without purchasing", () 
     expect(refund).toHaveAttribute("title", "Refund one Strength rank");
     expect(refund.closest(".ui-shop-card")).toBeNull();
     fireEvent.click(refund);
-    expect(actions.refundUpgrade).toHaveBeenCalledExactlyOnceWith("strength");
+    expect(actions.refundUpgrade).toHaveBeenCalledExactlyOnceWith("strength", "melee");
     expect(actions.buyUpgrade).not.toHaveBeenCalled();
     expect(actions.refundUpgrades).not.toHaveBeenCalled();
 });
@@ -170,7 +170,7 @@ test("maxed skills retain their visible refund button", () => {
     expect.hasAssertions();
     const actions = renderShop({ strength: 5 });
     fireEvent.click(screen.getByRole("button", { name: "Refund one Strength rank" }));
-    expect(actions.refundUpgrade).toHaveBeenCalledExactlyOnceWith("strength");
+    expect(actions.refundUpgrade).toHaveBeenCalledExactlyOnceWith("strength", "melee");
     expect(actions.buyUpgrade).not.toHaveBeenCalled();
 });
 
@@ -188,7 +188,7 @@ test("touch long presses do not refund, but the refund button still works", () =
     expect(fireEvent.contextMenu(card)).toBe(false);
     expect(actions.refundUpgrade).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Refund one Strength rank" }));
-    expect(actions.refundUpgrade).toHaveBeenCalledExactlyOnceWith("strength");
+    expect(actions.refundUpgrade).toHaveBeenCalledExactlyOnceWith("strength", "melee");
     expect(actions.buyUpgrade).not.toHaveBeenCalled();
 });
 
@@ -209,5 +209,5 @@ test("unaffordable skills cannot purchase but can refund a bought rank", () => {
     fireEvent.click(card);
     expect(actions.buyUpgrade).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Refund one Strength rank" }));
-    expect(actions.refundUpgrade).toHaveBeenCalledExactlyOnceWith("strength");
+    expect(actions.refundUpgrade).toHaveBeenCalledExactlyOnceWith("strength", "melee");
 });
