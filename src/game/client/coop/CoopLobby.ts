@@ -188,6 +188,7 @@ export class CoopLobby {
     onClosed?: () => void;
     onReconnecting?: () => void;
     onResumed?: () => void;
+    onMapChanged?: () => void;
 
     constructor(readonly store: GameStore) {
         this.view = OFFLINE;
@@ -210,8 +211,12 @@ export class CoopLobby {
     }
 
     private update(changes: Partial<CoopView>): void {
+        const previousMap = this.view.room?.mapId;
         this.view = { ...this.view, ...changes };
         this.store.set({ coop: this.view });
+        if (this.view.room?.mapId !== previousMap) {
+            this.onMapChanged?.();
+        }
     }
 
     // Connects, if it isn't, and keeps the list of open rooms fresh while

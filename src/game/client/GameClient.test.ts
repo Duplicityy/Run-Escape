@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
+import { getCharacter } from "../content/characters";
 import { emptyStats } from "../content/types";
 import { Sim } from "../core/Sim";
 import { hasBadNumber } from "../core/lockstep";
-import { LoadedSave, SaveData, SaveStore, createSave } from "../core/save";
+import {
+    LoadedSave,
+    SaveData,
+    SaveStore,
+    buyUpgrade,
+    createSave,
+    getMetaStats,
+} from "../core/save";
 import { makeGrid } from "../core/world/testGrid";
 import { DamageMeter } from "./DamageMeter";
 import {
@@ -492,6 +500,114 @@ describe("saving", () => {
         };
         return { client, store, saved, writeOver, setStored, lockChanged };
     }
+
+    test.each([
+        ["warrior", "melee"],
+        ["ranger", "ranged"],
+        ["wizard", "magic"],
+    ] as const)("%s sends only its class's skills to co-op", (characterId, style) => {
+        expect.hasAssertions();
+        const { client, store } = createSaving(true);
+        client.save.coins = 50000;
+        buyUpgrade(client.save, "strength", "melee");
+        buyUpgrade(client.save, "hitpoints", "ranged");
+        buyUpgrade(client.save, "ring_of_life", "magic");
+        store.set({ characterId });
+        const loadout = (
+            client as unknown as { getLoadout(): Parameters<typeof loadoutStats>[0] }
+        ).getLoadout();
+        const stats = loadoutStats(loadout);
+        expect(stats.might).toBeCloseTo(style === "melee" ? 0.05 : 0);
+        expect(stats.revival).toBe(style === "magic" ? 1 : 0);
+    });
+
+    test("a ranged skill refund persists without changing melee or magic", () => {
+        expect.hasAssertions();
+        const { client, store, saved } = createSaving(true);
+        client.save.coins = 50000;
+        buyUpgrade(client.save, "strength", "melee");
+        buyUpgrade(client.save, "strength", "ranged");
+        buyUpgrade(client.save, "hitpoints", "magic");
+        const before = structuredClone(client.save);
+        buyUpgrade(client.save, "strength", "ranged");
+        client.refundUpgrade("strength", "ranged");
+        expect(client.save).toEqual(before);
+        expect(saved).toEqual([before]);
+        expect(store.getSnapshot().save).toEqual(before);
+    });
+
+    test.each([
+        ["warrior", "lumbridge", "warrior"],
+        ["ranger", "lumbridge", "ranger"],
+        ["wizard", "lumbridge", "wizard"],
+        ["wizard", "falador", "durial321"],
+    ])(
+        "solo %s on %s uses the actual adventurer's class skills",
+        async (selected, mapId, actual) => {
+            expect.hasAssertions();
+            const { client, store } = createSaving(true);
+            client.save.coins = 50000;
+            buyUpgrade(client.save, "strength", "melee");
+            buyUpgrade(client.save, "hitpoints", "ranged");
+            buyUpgrade(client.save, "ring_of_life", "magic");
+            store.set({ characterId: selected });
+            const enterRun = vi.fn<(sim: Sim) => void>();
+            Object.assign(client, {
+                grid: createSim().grid,
+                travelTo: vi.fn().mockResolvedValue(true),
+                enterRun,
+                options: { stress: 0 },
+            });
+            await client.startRun(mapId);
+            const sim = enterRun.mock.calls[0][0];
+            expect(sim.characterId).toBe(actual);
+            expect(sim.metaStats).toEqual(getMetaStats(client.save, getCharacter(actual).style));
+        },
+    );
+
+    test("a co-op map's forced adventurer determines the skill page", () => {
+        expect.hasAssertions();
+        const { client, store } = createSaving(true);
+        client.save.coins = 50000;
+        buyUpgrade(client.save, "strength", "melee");
+        buyUpgrade(client.save, "ring_of_life", "magic");
+        store.set({ characterId: "wizard" });
+        Object.assign(client, { coop: { room: { mapId: "falador" } } });
+        const loadout = (
+            client as unknown as { getLoadout(): Parameters<typeof loadoutStats>[0] }
+        ).getLoadout();
+        expect(loadoutStats(loadout)).toEqual(
+            getMetaStats(client.save, getCharacter("durial321").style),
+        );
+    });
+
+    test("a single skill refund is saved and refreshes the shop", () => {
+        expect.hasAssertions();
+        const { client, store, saved } = createSaving(true);
+        client.save.coins = 10000;
+        buyUpgrade(client.save, "strength");
+        buyUpgrade(client.save, "hitpoints");
+        const before = structuredClone(client.save);
+        buyUpgrade(client.save, "strength");
+        client.refundUpgrade("strength");
+        expect(client.save).toEqual(before);
+        expect(saved).toEqual([before]);
+        expect(store.getSnapshot().save).toEqual(before);
+        client.refundUpgrade("unknown");
+        expect(saved).toHaveLength(1);
+    });
+
+    test("a single skill refund respects another tab's save lock", () => {
+        expect.hasAssertions();
+        const { client, store, saved, lockChanged } = createSaving(true);
+        client.save.coins = 10000;
+        buyUpgrade(client.save, "strength");
+        lockChanged(false);
+        client.refundUpgrade("strength");
+        expect(client.save.skillPages.melee.upgrades).toEqual({});
+        expect(store.getSnapshot().save.coins).toBe(10000);
+        expect(saved).toEqual([]);
+    });
 
     test("nothing's saved while another tab has the game", () => {
         const { client, store, saved, lockChanged } = createSaving(true);

@@ -61,6 +61,9 @@ the version in the corner).
   to get back to the boss you're learning quicker.
 - Beat the raid on hard for expert mode, with more of the real raid's mechanics, twice the coins
   and Lil' Zik's looks.
+- Each class's skill page can spend the full gold budget without taking gold from the other pages.
+- Separate Melee, Ranged and Magic skill pages, kept in exported saves, with refunds limited to the selected class.
+- Refund a skill rank with its arrow button, or right-click on desktop, without resetting the rest.
 
 ### Changed
 
@@ -76,12 +79,17 @@ the version in the corner).
 - Co-op: a guest who misses some of the host's updates gets them again, rather than freezing.
   With a relay that supports it, a dropped connection reconnects within a few seconds and the run
   carries on.
+- Co-op: an item used just as the connection drops is used once it's back, and someone who joined,
+  left or started a run just before a drop is remembered that way.
 - Huge numbers stay short: the damage panel, stats and hitsplats go on past trillions to Qa,
   Qi, Sx and on, then powers of ten, rather than growing digit by digit.
 - In very long endless runs, bones no longer stop dropping once coins and food have built up
   around the map.
 - The Nightmare's charge wind-up and sleepwalker animations tore her model apart, on Hallowed
   Night as well: they belonged to her other form.
+- Class skill tabs stay grouped on the left, with the selected page pressed in and green immediately, even while hovered.
+- Coin icons stay visible while a changed stack size loads after buying or refunding skills.
+- Maxed skills no longer look buyable, and touch long presses no longer refund ranks by accident.
 
 ## 0.23.0 - 2026-11-02
 

@@ -101,15 +101,19 @@ updates, and moving objects between machines. Each one drops every connection to
 what it had in memory, often more than once an hour. So:
 
 - A room keeps itself in storage, and gives each player a token when they make or join it.
+  Someone joining or leaving, and a run starting or ending, are saved before anyone hears of
+  them, so a restart straight after doesn't bring back the room as it was.
 - A player whose connection drops keeps their place for 15 seconds. Their game reconnects to
   `coop/room/<code>?resume=<token>` for up to 10 seconds, and the run carries on. Someone who
   doesn't come back is let go, as if they'd left.
 - Frames the host sent meanwhile come again: each host message says where the one before it
   ended, and a guest that sees a gap asks the host for what it missed (`resend` in `protocol.ts`,
-  kept for 20 seconds in `CoopRun`, and answered once a second at most).
+  kept for 20 seconds in `CoopRun`, and answered once a second at most). An item a guest used
+  just before the drop is sent again, and the host takes it once.
 - The lobby's connection dropping doesn't touch a room: the game makes it again after.
 
-`npm run check` tests coming back. To see a restart for yourself under `wrangler dev`, save any
+`npm run check` tests coming back, against a running relay. `room.test.ts` runs a room under
+Node, with `test/durable-object.mjs` in place of `cloudflare:workers` (see `vite.config.ts`). To see a restart for yourself under `wrangler dev`, save any
 file in `src/` during a run: wrangler reloads, which drops everything as Cloudflare does.
 
 **Settings** are in `wrangler.toml`: `MULTIPLAYER_ANY_MAP = "on"` lets players into rooms on maps
@@ -147,7 +151,7 @@ dashboard.
 **Against abuse.** Workers Paid has no spending cap, so the relay keeps what one connection can cost
 bounded: a room connection that hasn't made or joined its room within 10 seconds is closed (an open
 socket keeps a room billed), a room's saved to storage at most once a second however often its
-host changes settings, and rooms are capped per address and in all, as on the Node relay. Before
+host changes settings (joins, leaves and a run starting or ending are saved at once), and rooms are capped per address and in all, as on the Node relay. Before
 pointing a paid account at players, also:
 
 - set a billing notification (Manage account, Notifications), and

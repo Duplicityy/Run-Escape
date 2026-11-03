@@ -266,6 +266,8 @@ export default defineConfig({
         sourcemap: true,
     },
     test: {
+        // The Cloudflare relay's tests run its rooms under Node
+        alias: { "cloudflare:workers": resolve("server/cloudflare/test/durable-object.mjs") },
         // Game logic tests need no DOM; UI tests can opt in with
         // `// @vitest-environment jsdom`.
         environment: "node",

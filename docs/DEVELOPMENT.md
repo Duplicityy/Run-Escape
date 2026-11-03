@@ -964,8 +964,13 @@ Cloudflare restarts its objects now and then, dropping their connections, so the
 frames sees it from `from` on the next `down` and asks for them with a `resend` up message; the
 host keeps 20 seconds of what it's sent (longer than the room holds a dropped player) and answers
 once a second at most, from the earliest frame asked for, to every guest; each takes only frames
-after the ones it has. That part works on either relay. The Node relay sends no
-token, so with it a dropped connection still ends a guest's run.
+after the ones it has, in messages of `RESEND_EVENTS` at most. That part works on either relay.
+A guest numbers its actions that aren't decisions (`actionSeq`, so using an item), and the host's
+frames echo the number; after reconnecting it sends again those not echoed yet, and the host takes
+each number once. Decisions have their own resend (`DECISION_RESEND_MS`). The room saves someone
+joining or leaving, and the run starting or ending, at once and before telling anyone; other
+changes at most once a second. The Node relay sends no token, so with it a dropped connection
+still ends a guest's run.
 
 The open rooms list comes a page at a time (8 rooms, the fullest first, then the ones waiting
 longest), worked out once after each change rather than for every request; the menu asks for its
@@ -1052,6 +1057,29 @@ the lock goes mid-run, a solo run pauses under the panel (co-op's goes on for th
 
 The desktop app has one window and plays the newest game it has, so neither tabs nor an older
 game come up there; an export from a newer version is turned away on import, as anywhere.
+
+`SaveData.skillPages` holds independent `melee`, `ranged` and `magic` allocations, each with
+`upgrades`, `upgradesSpent` and optional `upgradeRefunds` lists of paid rank prices. Each page can
+allocate the full budget: `coins + max(upgradesSpent)`. `coins` is the unreserved bank available
+outside Skills, while `getSkillCoins(save, style)` subtracts that page's spending from the budget.
+Purchases and refunds adjust the bank only by the change in the largest page's spending; they never
+change another class's ranks or remaining budget. Armoury purchases still spend unreserved coins.
+Save format 11 converts the former sum of page investments into a maximum reservation, restoring
+the difference to `coins` once. Export/import retains this budget and every page's paid rank prices.
+Save format 10 moves the old shared allocation and its investment into Melee without duplicating either;
+Ranged and Magic start empty. Export and import preserve all three pages and their refund records.
+Solo and co-op loadouts use the actual adventurer's style, including maps with a forced adventurer;
+changing a co-op adventurer or room map refreshes the transmitted loadout.
+The arrow button on bought cards (the client's back-arrow sprite,
+`REFUND_SPRITE`) refunds the last price in that page's skill list, through
+`GameClient.persist()`. It is separate from the purchase button and has a larger hit area on coarse
+pointers. Desktop right-clicking does the same; coarse-pointer context menus never refund.
+Unavailable purchases use `aria-disabled` and keep their disabled appearance on hover, without
+blocking the desktop right-click shortcut or the refund button.
+Older allocations have only `upgradesSpent`: their first purchase or partial refund allocates that
+balance across the existing ranks in proportion to base prices, preserving the total exactly.
+Migration checks the lists against the ranks and total spent; invalid lists use the same fallback.
+Refund all clears only the selected class's ranks and price records.
 
 ### Notice
 

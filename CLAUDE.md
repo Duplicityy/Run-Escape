@@ -212,6 +212,10 @@ desktop build.
   New shop upgrades, ids and optional fields don't need one. Write the save only through
   `GameClient.persist()`: it doesn't write while another tab has `SaveLock` or the save is from a
   newer game. Never rename the lock, `run-escape-save`, any more than the keys.
+  Skills live in `skillPages` by combat style, with separate ranks, spending and refund records;
+  each page can allocate `coins + max(page.upgradesSpent)`. Only the maximum investment is reserved;
+  use `getSkillCoins(save, style)` for a page's balance. Always pass the intended style to skill
+  operations and run loadouts.
 - **Determinism**: the sim only uses its seeded `Rng`, never `Math.random`. Co-op runs the same sim
   on every player's browser, so in `src/game/core/` trigonometry goes through `fm` (`fm.sin`,
   `fm.cos`, `fm.atan2`, `fm.hypot`, `fm.acos`, `fm.pow`) from `core/fmath.ts`, never `Math`'s.

@@ -112,7 +112,7 @@ export type GoneReason = "left" | "kicked" | "disbanded" | "hostLeft" | "idle";
 // run is ready to go (the map's loaded)
 export type UpMessage =
     | { move: [number, number]; moveSeq?: number }
-    | { action: CoopAction }
+    | { action: CoopAction; actionSeq?: number }
     | { loaded: true }
     // The frames after this one again: some of the host's went missing (a
     // dropped connection)
