@@ -102,6 +102,10 @@ import { saveFile } from "./saveFile";
 // 20ms: the OSRS client tick, also the unit of animation frame lengths
 export const TICK_MS = 1000 / TICKS_PER_SECOND;
 const MAX_TICKS_PER_FRAME = 10;
+// A solo run makes up a late frame's ticks this many a frame at most, rather than
+// all in the next one, so one slow frame doesn't make the next slow too. Every
+// tick still runs: it's at most MAX_TICKS_PER_FRAME behind, as before.
+const SOLO_TICKS_PER_FRAME = 4;
 // A co-op guest that's fallen well behind the host catches up this fast
 const MAX_CATCH_UP_TICKS = 120;
 // A frame spends this long at most on catching up, so a slow phone stays
@@ -1603,8 +1607,17 @@ export class GameClient implements GameFrameHandler {
             this.updateCoop(deltaTimeMs, sim, this.coopRun);
         } else if (!this.paused && (sim.state === "playing" || sim.runOver)) {
             const wasOver = sim.runOver;
-            this.accumulator += Math.min(deltaTimeMs, TICK_MS * MAX_TICKS_PER_FRAME);
-            while (this.accumulator >= TICK_MS && (sim.state === "playing" || sim.runOver)) {
+            this.accumulator = Math.min(
+                this.accumulator + deltaTimeMs,
+                TICK_MS * MAX_TICKS_PER_FRAME,
+            );
+            let steps = 0;
+            while (
+                this.accumulator >= TICK_MS &&
+                steps < SOLO_TICKS_PER_FRAME &&
+                (sim.state === "playing" || sim.runOver)
+            ) {
+                steps++;
                 this.accumulator -= TICK_MS;
                 const move = this.input.getMoveVector(this.move);
                 sim.step(move.x, move.y);
