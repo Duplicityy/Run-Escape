@@ -565,6 +565,10 @@ export class LocType extends Type {
                 this.clipType = 2;
                 this.blocksProjectile = false;
             }
+            // Model space points down, so up is negative
+            if (override.height !== undefined) {
+                this.offsetHeight = -override.height;
+            }
         }
         if (this.isInteractive === -1) {
             this.isInteractive = 0;

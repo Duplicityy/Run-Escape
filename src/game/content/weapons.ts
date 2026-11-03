@@ -2220,6 +2220,46 @@ export const WEAPONS: WeaponDef[] = [
         }),
     },
     {
+        // Phosani's own: her grasping claws, turned on what's around the player
+        id: "nightmare_staff",
+        name: "Nightmare staff",
+        kind: "strike",
+        description:
+            "The Nightmare's grasping claws come up out of the ground under enemies around you, every so often. Bosses and elites are grabbed twice more.",
+        iconObjId: 24422,
+        // The staff's cast; her claws' sound, and her hands (spot 1761) coming
+        // up in full where each lands, as they do in her fight
+        playerSeq: 7855,
+        sound: 4274,
+        hitSound: -1,
+        rarity: "rare",
+        style: "magic",
+        bigHits: [0.75, 0.75],
+        impactFit: 1,
+        unlock: { kind: "killBoss", mapId: "phosani", enemyId: "phosanis_nightmare" },
+        levels: levels(
+            {
+                damage: 20,
+                cooldown: 2.8,
+                amount: 3,
+                area: 0.9,
+                pierce: 0,
+                speed: 0,
+                duration: 0,
+                knockback: 0.5,
+                objId: 24422,
+                impactSpotAnim: 1761,
+            },
+            { amount: 4, description: "One more hand." },
+            { damage: 24, description: "+4 damage." },
+            { area: 1.2, description: "Wider hands." },
+            { cooldown: 2.4, description: "The hands come a little more often." },
+            { amount: 5, description: "One more hand." },
+            { damage: 28, description: "+4 damage." },
+            { amount: 6, description: "One more hand." },
+        ),
+    },
+    {
         id: "volatile_nightmare_staff",
         name: "Volatile Nightmare staff",
         kind: "missile",

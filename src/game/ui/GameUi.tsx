@@ -29,7 +29,16 @@ import {
 } from "../client/GameStore";
 import { formatTime } from "../client/GameView";
 import { CHARACTERS, getCharacter } from "../content/characters";
-import { CAMPAIGN_MAPS, DEV_MAPS, FUN_MAPS, MAPS, SEASONAL_MAPS, getMap } from "../content/maps";
+import {
+    CAMPAIGN_MAPS,
+    DEV_MAPS,
+    FIGHT_MAPS,
+    FUN_MAPS,
+    MAPS,
+    SEASONAL_MAPS,
+    getMap,
+    getMapCharacter,
+} from "../content/maps";
 import { RARITIES } from "../content/rarity";
 import { SHOP_UPGRADES } from "../content/shop";
 import { COLLECTION_LOG_OBJ, TITLE_TAB_SPRITES } from "../content/titleIcons";
@@ -757,7 +766,7 @@ export function getStartingWeaponIcon(character: CharacterDef): number {
 function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
     return (
         <div className="ui-fill ui-select">
-            <AdventurerPanel ui={ui} client={client} />
+            <AdventurerPanel ui={ui} client={client} fixed={getMapCharacter(getMap(ui.mapId))} />
             <MapPanel ui={ui} client={client} />
             <div className="ui-panel rs-border rs-background ui-select-bar">
                 <button className="ui-button" onClick={() => client.showScreen("title")}>
@@ -780,8 +789,16 @@ function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
 }
 
 // Endless runs for the map picked, once it's been beaten (fun maps are
-// always endless)
+// always endless, and a boss fight never is)
 function EndlessSwitch({ ui, client }: ScreenProps): JSX.Element {
+    if (getMap(ui.mapId).fight) {
+        return (
+            <div className="ui-endless" title="A boss fight is over when she is.">
+                <span className="ui-endless-name">Endless</span>
+                <span className="ui-endless-hint">One fight</span>
+            </div>
+        );
+    }
     if (getMap(ui.mapId).fun) {
         return (
             <div
@@ -849,22 +866,39 @@ function stopPeeking(setPeek: (id: undefined) => void): (() => void) | undefined
 // pointed at (or tapped, so a locked one can say what it takes) until the
 // pointer leaves the panel, then the one picked. Only moving the pointer
 // changes it: the list scrolling under a still pointer doesn't.
-export function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
+// fixed: the adventurer the map picked makes everyone play (Falador's Durial321,
+// Phosani's Inquisitor), with the choice blurred out under them
+export function AdventurerPanel({
+    ui,
+    client,
+    fixed,
+}: ScreenProps & { fixed?: string }): JSX.Element {
     const unlocked = ui.save.unlockedCharacters;
     const [peek, setPeek] = useState<string>();
-    const opened = CHARACTERS.filter((c) => unlocked.includes(c.id)).length;
+    // The roster: not an adventurer played on one map alone (CharacterDef.only)
+    const roster = CHARACTERS.filter((c) => !c.only);
+    const opened = roster.filter((c) => unlocked.includes(c.id)).length;
     return (
         <div
-            className="ui-panel rs-border rs-background ui-select-panel ui-select-adventurers"
+            className={
+                "ui-panel rs-border rs-background ui-select-panel ui-select-adventurers" +
+                (fixed ? " ui-select-fixed" : "")
+            }
             onMouseLeave={stopPeeking(setPeek)}
         >
             <h2 className="ui-select-heading">
                 Adventurer
                 <span className="ui-select-count">
-                    {opened} / {CHARACTERS.length}
+                    {opened} / {roster.length}
                 </span>
             </h2>
-            <div className="ui-select-scroll">
+            {fixed && (
+                <div className="ui-select-fixed-note">
+                    <ItemIcon objId={getStartingWeaponIcon(getCharacter(fixed))} size={28} />
+                    Everyone plays the {getCharacter(fixed).name} here.
+                </div>
+            )}
+            <div className="ui-select-scroll" aria-hidden={fixed !== undefined}>
                 {STYLES.map((style) => {
                     const treasure = getClassTreasure(style);
                     return (
@@ -881,50 +915,55 @@ export function AdventurerPanel({ ui, client }: ScreenProps): JSX.Element {
                                 )}
                             </div>
                             <div className="ui-tiles">
-                                {CHARACTERS.filter((c) => c.style === style).map((character) => {
-                                    const selected = character.id === ui.characterId;
-                                    return (
-                                        <button
-                                            key={character.id}
-                                            className={
-                                                "ui-card ui-tile" +
-                                                (selected ? " ui-card-selected" : "") +
-                                                (unlocked.includes(character.id)
-                                                    ? ""
-                                                    : " ui-card-locked")
-                                            }
-                                            aria-label={character.name}
-                                            aria-pressed={selected}
-                                            onMouseMove={() => setPeek(character.id)}
-                                            onFocus={() => setPeek(character.id)}
-                                            onBlur={() => setPeek(undefined)}
-                                            onClick={() => {
-                                                setPeek(character.id);
-                                                client.selectCharacter(character.id);
-                                            }}
-                                        >
-                                            <ItemIcon
-                                                objId={
-                                                    character.equipment[EquipSlot.TORSO] ??
-                                                    getStartingWeaponIcon(character)
+                                {roster
+                                    .filter((c) => c.style === style)
+                                    .map((character) => {
+                                        const selected = character.id === ui.characterId;
+                                        return (
+                                            <button
+                                                key={character.id}
+                                                className={
+                                                    "ui-card ui-tile" +
+                                                    (selected ? " ui-card-selected" : "") +
+                                                    (unlocked.includes(character.id)
+                                                        ? ""
+                                                        : " ui-card-locked")
                                                 }
-                                                size={34}
-                                            />
-                                            <span className="ui-tile-badge">
+                                                aria-label={character.name}
+                                                aria-pressed={selected}
+                                                onMouseMove={() => setPeek(character.id)}
+                                                onFocus={() => setPeek(character.id)}
+                                                onBlur={() => setPeek(undefined)}
+                                                onClick={() => {
+                                                    setPeek(character.id);
+                                                    client.selectCharacter(character.id);
+                                                }}
+                                            >
                                                 <ItemIcon
-                                                    objId={getStartingWeaponIcon(character)}
-                                                    size={18}
+                                                    objId={
+                                                        character.equipment[EquipSlot.TORSO] ??
+                                                        getStartingWeaponIcon(character)
+                                                    }
+                                                    size={34}
                                                 />
-                                            </span>
-                                        </button>
-                                    );
-                                })}
+                                                <span className="ui-tile-badge">
+                                                    <ItemIcon
+                                                        objId={getStartingWeaponIcon(character)}
+                                                        size={18}
+                                                    />
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
                             </div>
                         </div>
                     );
                 })}
             </div>
-            <AdventurerDetails save={ui.save} character={getCharacter(peek ?? ui.characterId)} />
+            <AdventurerDetails
+                save={ui.save}
+                character={getCharacter(fixed ?? peek ?? ui.characterId)}
+            />
         </div>
     );
 }
@@ -1016,6 +1055,13 @@ function MapPanel({ ui, client }: ScreenProps): JSX.Element {
                 </div>
                 <div className="ui-style-group">
                     <div className="ui-style-name">
+                        Boss fights
+                        <span className="ui-style-treasure">once their map's beaten</span>
+                    </div>
+                    <div className="ui-map-list">{FIGHT_MAPS.map(tile)}</div>
+                </div>
+                <div className="ui-style-group">
+                    <div className="ui-style-name">
                         Fun maps
                         <span className="ui-style-treasure">endless, open from the start</span>
                     </div>
@@ -1054,10 +1100,15 @@ function MapDetails({ save, map }: { save: SaveData; map: MapDef }): JSX.Element
                                 ? `Fun map, endless. You play as ${getCharacter(map.fun.character).name}.`
                                 : "Fun map, endless"
                             : !unlocked
-                              ? `Beat ${MAPS[MAPS.indexOf(map) - 1].name} to unlock`
-                              : wins > 0
-                                ? `Beaten ${wins === 1 ? "once" : `${wins} times`}`
-                                : "Not beaten yet"}
+                              ? `Beat ${getMap(map.fight?.requires ?? MAPS[MAPS.indexOf(map) - 1].id).name} to unlock`
+                              : map.fight
+                                ? `Boss fight. You play as the ${getCharacter(map.fight.character).name}` +
+                                  (wins > 0
+                                      ? `, beaten ${wins === 1 ? "once" : `${wins} times`}.`
+                                      : ".")
+                                : wins > 0
+                                  ? `Beaten ${wins === 1 ? "once" : `${wins} times`}`
+                                  : "Not beaten yet"}
                     </div>
                     {endless && (
                         <div className="ui-card-style">
@@ -1542,7 +1593,11 @@ function BossBar({ mapId, client }: { mapId: string; client: GameClient }): JSX.
             )}
             {boss.fight && (
                 <div className="ui-boss-status">
-                    {boss.fight.stage === "totems" ? "Charge the totems!" : "Break her shield!"}
+                    {boss.fight.stage === "totems"
+                        ? "Charge the totems!"
+                        : boss.fight.stage === "finale"
+                          ? "Stay on your feet!"
+                          : "Break her shield!"}
                     {boss.fight.curseAttacks !== undefined && (
                         <span className="ui-boss-curse"> Cursed: {boss.fight.curseAttacks}</span>
                     )}

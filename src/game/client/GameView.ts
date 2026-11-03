@@ -90,6 +90,8 @@ const PROJECTILE_OUTLINE = 12;
 const PROJECTILE_GLOW = 20;
 // Health bars sit 15 units over the head, like the client's
 const HEALTH_BAR_GAP = 15 / 128;
+// How high something a boss throws out flies at the top of its arc, in tiles
+const FLUNG_ARC_HEIGHT = 3;
 
 const HITSPLAT_MS = 900;
 const MAX_HITSPLATS = 120;
@@ -552,7 +554,17 @@ export class GameView {
             const anim = model.anims[0];
             const frame = anim.getFrame(tick - effect.startTick, effect.loop ?? false);
             const height = this.ground(sim, effect.x, effect.y) - effect.height;
-            actors.draw(model, anim, frame, effect.x, height, effect.y, 0);
+            const fit = effect.fitRadius;
+            actors.draw(
+                model,
+                anim,
+                frame,
+                effect.x,
+                height,
+                effect.y,
+                0,
+                fit !== undefined ? { scale: (fit * 128) / Math.max(1, model.radius) } : undefined,
+            );
         }
     }
 
@@ -800,7 +812,13 @@ export class GameView {
             const t = tick - enemy.deathTick;
             if (def.deathSeq !== -1) {
                 anim = model.getAnim(def.deathSeq);
-                const length = Math.min(anim.totalTicks, MAX_DEATH_ANIM_TICKS);
+                // A final boss whose fall the run waits for plays all of its
+                // death (BossDef.fallSeconds); the rest are cut short
+                const fall = def.boss?.fallSeconds;
+                const length = Math.min(
+                    anim.totalTicks,
+                    fall ? Math.round(fall * TICKS_PER_SECOND) : MAX_DEATH_ANIM_TICKS,
+                );
                 frame = anim.getFrame(Math.min(t, length - 1), false);
                 if (t > length) {
                     sink = (t - length) / DEATH_SINK_TICKS;
@@ -826,9 +844,18 @@ export class GameView {
             // Offset by uid so a crowd doesn't move in lockstep
             frame = anim.getFrame(tick + enemy.uid * 7);
         }
-        const height =
+        let height =
             this.groundUnder(sim, x, y, (model.radius * enemy.scale) / 128) +
             (sink * model.height * enemy.scale) / 128;
+        // Thrown out by a boss: up and over in an arc (negative is up)
+        const flung = enemy.flung;
+        if (flung) {
+            const f = Math.min(
+                1,
+                Math.max(0, (tick + alpha - flung.startTick) / (flung.endTick - flung.startTick)),
+            );
+            height -= FLUNG_ARC_HEIGHT * 4 * f * (1 - f);
+        }
         let tint = enemy.tint;
         if (enemy.frozen > 0 && !enemy.dead) {
             tint = FROZEN_TINT;
@@ -875,11 +902,15 @@ export class GameView {
         this.drawSlashes(overlay, sim, alpha, now, scale);
         this.drawEnemyProjectileGlows(overlay, sim, alpha, scale);
 
-        // Health bars over hurt elites; with hundreds of enemies bars on all of
-        // them are just noise (hitsplats show the damage), and the boss has his
-        // bar at the top of the screen
+        // Health bars over hurt elites, and over whatever asks for one from the
+        // start (Phosani's eggs, against their time); with hundreds of enemies
+        // bars on all of them are just noise (hitsplats show the damage), and
+        // the boss has his bar at the top of the screen
         for (const enemy of sim.enemies) {
-            if (enemy.dead || enemy.hp >= enemy.maxHp || !enemy.elite) {
+            if (enemy.dead || enemy.flung) {
+                continue;
+            }
+            if (!enemy.def.healthBar && (enemy.hp >= enemy.maxHp || !enemy.elite)) {
                 continue;
             }
             const model = this.assets.get(getCachedEnemyModelKey(enemy.def, enemy.variant));

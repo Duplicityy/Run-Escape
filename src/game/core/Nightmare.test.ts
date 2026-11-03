@@ -319,6 +319,31 @@ describe("her phases", () => {
         expect(near.filter((e) => e.totemOf === boss).length).toBe(4);
     });
 
+    test("with the shield down, bolts fly on through her to a totem, with nothing shown on her", () => {
+        const sim = createSim();
+        const boss = startFight(sim);
+        breakShield(sim, boss);
+        sim.takeEvents();
+        // A totem brought in behind her, the player in front: the bolt's path
+        // runs through her
+        const totem = phaseOf(boss).totems[0];
+        totem.x = totem.prevX = boss.x + 4;
+        totem.y = totem.prevY = boss.y;
+        sim.player.x = sim.player.prevX = boss.x - 4;
+        sim.player.y = sim.player.prevY = boss.y;
+        sim.addWeapon("armadyl_crossbow");
+        const charge = totem.hp;
+        const blocked = boss.blockedTick;
+        run(sim, 3);
+        expect(sim.enemies.find((e) => e.finalBoss)).toBe(boss);
+        expect(boss.blockedTick).toBe(blocked);
+        expect(totem.hp).toBeLessThan(charge);
+        const splats = sim
+            .takeEvents()
+            .filter((e) => e.type === "damage" && e.enemyUid === boss.uid);
+        expect(splats).toEqual([]);
+    });
+
     test("a charged totem stays charged and takes no more", () => {
         const sim = createSim();
         const boss = startFight(sim);

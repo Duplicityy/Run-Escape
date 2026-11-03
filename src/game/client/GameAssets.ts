@@ -108,6 +108,9 @@ export const CANNON_MODEL_KEY = "loc:" + CANNON_LOC;
 // Hitsplat sprites (RuneLite's SpriteID): the red damage splat, the green
 // poison one and the blue one for a hit that was blocked (a shield's)
 export const HITSPLAT_SPRITES = { damage: 1359, poison: 1360, block: 1358 } as const;
+// The game's hint arrow (headicons_hint), the yellow one that bobs over what
+// you're pointed at
+export const HINT_ARROW_SPRITE = 441;
 
 // Every spot animation the content uses, plus the fixed ones (cannonball,
 // level up fireworks, a frozen player's ice, the bot nuke's explosions, the
@@ -404,6 +407,8 @@ export class GameAssets {
             ...(enemy.boss?.attacks.map((a) => a.seq ?? -1) ?? []),
             enemy.boss?.intro?.seq ?? -1,
             enemy.boss?.surgeSeq ?? -1,
+            enemy.boss?.leash?.jump?.downSeq ?? -1,
+            enemy.boss?.leash?.jump?.upSeq ?? -1,
         ].filter((id, i, all) => id !== -1 && all.indexOf(id) === i);
         if (enemy.outfits) {
             return enemy.outfits.map(
@@ -416,7 +421,10 @@ export class GameAssets {
             );
         }
         const requests: BakeRequest[] = [
-            { kind: "npc", key: "npc:" + enemy.id, npcId: enemy.npcId, seqIds },
+            // An item's model stands still, under the same key the view asks for
+            enemy.objId !== undefined
+                ? { kind: "obj", key: "npc:" + enemy.id, objId: enemy.objId, count: 1 }
+                : { kind: "npc", key: "npc:" + enemy.id, npcId: enemy.npcId, seqIds },
         ];
         const shielded = enemy.shield?.look;
         if (shielded) {

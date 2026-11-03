@@ -6,7 +6,7 @@ import { describeMissing, parseRoomCode } from "../client/coop/CoopLobby";
 import { RoomListing, RoomView } from "../client/coop/protocol";
 import { CHARACTERS, getCharacter } from "../content/characters";
 import { MAX_PARTY } from "../content/coop";
-import { FUN_MAPS, MAPS, MAP_BY_ID, getMap } from "../content/maps";
+import { FUN_MAPS, MAPS, MAP_BY_ID, getMap, getMapCharacter } from "../content/maps";
 import { isEndlessUnlocked, isHardUnlocked, isMapUnlocked } from "../core/save";
 import "./CoopScreen.css";
 import { AdventurerPanel, Toggle, getStartingWeaponIcon } from "./GameUi";
@@ -272,7 +272,7 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
     };
     return (
         <div className="ui-fill ui-select">
-            <AdventurerPanel ui={ui} client={client} />
+            <AdventurerPanel ui={ui} client={client} fixed={getMapCharacter(map)} />
             <div className="ui-panel rs-border rs-background ui-select-panel ui-select-maps ui-coop-party">
                 <h2 className="ui-select-heading">
                     {room.name || "Party"}
@@ -302,7 +302,7 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
                 <div className="ui-coop-members">
                     {room.members.map((member) => {
                         const character = getCharacter(
-                            map.fun?.character ??
+                            getMapCharacter(map) ??
                                 (CHARACTERS.some((c) => c.id === member.characterId)
                                     ? member.characterId
                                     : CHARACTERS[0].id),
@@ -411,9 +411,11 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
                                         ? map.fun.character
                                             ? `Fun map. Everyone plays ${getCharacter(map.fun.character).name}.`
                                             : "Fun map, endless"
-                                        : room.endless
-                                          ? "Endless"
-                                          : "Fifteen minutes and the boss"}
+                                        : map.fight
+                                          ? `Boss fight. Everyone plays the ${getCharacter(map.fight.character).name}.`
+                                          : room.endless
+                                            ? "Endless"
+                                            : "Fifteen minutes and the boss"}
                                 </div>
                                 {room.hard && <div className="ui-card-style">On hard mode</div>}
                             </div>

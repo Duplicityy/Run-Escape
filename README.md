@@ -25,7 +25,7 @@ built on [rs-map-viewer](https://github.com/dennisdev/rs-map-viewer), the code b
 - **6 fun maps**, open from the start and endless: the Grand Exchange's scammers, East Varrock's
   F2P pkers past the Wilderness Ditch, Falador on 6 June 2006, Last Man Standing, Castle Wars and
   Pest Control.
-- **33 adventurers**, each with a starting weapon and a bonus, unlocked by beating maps and doing
+- **34 adventurers**, each with a starting weapon and a bonus, unlocked by beating maps and doing
   tasks on them.
 - **Weapons that upgrade the OSRS way** (bronze to dragon, Fire Strike to Fire Wave) and
   **evolve** with the right passive (a maxed dragon scimitar with Piety becomes the Abyssal whip),
@@ -35,6 +35,8 @@ built on [rs-map-viewer](https://github.com/dennisdev/rs-map-viewer), the code b
   Inquisitor's, Crystal) and an **Armoury** to upgrade it for good between runs.
 - **Co-op** for up to four players: rooms by invite code or open to all, everyone with their own
   adventurer, shared levels, and the run going on while anyone's standing.
+- **Phosani's Nightmare**, a boss fight on its own once Hallowed Night's beaten: no waves, no
+  picks and no items, only the Inquisitor's crossbow and her, quicker and with more at once.
 - **Endless mode** and **hard mode** for every map you've beaten, **skills** to train with the coins
   you bank, and **quests** that pay out over many runs.
 
@@ -143,7 +145,7 @@ Issues and pull requests are welcome.
   [LICENSE](LICENSE))
 - [RuneLite](https://github.com/runelite/runelite)
 - [OpenRS2 Archive](https://archive.openrs2.org/) and [RuneScape Archive](https://rs-archive.github.io/) - caches
-- [OSRS Wiki](https://oldschool.runescape.wiki/) - item spawns and sound ids
+- [OSRS Wiki](https://oldschool.runescape.wiki/) - item spawns, sound ids and music recordings
 - [2004scape](https://github.com/2004scape/Server) and [2009scape](https://gitlab.com/2009scape/2009scape) - NPC spawns
 - [RuneStar](https://github.com/RuneStar/fonts) - fonts
 - [Blurite](https://github.com/blurite/pathfinder) - pathfinding

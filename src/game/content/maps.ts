@@ -1,8 +1,10 @@
 import { SCAPERUNE_DEV_MAPS } from "../scaperune/maps/devMaps";
 import { HALLOWED_BOSS_ARENA, HALLOWED_NIGHT } from "../scaperune/maps/hallowedNight";
+import { SANCTUARY_BOSS_ARENA, SISTERHOOD_SANCTUARY } from "../scaperune/maps/sisterhoodSanctuary";
 import { MapRecipe, getRecipeArena, getRecipeWorldTile } from "../scaperune/recipe";
 import { ENEMY_BY_ID, getEnemy } from "./enemies";
 import { FUN_MAPS } from "./fun/maps";
+import { PHOSANI_START_DISTANCE } from "./phosani";
 import { RANDOM_EVENTS } from "./randomEvents";
 import { EnemyDef, MapDef } from "./types";
 import {
@@ -326,13 +328,51 @@ export const MAPS: MapDef[] = [
         seasonal: true,
         brightness: 0.8,
     },
+    {
+        id: "phosani",
+        name: "Phosani's Nightmare",
+        description:
+            "The Nightmare's hard mode, on its own: her dream, walled round in the stone of the " +
+            "Sisterhood Sanctuary beneath Slepe. No waves, no picks and no items: " +
+            "the Armadyl crossbow, and her. She rises as you arrive, quicker than before and " +
+            "with more at once, and every hit of hers is shown before it lands. Her totems' " +
+            "blasts are the only rest, and each heals you.",
+        // The Inquisitor's great helm
+        iconObjId: 24419,
+        arena: getRecipeArena(SISTERHOOD_SANCTUARY),
+        // South of the arena's middle, where her entrance stands the player
+        // anyway: she rises at the middle itself
+        spawn: {
+            x: SANCTUARY_BOSS_ARENA.baseX + SANCTUARY_BOSS_ARENA.size / 2,
+            y: SANCTUARY_BOSS_ARENA.baseY + SANCTUARY_BOSS_ARENA.size / 2 - PHOSANI_START_DISTANCE,
+        },
+        // Her hitpoints come from the event: a run here has the Inquisitor's
+        // crossbow and nothing more, not fifteen minutes of levels. Her hits are
+        // tuned to the Inquisitor's hitpoints too: a big one takes about half,
+        // as hers do on Hallowed Night with a whole run's behind you
+        difficulty: { hp: 1, damage: 1 },
+        hard: { hp: 1.3, damage: 1.3 },
+        waves: [],
+        events: [{ at: 0, kind: "finalBoss", enemyId: "phosanis_nightmare", hp: 6000 }],
+        finalBossWarning: "",
+        victoryText: "Phosani's Nightmare is laid to rest!",
+        bossArena: SANCTUARY_BOSS_ARENA,
+        scaperune: true,
+        fight: { requires: "halloween", character: "inquisitor", weaponLevel: 3 },
+        brightness: 0.75,
+        // Her own track; the recording goes in src/media/music (see GameClient)
+        music: "The Bane of Ashihama",
+    },
 ];
 
 // The maps that open one after another
-export const CAMPAIGN_MAPS: MapDef[] = MAPS.filter((map) => !map.seasonal);
+export const CAMPAIGN_MAPS: MapDef[] = MAPS.filter((map) => !map.seasonal && !map.fight);
 
 // Open from the start, between the campaign and the fun maps
 export const SEASONAL_MAPS: MapDef[] = MAPS.filter((map) => map.seasonal);
+
+// Boss fights on their own, each open once its map has been beaten
+export const FIGHT_MAPS: MapDef[] = MAPS.filter((map) => map.fight);
 
 // The fun maps (fun/maps.ts): open from the start and endless, outside the
 // campaign's chain
@@ -395,6 +435,16 @@ export function isFunMap(mapId: string): boolean {
 
 export function isSeasonalMap(mapId: string): boolean {
     return MAP_BY_ID.get(mapId)?.seasonal === true;
+}
+
+export function isFightMap(mapId: string): boolean {
+    return MAP_BY_ID.get(mapId)?.fight !== undefined;
+}
+
+// The adventurer everyone plays on a map, if it has one (Durial321 in
+// Falador, the Inquisitor against Phosani's Nightmare)
+export function getMapCharacter(map: MapDef): string | undefined {
+    return map.fun?.character ?? map.fight?.character;
 }
 
 export function getMap(id: string): MapDef {

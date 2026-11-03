@@ -7,7 +7,7 @@ import {
 import { CHARACTERS } from "../content/characters";
 import { ENEMY_BY_ID } from "../content/enemies";
 import { ITEM_BY_ID, getGear } from "../content/items";
-import { ALL_MAPS, MAPS, isDevMap, isFunMap, isSeasonalMap } from "../content/maps";
+import { ALL_MAPS, MAPS, MAP_BY_ID, isDevMap, isFunMap, isSeasonalMap } from "../content/maps";
 import { QUESTS, QUEST_BY_ID } from "../content/quests";
 import { SHOP_UPGRADES, SHOP_UPGRADE_BY_ID, getUpgradeCost } from "../content/shop";
 import { TROPHY_BY_ID } from "../content/trophies";
@@ -87,7 +87,7 @@ export function createSave(): SaveData {
         totalCoins: 0,
         upgrades: {},
         upgradesSpent: 0,
-        unlockedCharacters: CHARACTERS.filter((c) => !c.unlock).map((c) => c.id),
+        unlockedCharacters: CHARACTERS.filter((c) => !c.unlock && !c.only).map((c) => c.id),
         unlockedItems: [],
         runs: 0,
         victories: 0,
@@ -482,6 +482,11 @@ export function isMapUnlocked(save: SaveData, mapId: string): boolean {
     if (isFunMap(mapId) || isSeasonalMap(mapId)) {
         return true;
     }
+    // A boss fight opens once the map it's the hard mode of has been beaten
+    const fight = MAP_BY_ID.get(mapId)?.fight;
+    if (fight) {
+        return (save.mapVictories[fight.requires] ?? 0) > 0 || (save.mapVictories[mapId] ?? 0) > 0;
+    }
     const index = MAPS.findIndex((m) => m.id === mapId);
     return (
         index === 0 ||
@@ -491,15 +496,18 @@ export function isMapUnlocked(save: SaveData, mapId: string): boolean {
 }
 
 // A map can be played endless once it's been beaten; the fun maps are only
-// ever endless
+// ever endless, and a boss fight never is (there's nothing after its boss)
 export function isEndlessUnlocked(save: SaveData, mapId: string): boolean {
+    if (MAP_BY_ID.get(mapId)?.fight) {
+        return false;
+    }
     return isFunMap(mapId) || (save.mapVictories[mapId] ?? 0) > 0;
 }
 
 // Hard mode opens the same way: once the map's been beaten, and from the start
 // on the fun maps, which can't be
 export function isHardUnlocked(save: SaveData, mapId: string): boolean {
-    return isEndlessUnlocked(save, mapId);
+    return isFunMap(mapId) || (save.mapVictories[mapId] ?? 0) > 0;
 }
 
 // A piece's next upgrade in the Armoury: what it becomes, what that costs,

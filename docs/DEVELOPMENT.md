@@ -463,15 +463,105 @@ A boss's fight is in its `BossDef` and `BossAttackDef`, with no boss named in `S
 (`content/nightmare.ts`) is built from these, and any boss can use them:
 
 - `BossDef.intro`: the player's safe, the screen goes dark, what's left runs for the map's edge and
-  is gone, and the boss rises. `alone` stops the waves until it's dead.
+  is gone, and the boss rises. `alone` stops the waves until it's dead. `atMiddle` rises it at the
+  middle of the map's `bossArena` with the players stood `distance` south of it (Phosani's), and
+  `holds` roots them until it's over: `Sim.introHolds`, which the movement rules and co-op's
+  prediction take like a hold. A boss's cooldown doesn't run while it rises, so the grace after an
+  entrance is set as it rises: a second, or none after `holds`.
 - `BossDef.phases`: a shield, then totems in the corners, then a blast for a share of its hitpoints.
   Only the shield takes hits, in `damageEnemy`. Totems are enemies that can't die: their hitpoints
   are the charge they still need, and `shieldEnd` is `Infinity` while they can't be hit, which keeps
-  weapons off them.
-- Attack kinds `pattern` (rings, spirals, aimed spreads), `ground` (marks that land, or stay armed),
-  `quarters`, `surge` and `mark`, and `phases` on an attack for when it's used.
+  weapons off them. With the shield down the boss is off them the same way, and a projectile flies
+  on through it with no blocked splat (`stepProjectiles`), so nothing of the player's registers
+  on it until the totems have blasted.
+- Attack kinds `pattern` (rings, spirals, aimed spreads), `ground` (marks that land, or stay armed;
+  a `ring` of marks is round the boss unless `around: "player"`, as Phosani's claw on the player
+  has), `quarters`, `surge` and `mark`, and `phases` on an attack for when it's used.
+- The bullet hell's own tools (Phosani's Nightmare): `chain` uses an attack again straight after,
+  with its own windup, a lane or spots picked afresh each time; `toMiddle` leaps the boss to the
+  arena's middle as it begins (a `quarters` attack's lines cross there, placed where it will
+  stand), with its `leash.jump` if it has one, the windup then running from when it's up
+  (`leapToMiddle` returns the spot and the jump's ticks, and `stepLeap` goes on to the windup's
+  animation), and the view flashes the quarters that will hurt red for a second as the flowers
+  first appear (`flashQuarters`, a colour overlay); `QuartersDef.during` has
+  it stand among its flowers using only those attacks at its own interval; a `pattern`'s `gap`
+  leaves a way through a ring that turns with it, and `track` re-aims a spread's every volley.
+- More of them, from the bullet hells she's modelled on: `gapAt` puts a ring's gap on the player or
+  away from them (Hush's ring with the gap at Isaac); `mirror` fires each volley again mirrored
+  about the aim, so the two turn opposite ways (a sweep's arms open like scissors, a spiral winds
+  against itself, as Doremy's do); `speedUp` quickens each volley so rings catch each other up
+  (Sparen's stacks); `around` fires a ring in from a circle round the player (Doremy's Ochre
+  Confusion); and `follow` on an attack names the one that comes delay seconds after it's fired,
+  through whatever's in the air (Rumia's slow rings and then an aimed volley). `summon.distance`
+  puts summons in a ring that far out, and with `summon.thrown` they fly out of the boss to spots
+  that far off in random directions (`Enemy.flung`, drawn in an arc by the view), shielded until
+  they land. An enemy with `hatches` is gone after its seconds with its `into` out where it stood
+  unless it's killed first (counted from landing, when thrown), `objId` draws it as an item's
+  model with nothing to animate (Phosani's eggs are the Parasitic egg, baked as an `obj` under the
+  enemy's key), `healthBar` keeps its bar over it from the start, and `solid` has the player give
+  way instead of pushing it (as what can't move already did). A boss faces down its lane from the
+  moment a `surge` is picked until the charge is done, and totems face the arena's middle plus
+  `totems.yawOffset`, since The Nightmare's totem model has its scroll three-quarters of the way
+  round from its yaw (the crowd code leaves their yaw alone). A ground attack's `grab` plays its
+  `middleSpotAnim` out in full where each mark lands (an `Effect` with `fitRadius`, which the view
+  scales to), instead of the faint warning just vanishing: the warning is a frame of the hands up
+  (`GRAB_WARNING_TICK`) held still at `GRAB_WARNING_ALPHA`, as wide as the mark (`fit` 1), kept
+  until the real hands have risen into sight (`grab.up.from`), and the mark only hurts from then
+  until they sink (`up.to`), so what's drawn is what's hit; Phosani's marks are 0.75 tiles, near the
+  real fight's one-tile hands, with more to a ring. The mark stays up for the grab's seconds (`GroundHazard.grabEnd`)
+  and hurts each hero once who steps in meanwhile (`hit`), and the boss's `channelEnd` runs to
+  the end of the animation, so a chain's next round waits for the hands. `leash.jump` has a leashing boss play a down
+  animation where it is and an up one where it lands (`BossState.leap`), doing nothing else
+  meanwhile, and never between a `chain`'s links or before a `follow` (a charge ends at the far
+  edge and its next lane is picked from there; a leash then had her sink, come up by the player
+  and snap back to the lane). A bullet is drawn no smaller than its hit radius, whatever its
+  `scale`, so a miss that looks like one is one. The view shows a surge's lane for its first second only, and a grab mark is its hands
+  alone (no outer model), faint until it lands. The Nightmare's NPC ids are
+  several models on two skeletons: her real absorb (8604) and pit rising (8610) are on the other
+  one (npc 9431's) and tear her usual model apart, so `nightmare.ts` uses her summon for the
+  absorb and 8594 for a charge's wind-up, with 8607 and 8609 (npc 9432's) as her sink and rise.
+  `scripts/cache/find-npc-seqs.ts` lists what each id's skeleton can play. `hintArrow` on an enemy has `BossFightView` draw the cache's
+  hint arrow sprite (`HINT_ARROW_SPRITE`, `headicons_hint`) bobbing over it, or an arrow at the
+  screen's edge when it's off the screen, as the totems get.
 - `Sim.bossArena` is the square all this goes by: `MapDef.bossArena`, or the whole map. Nothing's
   sized by hand, so she fights on any square.
+- A map's `music` names an OSRS track, and its recording (from the OSRS Wiki) goes in
+  `src/media/music` as the name in lower case with underscores: `the_bane_of_ashihama.ogg` for
+  Phosani's Nightmare. `GameClient` finds the files with a glob, so a track can be named before
+  its recording is in: the map is silent until it is, and nothing breaks.
+- `MapDef.fight` makes a map one fight (Phosani's Nightmare, `content/phosani.ts`): no waves, its
+  final boss event at 0, and the adventurer's starting weapon at `weaponLevel` from the first tick,
+  with nothing in the fight dropping anything (`dropLoot` keeps only the collection log's
+  trophies there). Phosani's is built from her data alone: her sweep
+  is a one-bullet `spread` that `turn`s each volley, and her husks are a `scatter` summon of
+  enemies with `holds`, which pin the player once they arrive (`holdPlayer`).
+- What makes a bullet hell hard, all defaulting to how The Nightmare plays: `BossDef.bulletGrace`
+  is the seconds after one of its bullets hits before another can (`stepBullets`; a second unless
+  set, Phosani's 0.3). A pattern's `channel` is how long the boss stands still for it instead of
+  until its last volley, so the next attack comes through it (`startPattern` keeps the later
+  `channelEnd`; Phosani's rings and spirals get 0.5 from the loop at the end of `phosani.ts`, her
+  aimed spreads none). A pattern's `burst` fires `count` volleys and then pauses `pause` seconds
+  (`stepEmitters`), so a fast sweep's arm is short solid pieces with holes between them that a
+  player can run through; `patternSeconds` counts the pauses in how long the boss stands for it. `BossPhasesDef.phases[i].ambient` names a pattern attack of its (weight 0,
+  `phases: []`, like an opener) begun again every `interval` seconds on the phase's own timer
+  (`BossPhase.ambientNext`) in `stepPhase`, under whatever else it does, through holds and
+  cooldowns, with no channel, and not while it's under the ground (`leap`) or its sleepwalkers
+  walk (`BossState.walkers`, outside a finale: the ambient's emitters are dropped and it begins
+  again the moment they're done, so a player up by it shooting them has nothing to step
+  through). `BossDef.fallSeconds` on a final boss keeps the run going that long after it falls
+  (`Sim.victoryAt`), with nothing landing on the players, so its death animation plays before
+  the victory screen, all of it (the view cuts other deaths at `MAX_DEATH_ANIM_TICKS`, and
+  `corpseTicks` keeps the body that long); the run's time is to the fall (`endRun`'s `at`).
+  Phosani's is her death's 5.4 seconds. `tempo` multiplies
+  the boss's interval and its pattern attacks' windups (only those: the big hits keep their
+  warnings) in `startBossAttack`, and `speed` its walk, applied as each phase begins. `finale`
+  keeps the boss up for `seconds` after the last blast as a stage of its own (`stage: "finale"`,
+  untouchable like the totems stage, the HUD's bar the time left): it opens with `opener`, keeps
+  to `attacks` at `interval` like the flowers' `during` (`keepsTo`), doesn't wait for its
+  sleepwalkers (`stepWalkers` doesn't stop it), runs the finale's own `ambient`, and
+  `stepPhase` kills it when the time's up. `Hero.damageByAttack` is what each boss attack did to
+  that player, by name: `sim.damageByAttack` in the console, and the balance bot's `boss attacks
+that hit` line, for tuning a fight.
 
 The curse is applied to the input in `stepPlayer`, so keys and the touch stick go the same way.
 

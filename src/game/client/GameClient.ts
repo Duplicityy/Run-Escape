@@ -3,7 +3,6 @@ import { MapViewer } from "../../mapviewer/MapViewer";
 import { ActorRenderer } from "../../mapviewer/webgl/actor/ActorRenderer";
 import { RegionData, RegionDataInput } from "../../mapviewer/worker/RegionData";
 import { RegionDataLoader } from "../../mapviewer/worker/RegionDataLoader";
-import massacre from "../../media/music/massacre.ogg";
 import { CollisionFlag } from "../../rs/pathfinder/flag/CollisionFlag";
 import { isCoarsePointer } from "../../util/DeviceUtil";
 import { CHARACTERS, getCharacter } from "../content/characters";
@@ -18,6 +17,7 @@ import {
     MAP_BY_ID,
     getArenaRegion,
     getMap,
+    getMapCharacter,
     isDevMap,
     isFunMap,
 } from "../content/maps";
@@ -70,6 +70,7 @@ import {
 } from "./DisplaySettings";
 import {
     GameAssets,
+    HINT_ARROW_SPRITE,
     HITSPLAT_SPRITES,
     getOfferedAttackSeqs,
     getRunAppearance,
@@ -131,10 +132,18 @@ const DPS_HOLD_TICKS = TICKS_PER_SECOND / 2;
 const TITLE_MAP = MAPS[0];
 
 // Recordings of the OSRS music tracks maps play (MapDef.music), from the OSRS
-// Wiki
-const MUSIC: Record<string, string> = {
-    Massacre: massacre,
-};
+// Wiki, in src/media/music: a track's file is its name in lower case with
+// underscores (massacre.ogg, the_bane_of_ashihama.ogg). A track with no
+// recording there plays nothing, so a map can name one before it's in.
+const MUSIC_FILES = import.meta.glob("../../media/music/*.ogg", {
+    eager: true,
+    import: "default",
+}) as Record<string, string>;
+
+function musicFor(track: string): string | undefined {
+    const file = track.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+    return MUSIC_FILES[`../../media/music/${file}.ogg`];
+}
 
 // Title screen camera: lower and slowly circling the character (RS angle units
 // per tick), or settling in front of them when it's not to spin
@@ -325,7 +334,10 @@ export class GameClient implements GameFrameHandler {
 
         const actors = await renderer.getActorRenderer();
         const assets = new GameAssets(workerPool, renderer, actors);
-        const spritesPromise = assets.loadSprites(Object.values(HITSPLAT_SPRITES));
+        const spritesPromise = assets.loadSprites([
+            ...Object.values(HITSPLAT_SPRITES),
+            HINT_ARROW_SPRITE,
+        ]);
         store.set({ loadingText: "Summoning monsters", loadingProgress: 10 });
         await assets.loadBase((done, total) => {
             store.set({ loadingProgress: 10 + Math.round((done / total) * 70) });
@@ -712,7 +724,7 @@ export class GameClient implements GameFrameHandler {
                 id: member.id,
                 name: member.name,
                 characterId:
-                    map.fun?.character ??
+                    getMapCharacter(map) ??
                     (CHARACTERS.some((c) => c.id === member.characterId)
                         ? member.characterId
                         : CHARACTERS[0].id),
@@ -1059,7 +1071,7 @@ export class GameClient implements GameFrameHandler {
             map.fun !== undefined ||
             (this.store.getSnapshot().endless && isEndlessUnlocked(this.save, mapId));
         const hard = this.store.getSnapshot().hard && isHardUnlocked(this.save, mapId);
-        const characterId = map.fun?.character ?? this.store.getSnapshot().characterId;
+        const characterId = getMapCharacter(map) ?? this.store.getSnapshot().characterId;
         if (!(await this.travelTo(mapId, "characters"))) {
             return;
         }
@@ -1188,7 +1200,7 @@ export class GameClient implements GameFrameHandler {
         this.cameraGround = undefined;
         this.renderer.setBrightness(map.brightness ?? 1);
         this.minimap.setMap(map);
-        const music = map.music && MUSIC[map.music];
+        const music = map.music && musicFor(map.music);
         if (music) {
             this.audio.playMusic(music);
         } else {
@@ -1227,6 +1239,9 @@ export class GameClient implements GameFrameHandler {
             revive: undefined,
         });
         this.updateHud(true);
+        // A run that begins with picks to make (a boss fight's) shows them now:
+        // the loop only steps the sim once they're made
+        this.syncOverlay();
         if (this.coopRun?.isHost && this.coopRun.waitingForLoad) {
             this.store.toast("Waiting for everyone to arrive...", 3000);
         }
@@ -1498,7 +1513,7 @@ export class GameClient implements GameFrameHandler {
         const result = sim.getResult();
         const locked = MAPS.filter((m) => !isMapUnlocked(this.save, m.id));
         const lockedCharacters = CHARACTERS.filter(
-            (c) => !this.save.unlockedCharacters.includes(c.id),
+            (c) => !c.only && !this.save.unlockedCharacters.includes(c.id),
         );
         const lockedItems = LOCKABLE_ITEMS.filter((i) => !this.save.unlockedItems.includes(i.id));
         const endlessRecord = result.endless && isEndlessRecord(this.save, result);
@@ -2110,7 +2125,12 @@ export class GameClient implements GameFrameHandler {
                 enraged: !shownBoss.dead && (shownBoss.bossState?.enraged ?? false),
             };
             if (phase && !shownBoss.dead) {
-                boss.fraction = phase.shield / phase.shieldMax;
+                const finale = shownBoss.def.boss?.phases?.finale;
+                boss.fraction =
+                    phase.stage === "finale" && finale
+                        ? Math.max(0, (phase.finaleEnd ?? 0) - sim.tick) /
+                          (finale.seconds * TICKS_PER_SECOND)
+                        : phase.shield / phase.shieldMax;
                 boss.fight = {
                     phase: phase.index + 1,
                     phases: shownBoss.def.boss?.phases?.phases.length ?? 1,

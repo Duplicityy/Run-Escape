@@ -2679,6 +2679,16 @@ describe("enemy mechanics", () => {
 describe("maps", () => {
     test("every map's waves, events and bosses make sense", () => {
         for (const map of MAPS) {
+            if (map.fight) {
+                // One boss fight: nothing but its final boss, from the start
+                expect(map.waves).toEqual([]);
+                expect(map.events.length).toBe(1);
+                expect(map.events[0]).toMatchObject({ at: 0, kind: "finalBoss" });
+                expect(getEnemy(map.events[0].enemyId).boss?.intro?.alone).toBe(true);
+                expect(getMap(map.fight.requires).fight).toBeUndefined();
+                expect(CHARACTERS.some((c) => c.id === map.fight!.character)).toBe(true);
+                continue;
+            }
             expect(map.waves.length).toBeGreaterThan(0);
             for (const wave of map.waves) {
                 expect(wave.enemies.length).toBeGreaterThan(0);
@@ -2961,6 +2971,7 @@ describe("maps", () => {
         for (const enemy of ENEMIES) {
             const ids = [
                 enemy.splits?.into,
+                enemy.hatches?.into,
                 ...(enemy.spawns?.enemies.map((e) => e.id) ?? []),
                 ...(enemy.heals?.targets ?? []),
                 enemy.boss?.rises?.into,

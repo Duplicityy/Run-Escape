@@ -5,6 +5,46 @@ the version in the corner).
 
 ## Unreleased
 
+### Added
+
+- Phosani's Nightmare: a boss fight on its own, open once Hallowed Night's beaten. The run is one
+  fight in her dream, as the real one is: her dark floor walled round in the Sanctuary's stone, with a barred
+  gate north and south, inside the Sisterhood Sanctuary's chamber under Slepe, among its candles,
+  statues, coffins, the Theatre's dead (Verzik's skeletons, Ver Sinhaza's, and the bodies and exhumed corpses of Xarpus's room) and the dream's sleepers hanging in the dark. No waves, no picks and no items. She
+  rises as you arrive, with everything The Nightmare has, quicker and with more at once, her
+  charge from the start, a sweep of petals to step against, and in her last phase a claw on the
+  tile you stand on. She charges three times over, her claws come at random round you twice
+  running, for her flowers she sinks and comes up at the middle while they grow (the wrong
+  quarters flash red as they appear) and keeps up her petals and claws, while her sleepwalkers
+  walk in she fires nothing, her death plays out before the victory screen, and she has a
+  ring with one way through, rings to weave between, a barrage that follows you and orbs that hunt
+  you. From the bullet hells: a turning wall of petals with one doorway, pinwheels of bending
+  petals, a two-armed sweep, a spiral wound against its mirror image, a ring whose gap moves on
+  with each volley, rings that catch each other up, slow rings and then her barrage, shots that
+  part round you and then her claw, two arms that open from where you stand, and a ring that
+  closes in on you with its way out towards her. She flings eggs out of herself across the
+  square, each with a bar and the game's hint arrow over it, that hatch parasites unless you
+  chase them down and break them, and husks that run for you and hold you where you stand until
+  they're dead. Her claws' hands come up out of every mark as it lands, as wide as the mark they
+  hit, hurting anyone who steps into them while they're up, and her rings with a way
+  through open it on your side. Her charge's lane shows for a second and then it's gone, and when
+  she runs after you rather than stand firing at nothing, charges as readily as she claws, and
+  when you've got well away she sinks into the ground and comes up by you. She rises at the middle of her square with you stood south of her, rooted until she's up,
+  and comes at you the moment you're let go. Her totems stand tall, each with its scroll turned to the middle,
+  and neither she nor anything of hers can be pushed. Her parasites run for her, or for a totem,
+  and heal her shield or undo its charge a good deal at a time. Nothing in the fight drops
+  anything. Her curse's pink flashes as it lifts. Her warnings on the ground are faint. Her totems' blasts heal
+  you a little. The dream itself is under everything she does: a pattern each phase that she
+  keeps up on its own, slow enough to walk through with care, and her rings don't hold her, so
+  the next thing comes through them. Her petals hurt more and land again sooner, each phase is
+  quicker than the last, and after the last blast she stands twelve seconds more, untouchable,
+  with her sleepwalkers walking in and her claws on your tile. Her sweeps' needles come in
+  bursts, so each arm has holes along it to run through. She fights to The Bane of Ashihama. It has a hard mode once it's beaten, a quest,
+  and it can't be endless. Everyone plays the Inquisitor there, an adventurer made for the fight
+  and played nowhere else: the Armadyl crossbow, quicker on their feet and with more hitpoints.
+  Beating her brings the Nightmare staff, Phosani's own, whose grasping claws come up under
+  enemies around you, and the adventurer choice is blurred out while the map's picked.
+
 ### Changed
 
 - Most evolutions gain less damage over their maxed base weapons, while keeping an upgrade at every level.
@@ -23,6 +63,8 @@ the version in the corner).
   Qi, Sx and on, then powers of ten, rather than growing digit by digit.
 - In very long endless runs, bones no longer stop dropping once coins and food have built up
   around the map.
+- The Nightmare's charge wind-up and sleepwalker animations tore her model apart, on Hallowed
+  Night as well: they belonged to her other form.
 
 ## 0.23.0 - 2026-11-02
 

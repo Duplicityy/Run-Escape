@@ -1,5 +1,5 @@
 import { ActorRenderer } from "../../mapviewer/webgl/actor/ActorRenderer";
-import { FREEZE_SPOTANIM, Sim, yawFromVector } from "../core/Sim";
+import { FREEZE_SPOTANIM, Sim, TICKS_PER_SECOND, yawFromVector } from "../core/Sim";
 import {
     BossQuarters,
     BossWindup,
@@ -8,7 +8,7 @@ import {
     SimEvent,
     SurgeLane,
 } from "../core/entities";
-import { GameAssets } from "./GameAssets";
+import { GameAssets, HINT_ARROW_SPRITE, getEnemyModelKey } from "./GameAssets";
 import { Overlay, ScreenPoint } from "./Overlay";
 
 // What a boss with a fight of its own puts in the world (BossDef.phases,
@@ -34,9 +34,34 @@ const FUSE_FLASH = 0.7;
 const PARASITE_HEIGHT = 2;
 const DARK = 0.78;
 const FADE_TICKS = 40;
+// Warnings on the ground (her marks, lanes, cones and aim) are drawn nearly see
+// through, so what's under them shows and they're there to be read, not stared at
+const WARNING_ALPHA = 0.1;
+// The curse's pink pulses this many times a second, quicker on its last
+// attack, and flashes this long from this alpha as it lifts
+const CURSE_PULSE = 3;
+const CURSE_ENDING_PULSE = 10;
+const CURSE_FLASH_SECONDS = 0.6;
+const CURSE_FLASH_ALPHA = 0.7;
+// The quarters that will hurt flash red this long as the flowers appear, from this alpha
+const QUARTER_FLASH_SECONDS = 1;
+const QUARTER_FLASH_ALPHA = 0.35;
+// A grab's hands, as the warning: plainer than the rest, as they're the mark
+const GRAB_WARNING_ALPHA = 0.45;
+// The tick of the hands' animation the warning holds: just up out of the ground
+const GRAB_WARNING_TICK = 40;
 const LANE_CHEVRON_GAP = 4;
+// A charge's lane is shown this long once it's picked, at this alpha, and
+// then not at all: a glimpse to read, not a line to stare at
+const LANE_SHOW_SECONDS = 1;
+const LANE_SHOW_ALPHA = 0.6;
 // Pixels, at a scale of 1
 const TOTEM_ARROW = 14;
+// The hint arrow: how many times its 25 pixels it's drawn, how far over the
+// top of what it marks in tiles, and how far it bobs in pixels
+const HINT_ARROW_SCALE = 1.2;
+const HINT_ARROW_GAP = 0.6;
+const HINT_ARROW_BOB = 10;
 
 function lerp(a: number, b: number, t: number): number {
     return a + (b - a) * t;
@@ -50,11 +75,16 @@ export class BossFightView {
     private beams: { x: number; y: number; toX: number; toY: number; start: number }[] = [];
     private readonly a: ScreenPoint = { x: 0, y: 0, visible: false };
     private readonly b: ScreenPoint = { x: 0, y: 0, visible: false };
+    // Whether the curse was on last frame, and when (ms) it lifted, for its flash
+    private curseOn = false;
+    private curseEndedAt = -1;
 
     constructor(private readonly assets: GameAssets) {}
 
     reset(): void {
         this.beams = [];
+        this.curseOn = false;
+        this.curseEndedAt = -1;
     }
 
     onEvent(event: SimEvent, now: number): void {
@@ -87,37 +117,62 @@ export class BossFightView {
     // them, and a real portal's fill is its countdown
     private drawHazard(actors: ActorRenderer, sim: Sim, hazard: GroundHazard): void {
         const ground = hazard.attack.ground!;
-        const model = this.assets.get(
-            ground.locId !== undefined ? "loc:" + ground.locId : "spot:" + ground.spotAnim,
-        );
-        if (!model) {
+        // A mark with a grab is its hands alone: faint until it lands
+        const model = ground.grab
+            ? undefined
+            : this.assets.get(
+                  ground.locId !== undefined ? "loc:" + ground.locId : "spot:" + ground.spotAnim,
+              );
+        if (!model && !ground.grab) {
             return;
         }
-        const anim = model.anims[0];
-        const frame = anim.getFrame(sim.tick - hazard.startTick, true);
-        const lit = hazard.fuseTick !== -1 ? FUSE_FLASH : 0;
-        const fit = ground.fit ?? 1;
-        actors.draw(
-            model,
-            anim,
-            frame,
-            hazard.x,
-            this.ground(sim, hazard.x, hazard.y),
-            hazard.y,
-            0,
-            { scale: (fit * hazard.radius * 128) / Math.max(1, model.radius), flash: lit },
-        );
-        const middle = this.assets.get("spot:" + ground.middleSpotAnim);
-        if (middle) {
-            const arm = middle.anims[0];
+        if (model) {
+            const anim = model.anims[0];
+            const frame = anim.getFrame(sim.tick - hazard.startTick, true);
+            const lit = hazard.fuseTick !== -1 ? FUSE_FLASH : 0;
+            const fit = ground.fit ?? 1;
             actors.draw(
-                middle,
-                arm,
-                arm.getFrame(sim.tick - hazard.startTick, false),
+                model,
+                anim,
+                frame,
                 hazard.x,
                 this.ground(sim, hazard.x, hazard.y),
                 hazard.y,
                 0,
+                {
+                    scale: (fit * hazard.radius * 128) / Math.max(1, model.radius),
+                    flash: lit,
+                    alpha: WARNING_ALPHA,
+                },
+            );
+        }
+        // A grab's warning stays until the hands that come up as an effect
+        // have risen into sight, so there's always a mark to see
+        const grab = ground.grab;
+        const middle =
+            grab && sim.tick >= hazard.landTick + grab.up.from * TICKS_PER_SECOND
+                ? undefined
+                : this.assets.get("spot:" + ground.middleSpotAnim);
+        if (middle) {
+            // As it is, or fitted to the spot when it's to come up there in
+            // full once the mark lands (GroundPatternDef.grab)
+            // A grab's warning holds a frame with the hands up, steady and
+            // plain to see, as big as they'll come up, so the mark is what's hit
+            const arm = middle.anims[0];
+            actors.draw(
+                middle,
+                arm,
+                grab
+                    ? arm.getFrame(GRAB_WARNING_TICK, false)
+                    : arm.getFrame(sim.tick - hazard.startTick, false),
+                hazard.x,
+                this.ground(sim, hazard.x, hazard.y),
+                hazard.y,
+                0,
+                {
+                    alpha: grab ? GRAB_WARNING_ALPHA : WARNING_ALPHA,
+                    scale: grab ? (grab.fit * hazard.radius * 128) / Math.max(1, middle.radius) : 1,
+                },
             );
         }
     }
@@ -140,8 +195,12 @@ export class BossFightView {
             const wy = lerp(prevY[slot], y[slot], alpha);
             const anim = model.anims[0];
             const pattern = attack.pattern!;
-            options.scale =
-                pattern.scale ?? Math.max(1, (radius[slot] * 128) / Math.max(1, model.radius));
+            // Never smaller than what it hits, however it's scaled to be seen:
+            // what looks like a miss has to be one
+            options.scale = Math.max(
+                pattern.scale ?? 1,
+                (radius[slot] * 128) / Math.max(1, model.radius),
+            );
             options.flash = pattern.bright ?? 0;
             actors.draw(
                 model,
@@ -255,29 +314,81 @@ export class BossFightView {
 
     drawGround(overlay: Overlay, sim: Sim, alpha: number, now: number, scale: number): void {
         this.drawSquareEdge(overlay, sim, scale);
+        this.flashQuarters(overlay, sim, alpha);
         for (const enemy of sim.enemies) {
             const state = enemy.bossState;
             if (!state || enemy.dead) {
                 continue;
             }
             const windup = state.windup;
+            const ctx = overlay.ctx;
+            ctx.globalAlpha = WARNING_ALPHA;
             if (windup) {
                 const t = clamp01(
                     (sim.tick + alpha - windup.startTick) /
                         Math.max(1, windup.landTick - windup.startTick),
                 );
                 if (windup.lane) {
-                    this.drawLane(overlay, sim, windup.lane, t, now, scale);
+                    // A second's look at where she'll go, then it's gone
+                    const since = (sim.tick + alpha - windup.startTick) / TICKS_PER_SECOND;
+                    if (since < LANE_SHOW_SECONDS) {
+                        ctx.globalAlpha = LANE_SHOW_ALPHA;
+                        this.drawLane(overlay, sim, windup.lane, t, now, scale);
+                        ctx.globalAlpha = WARNING_ALPHA;
+                    }
                 } else if (windup.attack.cone !== undefined) {
                     this.drawCone(overlay, sim, enemy, windup, t, scale);
                 } else if (windup.attack.pattern) {
                     this.drawAim(overlay, sim, enemy, windup, t, scale);
                 }
             }
-            const surge = state.surge;
-            if (surge) {
-                this.drawLane(overlay, sim, surge.lane, 1, now, scale);
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    // As the flowers first appear, the three quarters that will hurt flash red
+    // for a second, fading: the sign that it's happening, and which way to run.
+    // A colour overlay: the flowers themselves don't say which side is which
+    // until they're hurting.
+    private flashQuarters(overlay: Overlay, sim: Sim, alpha: number): void {
+        const quarters = sim.quarters;
+        if (!quarters) {
+            return;
+        }
+        const since = (sim.tick + alpha - quarters.startTick) / TICKS_PER_SECOND;
+        if (since < 0 || since >= QUARTER_FLASH_SECONDS) {
+            return;
+        }
+        const ctx = overlay.ctx;
+        const player = sim.player;
+        const arena = sim.bossArena;
+        const { x: cx, y: cy, safe } = quarters;
+        // Each quarter as far as the arena, and no further than the camera sees
+        const minX = Math.max(arena.minX, player.x - VIEW_REACH);
+        const maxX = Math.min(arena.maxX, player.x + VIEW_REACH);
+        const minY = Math.max(arena.minY, player.y - VIEW_REACH);
+        const maxY = Math.min(arena.maxY, player.y + VIEW_REACH);
+        ctx.fillStyle = `rgba(255, 30, 50, ${QUARTER_FLASH_ALPHA * (1 - since / QUARTER_FLASH_SECONDS)})`;
+        for (let quarter = 0; quarter < 4; quarter++) {
+            if (quarter === safe) {
+                continue;
             }
+            const east = (quarter & 1) === 1;
+            const north = (quarter & 2) === 2;
+            const x0 = east ? Math.max(cx, minX) : minX;
+            const x1 = east ? maxX : Math.min(cx, maxX);
+            const y0 = north ? Math.max(cy, minY) : minY;
+            const y1 = north ? maxY : Math.min(cy, maxY);
+            if (x1 <= x0 || y1 <= y0) {
+                continue;
+            }
+            this.traceGround(overlay, sim, [
+                { x: x0, y: y0 },
+                { x: x1, y: y0 },
+                { x: x1, y: y1 },
+                { x: x0, y: y1 },
+            ]);
+            ctx.fill();
         }
     }
 
@@ -486,7 +597,7 @@ export class BossFightView {
         const base = Math.atan2(windup.dirY, windup.dirX);
         const arc = pattern.arc ?? 1;
         ctx.strokeStyle = "#ffb060";
-        ctx.globalAlpha = 0.3 + 0.5 * t;
+        ctx.globalAlpha = (0.3 + 0.5 * t) * WARNING_ALPHA;
         ctx.lineWidth = Math.max(2, 3 * scale);
         for (let i = 0; i < pattern.count; i++) {
             const angle = base - arc / 2 + (arc * i) / Math.max(1, pattern.count - 1);
@@ -504,7 +615,7 @@ export class BossFightView {
             ctx.lineTo(to.x, to.y);
             ctx.stroke();
         }
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = WARNING_ALPHA;
     }
 
     // ---- Over the whole screen ----
@@ -512,6 +623,7 @@ export class BossFightView {
     drawScreen(overlay: Overlay, sim: Sim, alpha: number, now: number, scale: number): void {
         this.drawBeams(overlay, sim, now, scale);
         this.drawTotemArrows(overlay, sim, scale);
+        this.drawHintArrows(overlay, sim, alpha, now, scale);
         const boss = sim.shownBoss;
         const width = overlay.width;
         const height = overlay.height;
@@ -520,9 +632,22 @@ export class BossFightView {
         if (boss?.def.boss?.intro && !boss.dead && !sim.intro) {
             this.vignette(ctx, width, height, "rgba(10, 0, 20, 0.5)");
         }
-        if (sim.curse) {
-            const pulse = 0.5 + 0.5 * Math.sin((now / 1000) * 3);
+        const curse = sim.curse;
+        if (curse) {
+            // Quicker on its last attack, so the end's seen coming
+            const rate = curse.attacksLeft <= 1 ? CURSE_ENDING_PULSE : CURSE_PULSE;
+            const pulse = 0.5 + 0.5 * Math.sin((now / 1000) * rate);
             this.vignette(ctx, width, height, `rgba(255, 60, 190, ${0.28 + 0.2 * pulse})`);
+            this.curseOn = true;
+        } else if (this.curseOn) {
+            // And a flash as it lifts: the feet are their own again
+            this.curseOn = false;
+            this.curseEndedAt = now;
+        }
+        const lifted = (now - this.curseEndedAt) / 1000;
+        if (this.curseEndedAt >= 0 && lifted < CURSE_FLASH_SECONDS) {
+            const fade = 1 - lifted / CURSE_FLASH_SECONDS;
+            this.vignette(ctx, width, height, `rgba(255, 120, 220, ${CURSE_FLASH_ALPHA * fade})`);
         }
         this.drawIntro(overlay, sim, alpha, scale);
     }
@@ -584,14 +709,10 @@ export class BossFightView {
         if (!phase || phase.stage !== "totems") {
             return;
         }
-        const ctx = overlay.ctx;
         const width = overlay.width;
         const height = overlay.height;
         const margin = 40 * scale;
         const size = TOTEM_ARROW * scale;
-        const middleX = width / 2;
-        const middleY = height / 2;
-        const player = sim.player;
         for (const totem of phase.totems) {
             if (totem.hp <= 0) {
                 continue;
@@ -600,28 +721,86 @@ export class BossFightView {
             if (!p.behind && p.x > 0 && p.y > 0 && p.x < width && p.y < height) {
                 continue;
             }
-            // The way there on the ground, as it's on the screen: north is up
-            const dx = totem.x - player.x;
-            const dy = -(totem.y - player.y);
-            const length = Math.max(0.001, Math.hypot(dx, dy));
-            const dirX = dx / length;
-            const dirY = dy / length;
-            const reach = Math.min(
-                (middleX - margin) / Math.max(Math.abs(dirX), 0.001),
-                (middleY - margin) / Math.max(Math.abs(dirY), 0.001),
-            );
-            const x = middleX + dirX * reach;
-            const y = middleY + dirY * reach;
-            ctx.beginPath();
-            ctx.moveTo(x + dirX * size, y + dirY * size);
-            ctx.lineTo(x - dirX * size - dirY * size * 0.8, y - dirY * size + dirX * size * 0.8);
-            ctx.lineTo(x - dirX * size + dirY * size * 0.8, y - dirY * size - dirX * size * 0.8);
-            ctx.closePath();
-            ctx.fillStyle = "#ffd76a";
-            ctx.fill();
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = "#000000";
-            ctx.stroke();
+            this.drawEdgeArrow(overlay, sim, totem.x, totem.y, size, margin);
+        }
+    }
+
+    // A yellow arrow at the screen's edge, pointing the way there on the
+    // ground as it's on the screen: north is up
+    private drawEdgeArrow(
+        overlay: Overlay,
+        sim: Sim,
+        x: number,
+        y: number,
+        size: number,
+        margin: number,
+    ): void {
+        const ctx = overlay.ctx;
+        const middleX = overlay.width / 2;
+        const middleY = overlay.height / 2;
+        const player = sim.player;
+        const dx = x - player.x;
+        const dy = -(y - player.y);
+        const length = Math.max(0.001, Math.hypot(dx, dy));
+        const dirX = dx / length;
+        const dirY = dy / length;
+        const reach = Math.min(
+            (middleX - margin) / Math.max(Math.abs(dirX), 0.001),
+            (middleY - margin) / Math.max(Math.abs(dirY), 0.001),
+        );
+        const tipX = middleX + dirX * reach;
+        const tipY = middleY + dirY * reach;
+        ctx.beginPath();
+        ctx.moveTo(tipX + dirX * size, tipY + dirY * size);
+        ctx.lineTo(tipX - dirX * size - dirY * size * 0.8, tipY - dirY * size + dirX * size * 0.8);
+        ctx.lineTo(tipX - dirX * size + dirY * size * 0.8, tipY - dirY * size - dirX * size * 0.8);
+        ctx.closePath();
+        ctx.fillStyle = "#ffd76a";
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#000000";
+        ctx.stroke();
+    }
+
+    // The game's hint arrow over whatever asks for one (EnemyDef.hintArrow),
+    // bobbing as it does over an NPC you're pointed at, and from the screen's
+    // edge when it's off it
+    private drawHintArrows(
+        overlay: Overlay,
+        sim: Sim,
+        alpha: number,
+        now: number,
+        scale: number,
+    ): void {
+        const sprite = this.assets.getSprite(HINT_ARROW_SPRITE);
+        const ctx = overlay.ctx;
+        const width = overlay.width;
+        const height = overlay.height;
+        const bob = Math.abs(Math.sin(now / 200)) * HINT_ARROW_BOB * scale;
+        for (const enemy of sim.enemies) {
+            if (!enemy.def.hintArrow || enemy.dead || enemy.flung) {
+                continue;
+            }
+            const x = lerp(enemy.prevX, enemy.x, alpha);
+            const y = lerp(enemy.prevY, enemy.y, alpha);
+            const model = this.assets.get(getEnemyModelKey(enemy.def, enemy.variant));
+            const top =
+                this.ground(sim, x, y) -
+                ((model?.height ?? 128) * enemy.scale) / 128 -
+                HINT_ARROW_GAP;
+            const p = overlay.project(x, top, y, this.a);
+            if (p.behind || p.x < 0 || p.y < 0 || p.x > width || p.y > height) {
+                this.drawEdgeArrow(overlay, sim, enemy.x, enemy.y, TOTEM_ARROW * scale, 40 * scale);
+                continue;
+            }
+            if (!sprite) {
+                continue;
+            }
+            const w = sprite.width * HINT_ARROW_SCALE * scale;
+            const h = sprite.height * HINT_ARROW_SCALE * scale;
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(sprite, Math.round(p.x - w / 2), Math.round(p.y - h - bob), w, h);
+            ctx.imageSmoothingEnabled = true;
         }
     }
 

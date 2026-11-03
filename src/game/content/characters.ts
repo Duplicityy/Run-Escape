@@ -541,6 +541,28 @@ export const CHARACTERS: CharacterDef[] = [
         bonus: { might: 0.1 },
         unlock: { kind: "killBoss", mapId: "pest_control", enemyId: "purple_portal" },
     },
+    {
+        id: "inquisitor",
+        name: "Inquisitor",
+        description:
+            "Made for Phosani's Nightmare, and everyone plays them there, and nowhere else: " +
+            "starts with the Armadyl crossbow, moves 20% faster and has 20% more hitpoints.",
+        style: "ranged",
+        startingWeapon: "armadyl_crossbow",
+        // The Inquisitor's armour, her own drop, with Barrows gloves and climbing boots
+        equipment: {
+            [EquipSlot.HEAD]: 24419,
+            [EquipSlot.TORSO]: 24420,
+            [EquipSlot.LEGS]: 24421,
+            [EquipSlot.HANDS]: FUN_ITEMS.barrowsGloves,
+            [EquipSlot.FEET]: FUN_ITEMS.climbingBoots,
+        },
+        // A fight that's all dodging and one boss: feet, and hitpoints to learn
+        // her on. The damage is the crossbow's alone, at the level the map says.
+        bonus: { moveSpeed: 0.2, maxHp: 0.2 },
+        // Hers alone: never in the roster, and no reward for beating her
+        only: "phosani",
+    },
 ];
 
 export const CHARACTER_BY_ID: Map<string, CharacterDef> = new Map(CHARACTERS.map((c) => [c.id, c]));

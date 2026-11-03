@@ -8,6 +8,8 @@ export type LocOverride = {
     size?: number;
     // Blocks walking, not projectiles, whatever the loc did
     solid?: boolean;
+    // Lifts the model this far off the ground, in scene units (128 to a tile), for what floats
+    height?: number;
 };
 
 export const LOC_OVERRIDES: Map<number, LocOverride> = new Map([
@@ -19,4 +21,12 @@ export const LOC_OVERRIDES: Map<number, LocOverride> = new Map([
     [46266, { models: [2591], size: 576, solid: true }],
     // A carved one, 1.2 tiles
     [46267, { models: [46664], size: 384, solid: true }],
+    // The Nightmare's dream's sleepers, which hang in the dark round her arena: in the cache
+    // they stand on an upper level over the void, so here they're lifted a tile or two
+    [37732, { height: 200 }],
+    [37733, { height: 150 }],
+    [37734, { height: 240 }],
+    [37735, { height: 170 }],
+    [37736, { height: 220 }],
+    [37737, { height: 190 }],
 ]);

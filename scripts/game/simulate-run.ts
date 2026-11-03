@@ -295,6 +295,11 @@ function fightMove(sim: Sim): { x: number; y: number } | undefined {
         state.walkers.enemies.filter((e) => !e.dead).forEach(consider);
     } else if (phase.stage === "totems") {
         phase.totems.filter((t) => t.hp > 0).forEach(consider);
+    } else if (sim.weapons.every((w) => w.def.kind === "slash" || w.def.kind === "sweep")) {
+        // With nothing but melee (the Inquisitor against Phosani's Nightmare) the
+        // shield has to be hit from up close, so it walks up to her and takes
+        // what comes
+        consider(boss);
     }
     if (target) {
         // Close enough for short weapons, then it just stays there
@@ -492,6 +497,13 @@ function runOnce(characterId: string, seed: number) {
                 `maxHp ${sim.player.maxHp}, armour ${sim.stats.armor}, ` +
                 `taken ${sim.damageTaken}, dps ${Math.round(sim.dps)}`,
         );
+        // Which of the boss's attacks did it, over the whole fight
+        const byAttack = Object.entries(sim.damageByAttack).sort((a, b) => b[1] - a[1]);
+        if (byAttack.length > 0) {
+            console.log(
+                "  boss attacks that hit: " + byAttack.map(([k, v]) => `${k} ${v}`).join(", "),
+            );
+        }
     }
     const result = sim.getResult();
     const ms = performance.now() - startTime;

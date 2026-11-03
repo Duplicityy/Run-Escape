@@ -217,7 +217,8 @@ export type BossView = {
     fight?: {
         phase: number;
         phases: number;
-        stage: "shield" | "totems";
+        // finale: its last stand, and fraction is the time left in it
+        stage: "shield" | "totems" | "finale";
         // How charged each totem is, 0 to 1
         totems: number[];
         curseAttacks?: number;

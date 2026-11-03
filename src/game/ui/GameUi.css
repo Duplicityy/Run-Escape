@@ -594,6 +594,23 @@
     flex-shrink: 0;
 }
 
+/* The map's own adventurer: the choice is there to see, blurred, and can't be clicked */
+.ui-select-fixed .ui-select-scroll {
+    filter: blur(3px);
+    opacity: 0.55;
+    pointer-events: none;
+    user-select: none;
+}
+
+.ui-select-fixed-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    color: #ffb83f;
+    font-weight: bold;
+}
+
 .ui-select-maps {
     grid-column: 3;
 }

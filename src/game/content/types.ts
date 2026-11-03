@@ -163,6 +163,22 @@ export type EnemyDef = {
     // Control's splatters). damage is like EnemyDef.damage (the map's
     // difficulty and the run's time scale it the same way).
     explodes?: { damage: number; radius: number; spotAnim?: number; sound?: number };
+    // Drawn as this item's model, never animated, instead of as the NPC
+    // (Phosani's eggs are the Parasitic egg): npcId goes unused
+    objId?: number;
+    // Still alive this many seconds after it turns up, it's gone, and count of
+    // into come out where it stood, dropping nothing (Phosani's eggs hatch
+    // parasites unless they're broken first)
+    hatches?: { seconds: number; into: string; count: number; spotAnim?: number; sound?: number };
+    // Its health bar's over it for as long as it's alive, full or not, so what
+    // it's got left can be read at a glance (Phosani's eggs, against their time)
+    healthBar?: boolean;
+    // The player can't push it: walking into it, they're the one that gives,
+    // as with what can't move (Phosani's Nightmare and everything of hers)
+    solid?: boolean;
+    // The game's hint arrow bobs over it while it's alive, and points the way
+    // from the screen's edge when it's off it (Phosani's eggs, to be found)
+    hintArrow?: boolean;
     // Now and then digs in or blinks and comes up right by the player
     // (Jal-ImKot burrows, Pest Control's shifters teleport)
     blinks?: EnemyBlinksDef;
@@ -176,6 +192,10 @@ export type EnemyDef = {
     // at them, and doesn't come closer than twice that (Castle Wars' flag
     // carrier, off home with the flag)
     flees?: { range: number };
+    // Holds the player where they stand for this many seconds once it reaches
+    // them, or until it's dead (Phosani's husks): the boss holds off meanwhile,
+    // as it does for a summon that holds
+    holds?: number;
     // Bosses: turns up as a reward casket of this tier instead, lying near the
     // player with its beam like any other (the Mimic). Walking onto it, or
     // leaving it for seconds, sets it shaking, and shake seconds later it opens
@@ -347,21 +367,50 @@ export type BulletPatternDef = {
     arc?: number;
     // Radians a second each bullet curves by as it flies
     curve?: number;
+    // Rings and spirals: radians left empty in each volley, from the ring's own
+    // angle, so there's a way through that moves round with turn
+    gap?: number;
+    // Rings and spirals: the gap's put on the side of the player it's aimed at
+    // ("player") or the far side of the boss from them ("away", so the way
+    // out is round behind her), instead of at random
+    gapAt?: "player" | "away";
+    // Spreads: aimed afresh at the nearest player with every volley, as a
+    // stream that follows them (keep stepping across it)
+    track?: boolean;
+    // Each volley's fired twice, the second mirrored about the aim, so the
+    // two turn opposite ways: a sweep's arms open like scissors, a spiral
+    // winds against itself
+    mirror?: boolean;
+    // Tiles a second added to each volley's speed after the first, so later
+    // volleys catch the earlier ones up and the lattice closes as it arrives
+    speedUp?: number;
+    // Rings and spirals: fired from a circle this many tiles round the nearest
+    // player, flying inwards, rather than out from the boss (the ring closes
+    // in on them, and the gap's the way out)
+    around?: number;
     // Model scale, when its hit size would leave it too thin to dodge, and how
     // much it's lit up against dark ground (0 to 1)
     scale?: number;
     bright?: number;
+    // Seconds the boss stands still firing before it can begin its next attack,
+    // instead of until the last volley's out: a slow ring keeps coming while
+    // she aims the next thing through it (Phosani's)
+    channel?: number;
+    // Fired in bursts: count volleys at interval, then pause seconds before
+    // the next burst, so a sweep's arm has holes along it to run through
+    burst?: { count: number; pause: number };
 };
 
 // Where a boss's "ground" attack marks the ground, each spot radius tiles
 // across. Everything's on the ground for the attack's windup before it lands.
 export type GroundPatternDef = {
-    // under: on the boss; player: on the player; ring: around the boss, ring
-    // tiles out; grid: a lattice around the player, spacing tiles apart;
-    // scatter: at random within spread tiles of the player
+    // under: on the boss; player: on the player; ring: around the boss (or
+    // the player, with around), distance tiles out; grid: a lattice around
+    // the player, spacing tiles apart; scatter: at random within spread tiles
+    // of the player, none on another
     spots: (
         | { shape: "under" | "player" }
-        | { shape: "ring"; count: number; distance: number }
+        | { shape: "ring"; count: number; distance: number; around?: "player" }
         | { shape: "grid"; size: number; spacing: number }
         | { shape: "scatter"; count: number; spread: number }
     )[];
@@ -375,9 +424,16 @@ export type GroundPatternDef = {
     locId?: number;
     spotAnim?: number;
     fit?: number;
-    // Drawn as it is in the middle of the spot, for what can't be scaled up
-    // (Grasping Claws' arm: as wide as its spot, it'd tower over the arena)
+    // Drawn in the middle of the spot, faintly, as the warning; and with grab
+    // set, played out there in full as the spot lands, for seconds, scaled so
+    // it fits the spot's radius times fit (Grasping Claws' hands coming up
+    // out of the ground). up is when in that animation, in seconds from
+    // landing, what comes up is in sight: the warning (a frame from then,
+    // held) stays until up.from, and the spot only hurts from up.from to
+    // up.to, so nothing's hit by what can't be seen. Without grab it's drawn
+    // as it is, for what can't be scaled up.
     middleSpotAnim?: number;
+    grab?: { seconds: number; fit: number; up: { from: number; to: number } };
 };
 
 // A boss's corpse flowers: lines cross near the player, and the quarters but
@@ -385,6 +441,9 @@ export type GroundPatternDef = {
 export type QuartersDef = {
     seconds: number;
     interval: number;
+    // While the flowers stand the boss stays put and uses only these of its
+    // attacks (by name, cooldowns or not), one every interval seconds
+    during?: { attacks: string[]; interval: number };
     // How much of its shield the boss gets back for each hit
     heal: number;
     // Tiles from the player the lines cross at most, and how far apart the
@@ -435,6 +494,7 @@ export type BossAttackDef = {
     // Swings and blasts: tiles around the boss (or the spot) they hit.
     // Teleports: how far from the player the boss lands.
     // Surges: tiles either side of the lane's middle.
+    // Projectiles: each one's hit radius (0.35 tiles unless set).
     radius?: number;
     // Swings: hits only a wedge this many radians across, in the way the boss
     // faced as it began, and under the boss (around it, underRadius tiles)
@@ -461,12 +521,22 @@ export type BossAttackDef = {
     // it. Those that get there are absorbed: when the last is dead or
     // absorbed, a blast no one can dodge hits for damage, plus perAbsorbed
     // for each one. (The Nightmare's Sleepwalkers.)
+    // scatter: they turn up at random, as far off as a wave's enemies do, and
+    // come for the player (Phosani's husks, which hold once they arrive).
+    // distance: tiles from the boss (or the player, with beside) they turn up,
+    // in a ring, instead of right by them (Phosani's rooted husks).
+    // thrown: they fly out of the boss to spots about distance tiles off in
+    // random directions, over seconds, and can't be hit until they land; what
+    // hatches counts its time from landing (Phosani's eggs, to be chased down).
     summon?: {
         enemyId: string;
         count: number;
         // Comes with them, one of it (a Husk of each kind)
         alsoId?: string;
         beside?: boolean;
+        scatter?: boolean;
+        distance?: number;
+        thrown?: { seconds: number };
         holds?: number;
         walkTo?: { distance: number; perAbsorbed: number };
     };
@@ -491,6 +561,19 @@ export type BossAttackDef = {
     // Blasts: the boss jumps onto the spot the player stood on, landing as it
     // hits (one of several, the first)
     leap?: boolean;
+    // Used again this many more times straight after, each wound up for
+    // windup seconds, before the boss's usual interval: dashes back to back,
+    // claws again and again. A surge's lane and a ground attack's spots are
+    // picked afresh each time.
+    chain?: { times: number; windup: number };
+    // Another of the boss's attacks, by name, begins delay seconds after this
+    // one's fired, before anything else and whatever's still in the air: slow
+    // rings and then an aimed barrage, a fan that parts round the player and
+    // then a claw where they stand
+    follow?: { attack: string; delay: number };
+    // The boss leaps to the middle of the arena as it begins (castSpotAnim
+    // where it left), and a quarters attack's lines cross there
+    toMiddle?: boolean;
     // Only used once the boss is enraged
     enraged?: boolean;
     // Only used in these of the boss's phases (BossDef.phases), counting from 1
@@ -545,20 +628,57 @@ export type BossIntroDef = {
     distance: number;
     // No waves or events until it's dead: it's the two of them
     alone?: boolean;
+    // It rises at the middle of the map's bossArena, with the player brought
+    // to distance tiles south of it (a party side by side), rather than beside
+    // wherever they are (Phosani's Nightmare, in her square)
+    atMiddle?: boolean;
+    // The player can't move until it's over: they stand and watch it rise
+    holds?: boolean;
 };
+
+// A pattern a boss keeps up by itself (BossPhasesDef ambient): the attack,
+// by name, and seconds between one beginning and the next
+export type BossAmbientDef = { attack: string; interval: number };
 
 // A boss fought in phases: a shield to break, then totems in the arena's
 // corners to charge with hits, whose blast takes away a share of its
 // hitpoints, which nothing else can touch. The last blast ends it.
 export type BossPhasesDef = {
     // One a phase. shield: of its hitpoints. opener: the attack (by name) it
-    // begins with, before anything else.
-    phases: { shield: number; opener?: string }[];
+    // begins with, before anything else. ambient: an attack of its (a
+    // pattern, by name) it keeps up the whole phase on its own timer, begun
+    // again every interval seconds under whatever else it's doing, through
+    // holds and cooldowns: the floor the fight's dodged on. tempo multiplies
+    // its interval between attacks and its patterns' windups (not the big
+    // hits'), and speed its walk, so each phase is a gear up on the last.
+    phases: {
+        shield: number;
+        opener?: string;
+        ambient?: BossAmbientDef;
+        tempo?: number;
+        speed?: number;
+    }[];
+    // After the last blast it stands for seconds more before it falls, using
+    // only these attacks (by name) interval seconds apart, opener first, with
+    // ambient under them, and can't be hurt meanwhile: a last stand to live
+    // through (Phosani's desperation phase). Without it the last blast kills.
+    finale?: {
+        seconds: number;
+        attacks: string[];
+        interval: number;
+        opener?: string;
+        ambient?: BossAmbientDef;
+        message: string;
+    };
     totems: {
         // The enemies: stands idle, can be charged, and is charged
         idleId: string;
         chargingId: string;
         chargedId: string;
+        // Each stands turned to the arena's middle: this is added to that yaw
+        // for a model whose mark isn't on its front (The Nightmare's totems'
+        // scroll hangs three-quarters of the way round)
+        yawOffset?: number;
         // Charge each needs, of the boss's hitpoints
         charge: number;
         // Tiles in from the arena's corners
@@ -624,9 +744,25 @@ export type BossDef = {
     };
     intro?: BossIntroDef;
     phases?: BossPhasesDef;
+    // Seconds after one of its bullets hits a player before another can (a
+    // second when unset): what a bullet hell's worth of petals can do to
+    // someone stood in them
+    bulletGrace?: number;
+    // A final boss: the run goes on this many seconds after it falls, for its
+    // death animation to play before the victory screen, with nothing
+    // landing on the players meanwhile (the run's time is to the fall)
+    fallSeconds?: number;
     // Further than this from the player, it blinks back to about keep tiles
-    // from them (a fight across a big arena stays on the screen)
-    leash?: { distance: number; keep: number; spotAnim?: number };
+    // from them (a fight across a big arena stays on the screen). With jump,
+    // it plays downSeq for seconds where it is, then upSeq for seconds where
+    // it lands, instead of just being there (The Nightmare into the ground
+    // and up out of it)
+    leash?: {
+        distance: number;
+        keep: number;
+        spotAnim?: number;
+        jump?: { downSeq: number; upSeq: number; seconds: number };
+    };
     // Its animation as it charges (BossAttackDef surge), and as it stands
     // winding one up
     surgeSeq?: number;
@@ -725,6 +861,10 @@ export type WeaponDef = {
     // Auras and strikes: what they hit can't move for the level's duration
     // (bosses shrug it off)
     freezes?: boolean;
+    // Strikes: each impact's spot animation is scaled to this many times the
+    // strike's radius and played out in full, rather than drawn as it is for
+    // a moment (the Nightmare's hands coming up out of the ground)
+    impactFit?: number;
     // Auras and strikes: what they hit takes this much more damage from
     // everything for the level's duration (0.2 = +20%; Shadow Burst)
     drain?: number;
@@ -898,6 +1038,10 @@ export type CharacterDef = {
     bonus: Partial<Stats>;
     // Always available when unset
     unlock?: UnlockTask;
+    // Played on this map alone (a boss fight's, MapDef.fight.character), and
+    // nowhere else: never in the roster, never unlocked, never counted (the
+    // Inquisitor, Phosani's)
+    only?: string;
 };
 
 export type ShopUpgradeDef = {
@@ -964,8 +1108,9 @@ export type MapDef = {
     // The countdown before the final boss, and the victory title
     finalBossWarning: string;
     victoryText: string;
-    // The OSRS music track that loops quietly through a run here, by name
-    // (the client has a recording of each, see GameClient's MUSIC)
+    // The OSRS music track that loops quietly through a run here, by name:
+    // its recording goes in src/media/music, named as GameClient's musicFor
+    // says, and until it's there the map plays nothing
     music?: string;
     // Fun maps: endless from the start and outside the unlock chain (see
     // FunMapDef). Campaign maps leave it unset.
@@ -977,6 +1122,13 @@ export type MapDef = {
     scaperune?: boolean;
     // A seasonal event: open from the start, outside the campaign's chain
     seasonal?: boolean;
+    // One boss fight and nothing else (Phosani's Nightmare): no waves, no
+    // picks and no items, and its final boss rises as the run begins. Outside
+    // the campaign's chain like a seasonal map, and open once requires (a map
+    // id) has been beaten; it can't be endless. Everyone plays character there,
+    // an adventurer made for the fight, whose starting weapon begins at
+    // weaponLevel: that's the whole kit, and the fight's balanced to it.
+    fight?: { requires: string; character: string; weaponLevel: number };
     // How the map's drawn, 1 as the game is and lower darker
     brightness?: number;
 };
