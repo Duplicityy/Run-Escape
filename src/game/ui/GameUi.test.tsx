@@ -211,3 +211,46 @@ test("unaffordable skills cannot purchase but can refund a bought rank", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refund one Strength rank" }));
     expect(actions.refundUpgrade).toHaveBeenCalledExactlyOnceWith("strength", "melee");
 });
+
+function renderMaps(mapId = "lumbridge") {
+    const store = new GameStore(createSave());
+    store.set({ screen: "characters", mapId });
+    const actions = {
+        selectMap: vi.fn((id: string) => store.set({ mapId: id })),
+        selectCharacter: vi.fn(),
+        playClick: vi.fn(),
+    };
+    render(<GameUi store={store} client={actions as unknown as GameClient} />);
+    return actions;
+}
+
+test("the map screen opens on the picked map's tab, and a map on another tab can be picked", () => {
+    expect.hasAssertions();
+    const actions = renderMaps();
+    expect(screen.getByRole("tab", { name: "Campaign" })).toHaveAttribute("aria-selected", "true");
+    // The other tabs' maps are laid out, but out of reach
+    expect(screen.getByRole("button", { name: "Lumbridge" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Theatre of Blood" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Bosses" }));
+    expect(screen.queryByRole("button", { name: "Lumbridge" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Theatre of Blood" }));
+    expect(actions.selectMap).toHaveBeenCalledExactlyOnceWith("theatre_of_blood");
+    expect(screen.getByRole("button", { name: /Enter Theatre of Blood/ })).toBeInTheDocument();
+    cleanup();
+    renderMaps("theatre_of_blood");
+    expect(screen.getByRole("tab", { name: "Bosses" })).toHaveAttribute("aria-selected", "true");
+}, 30000);
+
+test("map tabs support arrow keys and wrap", () => {
+    expect.hasAssertions();
+    renderMaps();
+    const campaign = screen.getByRole("tab", { name: "Campaign" });
+    campaign.focus();
+    fireEvent.keyDown(campaign, { key: "ArrowRight" });
+    const bosses = screen.getByRole("tab", { name: "Bosses" });
+    expect(bosses).toHaveFocus();
+    expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Bosses");
+    fireEvent.keyDown(bosses, { key: "ArrowLeft" });
+    fireEvent.keyDown(campaign, { key: "ArrowLeft" });
+    expect(screen.getAllByRole("tab").at(-1)).toHaveFocus();
+});

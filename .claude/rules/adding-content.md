@@ -182,13 +182,18 @@ Add it to `MAPS` in `maps.ts` (fun maps go in `fun/maps.ts`), with its waves in 
   to it. The spawn is the middle of the boss square, where the entrance puts the player anyway.
   The bot keeps away from bosses, so with nothing but melee it walks up to a shielded one and
   takes her swings: its numbers say how long the kit takes, not how a player fares. It's listed
-  under Boss fights on the map screen, and can't be endless. Sim it with
+  under Boss fights on the map screen's Bosses tab, and can't be endless. Sim it with
   `FLAT=1 MAP=phosani DODGE=1`, which needs no cache, and go by how long the bot lasts and what
   hits it (its `boss attacks that hit` line says which of the boss's attacks did it): it can't
   dodge as a person does.
 - Check it in the browser: the minimap, the spawn, and that enemies can reach you. The sim's bot
   uses the real collision, so a sim also shows whether a map plays at all.
 - Fun maps don't count towards quests.
+- The map screen lists maps by kind, a tab for each (`MAP_TABS` in `ui/GameUi.tsx`): a new list
+  like `RAID_MAPS` needs a group there, or it won't be on the screen. Every tab's page is laid out
+  at once, one over another, so the list keeps the tallest's height and the details below never
+  move. A tab taller than the Campaign's makes the list taller on every tab, and past about half
+  the panel it scrolls.
 - `hard` is what hard mode multiplies its enemies' hitpoints and damage by (`hard.ts` has the rest of
   hard mode, and the numbers for a map that doesn't set its own). Sim it against normal with `HARD=1`.
 - A map that isn't a slice of the real world is a ScapeRune recipe, and one that ships goes in

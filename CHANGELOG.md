@@ -3,6 +3,18 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
+## Unreleased
+
+### Changed
+
+- The map screen has a tab for each kind of map: Campaign, Bosses (boss fights and raids) and
+  Fun. A map's details have a box of their own under the list, which scrolls for a long one.
+
+### Fixed
+
+- The Theatre of Blood couldn't be picked on the map screen: pointing at it pushed it out from
+  under the pointer.
+
 ## 0.24.0 - 2026-11-03
 
 ### Added

@@ -572,8 +572,10 @@
 
 /* Adventurer and map select: a panel down each side, so the adventurer picked
    stands in view between them, and a bar along the bottom. In each panel the
-   list scrolls on its own if the window's too short for it, and the details
-   stay in view below it. */
+   list takes the height it needs and the details fill the rest, scrolling on
+   their own: the details are never what sizes the list, so nothing moves
+   under the pointer as they change. The list scrolls too if the window's too
+   short for it. */
 
 .ui-select {
     display: grid;
@@ -585,8 +587,7 @@
 }
 
 .ui-select-panel {
-    align-self: start;
-    max-height: 100%;
+    min-height: 0;
     box-sizing: border-box;
     overflow: hidden;
     display: flex;
@@ -595,13 +596,29 @@
 }
 
 .ui-select-scroll {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: 0;
     overflow-y: auto;
 }
 
 .ui-select-panel > .ui-select-details {
-    flex-shrink: 0;
+    flex: 1 1 0;
+    min-height: 118px;
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+/* The co-op room's party, in the map panel's place: only as tall as what's in
+   it, with the map the host picked written out in full. Here and not in
+   CoopScreen.css, which loads first. */
+.ui-coop-party {
+    align-self: start;
+    max-height: 100%;
+}
+
+.ui-coop-party > .ui-select-details {
+    flex: none;
+    min-height: 0;
 }
 
 /* The map's own adventurer: the choice is there to see, blurred, and can't be clicked */
@@ -692,12 +709,6 @@
     box-shadow: inset 0 0 0 1px rgba(107, 94, 74, 0.35);
 }
 
-/* Room for the longest, so it doesn't jump about between them */
-.ui-select-adventurers .ui-select-details {
-    min-height: 118px;
-    box-sizing: border-box;
-}
-
 .ui-select-details-head {
     display: flex;
     align-items: center;
@@ -745,6 +756,38 @@
     right: 1px;
     bottom: 0;
     display: flex;
+}
+
+/* The kinds of map, a tab each across the panel */
+.ui-map-tabs {
+    display: flex;
+    gap: 4px;
+}
+
+.ui-map-tabs .ui-button {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 4px;
+}
+
+/* Every tab's page in the one place, so the list is as tall as the longest
+   whichever's open; the others are there but hidden. At most a little over
+   half the panel, so a long one (the dev server's) scrolls rather than
+   squeezing the details. */
+.ui-map-pages {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 55%;
+}
+
+.ui-map-page {
+    grid-area: 1 / 1;
+}
+
+.ui-map-page[aria-hidden="true"] {
+    visibility: hidden;
 }
 
 .ui-map-list {
@@ -844,8 +887,18 @@
         overflow: visible;
     }
 
-    .ui-select-scroll {
+    .ui-select-scroll,
+    .ui-select-panel > .ui-select-details {
         overflow-y: visible;
+    }
+
+    .ui-select-panel > .ui-select-details,
+    .ui-map-pages {
+        flex: none;
+    }
+
+    .ui-map-pages {
+        max-height: none;
     }
 
     .ui-select-bar {
@@ -880,13 +933,14 @@
     margin-bottom: 8px;
 }
 
-.ui-shop-tabs .ui-button {
+/* Tabs: raised, and the open one pressed in */
+.ui-tabs .ui-button {
     box-shadow:
         inset 1px 1px 0 var(--ui-edge-light),
         inset -1px -1px 0 rgba(0, 0, 0, 0.55);
 }
 
-.ui-shop-tabs .ui-button[aria-selected="true"] {
+.ui-tabs .ui-button[aria-selected="true"] {
     color: var(--ui-green);
     box-shadow:
         inset 2px 2px 0 rgba(0, 0, 0, 0.75),
