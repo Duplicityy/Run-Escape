@@ -111,6 +111,12 @@ const CATCH_UP_BUDGET_MS = 8;
 // than a slow load brings in
 const MAX_COOP_INBOX = 50_000;
 const HUD_INTERVAL_MS = 100;
+// Frames a second at most. A phone's screen can refresh at 90 or 120 Hz, which is
+// twice the drawing for a run that ticks 50 times a second, and heat. Behind a
+// solo run's menus (and on the title screen) all that moves is the scenery.
+// 0 is every frame the browser offers.
+const PLAY_FPS = isCoarsePointer ? 60 : 0;
+const MENU_FPS = 30;
 // The damage meter's number holds this long, so it can be read
 const DPS_HOLD_TICKS = TICKS_PER_SECOND / 2;
 
@@ -1557,6 +1563,7 @@ export class GameClient implements GameFrameHandler {
     // ---- Frame ----
 
     update(deltaTimeMs: number, camera: Camera): void {
+        this.renderer.fpsLimit = this.isStoppedBehindMenu() ? MENU_FPS : PLAY_FPS;
         this.fps = this.fps * 0.95 + (deltaTimeMs > 0 ? 1000 / deltaTimeMs : 0) * 0.05;
         const wheel = this.input.takeWheel();
         if (wheel !== 0 && this.sim) {
@@ -1634,6 +1641,17 @@ export class GameClient implements GameFrameHandler {
             this.cameraGround = ground;
         }
         this.cameraRig.apply(camera, px, ground - 0.6, py);
+    }
+
+    // Nothing but the scenery moves: the title screen, or a solo run that's stopped
+    // for a menu (a level up, a casket, the pause menu, the results). A co-op run
+    // carries on behind its menus.
+    private isStoppedBehindMenu(): boolean {
+        const sim = this.sim;
+        if (!sim) {
+            return true;
+        }
+        return !this.coopRun && (this.paused || sim.state !== "playing");
     }
 
     // A co-op run: frames step at the run's pace, the host's whenever it
