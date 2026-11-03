@@ -30,6 +30,12 @@ const BOSS_COLOR = "#ff3030";
 const PLAYER_COLOR = "#ffffff";
 // Co-op teammates, green like friends on the client's minimap
 const TEAMMATE_COLOR = "#00ff80";
+const OUTLINE_COLOR = "#000000";
+// Redrawn this often at most: its dots move a pixel or so a frame, and a big
+// wave is hundreds of them
+const DRAW_INTERVAL_MS = 1000 / 30;
+// How early a redraw can come, for frame times that wobble
+const DRAW_TOLERANCE_MS = 2;
 
 function lerp(a: number, b: number, t: number): number {
     return a + (b - a) * t;
@@ -54,6 +60,11 @@ export class Minimap {
     // doesn't keep (it has plane 0's), by map square
     private readonly planeImages = new Map<number, string>();
     private readonly planeImagesAsked = new Set<number>();
+    private lastDraw = -Infinity;
+    // Reused each draw: the enemies' dots on the minimap, by colour, and the bosses
+    private readonly enemyDots = new DotList();
+    private readonly eliteDots = new DotList();
+    private readonly bosses: Sim["enemies"] = [];
 
     constructor(readonly mapViewer: MapViewer) {}
 
@@ -194,6 +205,11 @@ export class Minimap {
         viewHero = sim.focus,
         predicted?: PlayerPose,
     ): void {
+        const now = performance.now();
+        if (now - this.lastDraw < DRAW_INTERVAL_MS - DRAW_TOLERANCE_MS) {
+            return;
+        }
+        this.lastDraw = now;
         const viewed = getPlayerPose(sim, viewHero, alpha, predicted);
         this.playerMapX = Math.floor(viewed.x / MAP_SQUARE_SIZE);
         this.playerMapY = Math.floor(viewed.y / MAP_SQUARE_SIZE);
@@ -235,7 +251,16 @@ export class Minimap {
         // A tile's worth, at least a couple of pixels
         const dot = Math.max(2, Math.round(scale));
         const outline = Math.max(1, Math.round(pixel));
-        const bosses = [];
+        // Grouped by colour, so a wave of hundreds is a few colour changes rather
+        // than two for every dot. Those off the minimap are left out.
+        const bosses = this.bosses;
+        bosses.length = 0;
+        const enemyDots = this.enemyDots;
+        const eliteDots = this.eliteDots;
+        enemyDots.clear();
+        eliteDots.clear();
+        const eliteDot = Math.round(dot * 1.6);
+        const reach = eliteDot / 2 + outline;
         for (const enemy of sim.enemies) {
             if (enemy.dead) {
                 continue;
@@ -246,12 +271,14 @@ export class Minimap {
             }
             const x = toX(lerp(enemy.prevX, enemy.x, alpha));
             const y = toY(lerp(enemy.prevY, enemy.y, alpha));
-            if (enemy.elite) {
-                drawDot(ctx, x, y, Math.round(dot * 1.6), outline, ELITE_COLOR);
-            } else {
-                drawDot(ctx, x, y, dot, outline, ENEMY_COLOR);
+            if (x < -reach || y < -reach || x > size + reach || y > size + reach) {
+                continue;
             }
+            (enemy.elite ? eliteDots : enemyDots).add(x, y);
         }
+        enemyDots.draw(ctx, dot, outline, ENEMY_COLOR);
+        // Elites, bigger, over the rest
+        eliteDots.draw(ctx, eliteDot, outline, ELITE_COLOR);
         for (const pickup of sim.pickups) {
             let color: string;
             if (pickup.kind === "casket" && pickup.tier) {
@@ -298,6 +325,49 @@ export class Minimap {
     }
 }
 
+// Dots of one colour: all their dark edges, then all of them
+class DotList {
+    private xs = new Float32Array(256);
+    private ys = new Float32Array(256);
+    private count = 0;
+
+    clear(): void {
+        this.count = 0;
+    }
+
+    add(x: number, y: number): void {
+        if (this.count === this.xs.length) {
+            const xs = new Float32Array(this.count * 2);
+            const ys = new Float32Array(this.count * 2);
+            xs.set(this.xs);
+            ys.set(this.ys);
+            this.xs = xs;
+            this.ys = ys;
+        }
+        this.xs[this.count] = x;
+        this.ys[this.count] = y;
+        this.count++;
+    }
+
+    draw(ctx: CanvasRenderingContext2D, size: number, outline: number, color: string): void {
+        if (this.count === 0) {
+            return;
+        }
+        const { xs, ys, count } = this;
+        const edge = size + outline * 2;
+        ctx.fillStyle = OUTLINE_COLOR;
+        for (let i = 0; i < count; i++) {
+            const left = Math.round(xs[i] - size / 2);
+            const top = Math.round(ys[i] - size / 2);
+            ctx.fillRect(left - outline, top - outline, edge, edge);
+        }
+        ctx.fillStyle = color;
+        for (let i = 0; i < count; i++) {
+            ctx.fillRect(Math.round(xs[i] - size / 2), Math.round(ys[i] - size / 2), size, size);
+        }
+    }
+}
+
 // A square dot with a dark edge, on whole pixels
 function drawDot(
     ctx: CanvasRenderingContext2D,
@@ -309,7 +379,7 @@ function drawDot(
 ): void {
     const left = Math.round(x - size / 2);
     const top = Math.round(y - size / 2);
-    ctx.fillStyle = "#000000";
+    ctx.fillStyle = OUTLINE_COLOR;
     ctx.fillRect(left - outline, top - outline, size + outline * 2, size + outline * 2);
     ctx.fillStyle = color;
     ctx.fillRect(left, top, size, size);

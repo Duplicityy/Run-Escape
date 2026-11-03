@@ -175,7 +175,8 @@
 .ui-chest[data-phase="burst"] .ui-chest-halo,
 .ui-chest[data-phase="reveal"] .ui-chest-halo {
     background: radial-gradient(circle, var(--rarity) 0%, transparent 65%);
-    animation: chest-halo-pulse 2.2s ease-in-out infinite;
+    /* A few pulses, then it holds */
+    animation: chest-halo-pulse 2.2s ease-in-out 3 both;
 }
 
 @keyframes chest-halo-charge {
@@ -205,35 +206,33 @@
     width: 640px;
     height: 640px;
     margin: -320px 0 0 -320px;
-    opacity: 0;
-    -webkit-mask-image: radial-gradient(circle, #000 12%, transparent 68%);
-    mask-image: radial-gradient(circle, #000 12%, transparent 68%);
 }
 
-.ui-chest-rays::before,
-.ui-chest-rays::after {
-    content: "";
+/* Each set turns on its own and slows to a stop, so the reveal isn't drawn
+   for as long as it's left open. The fade in is on them rather than the box:
+   opacity on a box of turning layers makes it a surface of its own. */
+.ui-chest-rays svg {
     position: absolute;
     inset: 0;
-    border-radius: 50%;
-    background: repeating-conic-gradient(var(--rarity) 0deg 6deg, transparent 6deg 22.5deg);
-    animation: chest-spin 10s linear infinite;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
 }
 
-/* Rarer items get a second set turning the other way */
-.ui-chest-rays::after {
+.ui-chest-rays-main stop {
+    stop-color: var(--rarity);
+}
+
+.ui-chest-rays-fine {
     display: none;
-    background: repeating-conic-gradient(
-        from 11deg,
-        rgba(255, 255, 255, 0.7) 0deg 2deg,
-        transparent 2deg 30deg
-    );
-    animation-direction: reverse;
-    animation-duration: 14s;
 }
 
-.ui-chest[data-rarity="rare"] .ui-chest-rays::after,
-.ui-chest[data-rarity="veryRare"] .ui-chest-rays::after {
+.ui-chest-rays-fine stop {
+    stop-color: rgba(255, 255, 255, 0.7);
+}
+
+.ui-chest[data-rarity="rare"] .ui-chest-rays-fine,
+.ui-chest[data-rarity="veryRare"] .ui-chest-rays-fine {
     display: block;
 }
 
@@ -242,18 +241,45 @@
     animation: chest-rays-in 0.5s ease-out both;
 }
 
+.ui-chest[data-phase="burst"] .ui-chest-rays-main,
+.ui-chest[data-phase="reveal"] .ui-chest-rays-main {
+    animation:
+        chest-rays-fade 0.5s ease-out both,
+        chest-spin 20s cubic-bezier(0.3, 0.6, 0.5, 1) both;
+}
+
+.ui-chest[data-phase="burst"] .ui-chest-rays-fine,
+.ui-chest[data-phase="reveal"] .ui-chest-rays-fine {
+    animation:
+        chest-rays-fade 0.5s ease-out both,
+        chest-spin-back 24s cubic-bezier(0.3, 0.6, 0.5, 1) both;
+}
+
 .ui-chest[data-rarity="common"] .ui-chest-rays {
     --rays-opacity: 0.3;
 }
 
 @keyframes chest-rays-in {
     from {
-        opacity: 0;
         transform: scale(0.3);
     }
     to {
-        opacity: var(--rays-opacity, 0.6);
         transform: scale(1);
+    }
+}
+
+@keyframes chest-rays-fade {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: var(--rays-opacity, 0.6);
+    }
+}
+
+@keyframes chest-spin-back {
+    to {
+        transform: rotate(-360deg);
     }
 }
 
@@ -387,7 +413,7 @@
 
 .ui-chest-item .ui-icon {
     filter: drop-shadow(0 0 10px var(--rarity)) drop-shadow(0 0 3px #fff);
-    animation: chest-float 2.4s ease-in-out 0.7s infinite;
+    animation: chest-float 2.4s ease-in-out 0.7s 3;
 }
 
 @keyframes chest-item-pop {
@@ -497,7 +523,7 @@
     filter: drop-shadow(1px 1px 0 #000);
     animation:
         chest-slam 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) 0.12s both,
-        chest-shimmer 1.4s linear infinite;
+        chest-shimmer 1.4s linear 4;
 }
 
 @keyframes chest-slam {
@@ -639,6 +665,18 @@
     }
     to {
         opacity: 1;
+    }
+}
+
+/* Phones: one set of rays, and no shimmer (it paints the text again every
+   frame) */
+@media (pointer: coarse) {
+    .ui-chest[data-rarity] .ui-chest-rays-fine {
+        display: none;
+    }
+
+    .ui-chest[data-rarity="veryRare"] .ui-chest-rarity {
+        animation: chest-slam 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) 0.12s both;
     }
 }
 

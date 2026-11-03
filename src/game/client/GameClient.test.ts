@@ -5,7 +5,13 @@ import { hasBadNumber } from "../core/lockstep";
 import { LoadedSave, SaveData, SaveStore, createSave } from "../core/save";
 import { makeGrid } from "../core/world/testGrid";
 import { DamageMeter } from "./DamageMeter";
-import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
+import {
+    DisplaySettings,
+    FrameRate,
+    frameCap,
+    loadDisplaySettings,
+    saveDisplaySettings,
+} from "./DisplaySettings";
 import { GameClient, loadoutStats } from "./GameClient";
 import { GameStore } from "./GameStore";
 
@@ -90,6 +96,131 @@ function displayOf(client: GameClient): DisplaySettings {
     return (client as unknown as { display: DisplaySettings }).display;
 }
 
+describe("the HUD", () => {
+    const updateHud = (client: GameClient, force = false) =>
+        (client as unknown as { updateHud(force: boolean): void }).updateHud.call(client, force);
+
+    test("keeps what hasn't changed the same object, so its parts don't draw again", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const sim = createSim();
+        const { client, store } = createClient(sim, false);
+        updateHud(client, true);
+        const hud = store.getSnapshot().hud!;
+        const numbers = store.getNumbers()!;
+        sim.tick += 50;
+        updateHud(client);
+        // A second on: the clock's changed, nothing the hero has
+        expect(store.getSnapshot().hud).toBe(hud);
+        expect(store.getNumbers()!.seconds).toBe(numbers.seconds + 1);
+        expect(store.getNumbers()!.quests).toBe(numbers.quests);
+        expect(store.getNumbers()!.buffs).toBe(numbers.buffs);
+        // A new weapon: the weapons change, the passives and gear don't
+        sim.addWeapon("fire_spells");
+        updateHud(client);
+        const after = store.getSnapshot().hud!;
+        expect(after).not.toBe(hud);
+        expect(after.weapons).not.toBe(hud.weapons);
+        expect(after.weapons.map((w) => w.id)).toContain("fire_spells");
+        expect(after.passives).toBe(hud.passives);
+        expect(after.gear).toBe(hud.gear);
+        vi.unstubAllGlobals();
+    });
+
+    test("with nothing changed, tells nothing that it has", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const sim = createSim();
+        const { client, store } = createClient(sim, false);
+        updateHud(client, true);
+        const ui = vi.fn();
+        const numbers = vi.fn();
+        store.subscribe(ui);
+        store.subscribeNumbers(numbers);
+        // Within the same second
+        sim.tick += 10;
+        updateHud(client);
+        updateHud(client);
+        expect(ui).not.toHaveBeenCalled();
+        expect(numbers).not.toHaveBeenCalled();
+        vi.unstubAllGlobals();
+    });
+});
+
+describe("the frame rate setting", () => {
+    test("comes to a cap: auto is 60 on a touch screen and none on a desktop", () => {
+        expect(frameCap("auto", true, false)).toBe(60);
+        expect(frameCap("auto", false, false)).toBe(0);
+        expect(frameCap("30", false, false)).toBe(30);
+        expect(frameCap("60", false, false)).toBe(60);
+        expect(frameCap("60", true, false)).toBe(60);
+        expect(frameCap("unlimited", true, false)).toBe(0);
+        expect(frameCap("unlimited", false, false)).toBe(0);
+    });
+
+    test("behind a solo run's menus it's 30 at most", () => {
+        expect(frameCap("auto", true, true)).toBe(30);
+        expect(frameCap("auto", false, true)).toBe(30);
+        expect(frameCap("unlimited", false, true)).toBe(30);
+        expect(frameCap("60", false, true)).toBe(30);
+        expect(frameCap("30", false, true)).toBe(30);
+    });
+
+    test("is auto for settings saved before it, or with one that isn't a choice", () => {
+        const stored = new Map<string, string>();
+        vi.stubGlobal("window", {
+            matchMedia: () => ({ matches: false }),
+            localStorage: {
+                getItem: (key: string) => stored.get(key) ?? null,
+                setItem: (key: string, value: string) => stored.set(key, value),
+            },
+        });
+        expect(loadDisplaySettings().frameRate).toBe("auto");
+        stored.set("rune-survivors-display", JSON.stringify({ menuSpin: false, autoAlch: true }));
+        expect(loadDisplaySettings()).toMatchObject({ frameRate: "auto", autoAlch: true });
+        stored.set("rune-survivors-display", JSON.stringify({ frameRate: 45 }));
+        expect(loadDisplaySettings().frameRate).toBe("auto");
+        saveDisplaySettings({ ...loadDisplaySettings(), frameRate: "30" });
+        expect(loadDisplaySettings().frameRate).toBe("30");
+        vi.unstubAllGlobals();
+    });
+
+    test("changed, takes hold from the next frame", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const sim = createSim();
+        const { client, store } = createClient(sim, false);
+        const renderer = { fpsLimit: 999 };
+        Object.assign(client, { renderer });
+        // A solo run that's being played. The cap's set first thing in a frame, and
+        // nothing past it matters here (the client has no input or camera).
+        const capFor = (rate: FrameRate) => {
+            client.setFrameRate(rate);
+            expect(() => client.update(16, {} as never)).toThrow();
+            return renderer.fpsLimit;
+        };
+        expect(capFor("60")).toBe(60);
+        expect(store.getSnapshot().display.frameRate).toBe("60");
+        expect(capFor("30")).toBe(30);
+        vi.unstubAllGlobals();
+    });
+});
+
+describe("the frame cap", () => {
+    const stopped = (client: GameClient) =>
+        (client as unknown as { isStoppedBehindMenu(): boolean }).isStoppedBehindMenu.call(client);
+
+    test("drops behind a solo run's menus, and not in co-op, whose run carries on", () => {
+        const sim = createSim();
+        const { client } = createClient(sim, false);
+        expect(stopped(client)).toBe(false);
+        Object.assign(client, { paused: true });
+        expect(stopped(client)).toBe(true);
+        Object.assign(client, { coopRun: {} });
+        expect(stopped(client)).toBe(false);
+        // The title screen
+        Object.assign(client, { sim: undefined, coopRun: undefined });
+        expect(stopped(client)).toBe(true);
+    });
+});
+
 describe("the damage panel", () => {
     test("is shut unless it's been opened, and is remembered", () => {
         const stored = new Map<string, string>();
@@ -125,9 +256,9 @@ describe("the damage panel", () => {
         }
         sim.damageBySource[source] = 400;
         updateHud.call(client, true);
-        const hud = store.getSnapshot().hud!;
-        expect(hud.weapons[0]).toMatchObject({ dps: 100, damage: 400 });
-        expect(hud.otherDps).toBe(0);
+        const numbers = store.getNumbers()!;
+        expect(numbers.weaponDamage[sim.weapons[0].def.id]).toEqual({ dps: 100, damage: 400 });
+        expect(numbers.otherDps).toBe(0);
         vi.unstubAllGlobals();
     });
 
@@ -142,7 +273,7 @@ describe("the damage panel", () => {
         sim.damageBySource["weapon:evolved_away"] = 600;
         sim.damageBySource.recoil = 40;
         updateHud.call(client, true);
-        expect(store.getSnapshot().hud!.otherDps).toBe(10);
+        expect(store.getNumbers()!.otherDps).toBe(10);
         vi.unstubAllGlobals();
     });
 

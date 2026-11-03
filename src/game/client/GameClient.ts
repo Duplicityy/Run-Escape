@@ -61,7 +61,13 @@ import { CameraRig, MAX_CAMERA_DISTANCE, getGroundReach } from "../render/Camera
 import { CameraReach, GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer";
 import { installRecipe } from "../scaperune/squares";
 import { DamageMeter } from "./DamageMeter";
-import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
+import {
+    DisplaySettings,
+    FrameRate,
+    frameCap,
+    loadDisplaySettings,
+    saveDisplaySettings,
+} from "./DisplaySettings";
 import {
     GameAssets,
     HITSPLAT_SPRITES,
@@ -75,12 +81,14 @@ import { ChestCue, GameSounds, getGameSoundIds } from "./GameSounds";
 import {
     ChoiceView,
     GameStore,
+    HudNumbers,
     HudView,
     QuestTrackView,
     ReviveView,
     SaveBlock,
     Screen,
     SlotView,
+    shareUnchanged,
 } from "./GameStore";
 import { GameView } from "./GameView";
 import {
@@ -825,6 +833,11 @@ export class GameClient implements GameFrameHandler {
         this.coopRun?.setPrediction(this.display.movePrediction);
     }
 
+    // Takes hold from the next frame (update)
+    setFrameRate(frameRate: FrameRate): void {
+        this.setDisplay({ frameRate });
+    }
+
     private setDisplay(changes: Partial<DisplaySettings>): void {
         this.display = { ...this.display, ...changes };
         saveDisplaySettings(this.display);
@@ -1380,6 +1393,31 @@ export class GameClient implements GameFrameHandler {
         }
     }
 
+    // The page lost its graphics (GameApp): a solo run stops where it stands, and
+    // nothing happens to it while its player can't see it. Says what was going on.
+    onGraphicsLost(): "none" | "solo" | "coop" {
+        if (!this.sim || this.sim.runOver) {
+            return "none";
+        }
+        if (this.coopRun) {
+            return "coop";
+        }
+        this.pause();
+        return "solo";
+    }
+
+    // Before the page reloads for its lost graphics: the run counts as the pause
+    // menu's quit does (its coins and quests are kept), with nothing more drawn
+    // or let go on the GPU
+    endRunForReload(): void {
+        if (this.sim) {
+            this.finishRun();
+        }
+        if (this.coopRun) {
+            this.coop.leave();
+        }
+    }
+
     resume(): void {
         this.paused = false;
         this.accumulator = 0;
@@ -1425,6 +1463,7 @@ export class GameClient implements GameFrameHandler {
         if (!show) {
             return;
         }
+        this.store.setNumbers(undefined);
         this.store.set({
             screen: wasCoop && this.coop.room ? "coop" : "title",
             overlay: "none",
@@ -1597,6 +1636,11 @@ export class GameClient implements GameFrameHandler {
     // ---- Frame ----
 
     update(deltaTimeMs: number, camera: Camera): void {
+        this.renderer.fpsLimit = frameCap(
+            this.display.frameRate,
+            isCoarsePointer,
+            this.isStoppedBehindMenu(),
+        );
         this.fps = this.fps * 0.95 + (deltaTimeMs > 0 ? 1000 / deltaTimeMs : 0) * 0.05;
         const wheel = this.input.takeWheel();
         if (wheel !== 0 && this.sim) {
@@ -1685,6 +1729,17 @@ export class GameClient implements GameFrameHandler {
             this.cameraGround = ground;
         }
         this.cameraRig.apply(camera, px, ground - 0.6, py);
+    }
+
+    // Nothing but the scenery moves: the title screen, or a solo run that's stopped
+    // for a menu (a level up, a casket, the pause menu, the results). A co-op run
+    // carries on behind its menus.
+    private isStoppedBehindMenu(): boolean {
+        const sim = this.sim;
+        if (!sim) {
+            return true;
+        }
+        return !this.coopRun && (this.paused || sim.state !== "playing");
     }
 
     // A co-op run: frames step at the run's pace, the host's whenever it
@@ -2033,7 +2088,7 @@ export class GameClient implements GameFrameHandler {
         this.lastHudUpdate = performance.now();
         const thisLevel = sim.xpForThisLevel;
         const nextLevel = sim.xpForNextLevel;
-        let boss: HudView["boss"];
+        let boss: HudNumbers["boss"];
         const shownBoss = sim.shownBoss;
         if (shownBoss) {
             const phase = shownBoss.bossState?.phase;
@@ -2065,23 +2120,44 @@ export class GameClient implements GameFrameHandler {
         }
         this.damageMeter.sample(sim.tick, sim.damageBySource);
         const meter = this.damageMeter.read();
-        const hud: HudView = {
-            mapId: sim.map.id,
-            round: sim.endless ? sim.round : undefined,
-            bossIn: sim.timeLeftForBoss,
+        const weaponDamage: HudNumbers["weaponDamage"] = {};
+        for (const w of sim.weapons) {
+            weaponDamage[w.def.id] = {
+                dps: meter.perSecond[`weapon:${w.def.id}`] ?? 0,
+                damage: meter.totals[`weapon:${w.def.id}`] ?? 0,
+            };
+        }
+        const numbers: HudNumbers = {
+            // Whole seconds, as they're shown, so standing still changes nothing
+            bossIn: Math.ceil(sim.timeLeftForBoss),
             hp: Math.max(0, Math.round(sim.player.hp)),
             maxHp: sim.player.maxHp,
             poisoned: sim.player.poisonEnd !== -1,
-            level: sim.level,
             xpFraction: Math.min(
                 1,
                 Math.max(0, (sim.xp - thisLevel) / Math.max(1, nextLevel - thisLevel)),
             ),
-            seconds: sim.seconds,
+            seconds: Math.floor(sim.seconds),
             kills: sim.kills,
             coins: sim.coins,
             dps: this.shownDps,
+            weaponDamage,
             otherDps: meter.otherPerSecond,
+            buffs: getBuffViews(sim),
+            boss,
+            quests: getQuestTrackViews(this.save, sim),
+        };
+        // What hasn't changed stays the same object, so a part of the HUD that shows
+        // only that doesn't draw again
+        const shownNumbers = this.store.getNumbers();
+        const sharedNumbers = shareUnchanged(shownNumbers, numbers);
+        if (force || sharedNumbers !== shownNumbers) {
+            this.store.setNumbers(sharedNumbers);
+        }
+        const hud: HudView = {
+            mapId: sim.map.id,
+            round: sim.endless ? sim.round : undefined,
+            level: sim.level,
             maxWeapons: sim.maxWeapons,
             maxPassives: sim.maxPassives,
             weapons: sim.weapons.map((w) => {
@@ -2097,8 +2173,6 @@ export class GameClient implements GameFrameHandler {
                     stats: weaponStats(w.def, level).map(formatWeaponStat),
                     evolution: getEvolutionView(sim, w),
                     rarityColor: RARITIES[w.def.rarity].color,
-                    dps: meter.perSecond[`weapon:${w.def.id}`] ?? 0,
-                    damage: meter.totals[`weapon:${w.def.id}`] ?? 0,
                 };
             }),
             passives: sim.passives.map((p) => {
@@ -2117,17 +2191,15 @@ export class GameClient implements GameFrameHandler {
             stats: formatStats(sim.stats),
             gear: getGearViews(sim),
             inventory: getInventoryViews(sim),
-            buffs: getBuffViews(sim),
             rerolls: sim.rerollsLeft,
             skip: sim.canSkip
                 ? { cost: sim.skipCost, affordable: sim.coins >= sim.skipCost }
                 : undefined,
-            boss,
-            quests: getQuestTrackViews(this.save, sim),
         };
         const previous = this.store.getSnapshot().hud;
-        if (force || !previous || JSON.stringify(previous) !== JSON.stringify(hud)) {
-            this.store.set({ hud });
+        const shared = shareUnchanged(previous, hud);
+        if (force || shared !== previous) {
+            this.store.set({ hud: shared });
         }
         if (sim.heroes.length > 1) {
             const party = sim.heroes
