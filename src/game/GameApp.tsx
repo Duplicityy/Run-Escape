@@ -193,8 +193,7 @@ export function GameApp(): JSX.Element {
 
     const reloadAfterLoss = () => {
         try {
-            // As the pause menu's quit: the coins and quests found are kept
-            client?.quitRun();
+            client?.endRunForReload();
         } finally {
             window.location.reload();
         }
@@ -214,7 +213,7 @@ export function GameApp(): JSX.Element {
                         {graphicsLost === "solo" && " Your run is paused."}
                         {graphicsLost === "none"
                             ? " Reload to carry on."
-                            : " Reload to play on: the coins and quests from this run are kept."}
+                            : " Reload to play again: the coins and quests from this run are kept."}
                     </p>
                     <button className="ui-button" onClick={reloadAfterLoss}>
                         Reload

@@ -1359,6 +1359,18 @@ export class GameClient implements GameFrameHandler {
         return "solo";
     }
 
+    // Before the page reloads for its lost graphics: the run counts as the pause
+    // menu's quit does (its coins and quests are kept), with nothing more drawn
+    // or let go on the GPU
+    endRunForReload(): void {
+        if (this.sim) {
+            this.finishRun();
+        }
+        if (this.coopRun) {
+            this.coop.leave();
+        }
+    }
+
     resume(): void {
         this.paused = false;
         this.accumulator = 0;
