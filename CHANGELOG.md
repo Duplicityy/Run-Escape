@@ -44,6 +44,19 @@ the version in the corner).
   and played nowhere else: the Armadyl crossbow, quicker on their feet and with more hitpoints.
   Beating her brings the Nightmare staff, Phosani's own, whose grasping claws come up under
   enemies around you, and the adventurer choice is blurred out while the map's picked.
+- Raids, by Okaeri: the Theatre of Blood, a new section on the map screen. Six rooms one after
+  another, each with its own waves and then its boss in its real room from OSRS, fought as a
+  bullet hell. It's a melee raid: its bosses take far less from missiles and magic.
+- Raid points for each room, more for a fast, clean kill: they pay coins, buy food and potions from
+  a supply chest between rooms, and better your chance of a purple from the chest at the end.
+- The Theatre's uniques for the Collection log, Lil' Zik, and two weapons: the Ghrazi rapier for
+  beating it, and the Holy Scythe of Vitur for beating it on hard.
+- The raid runs through Morytania: each room fights its waves in a real place, from the woods
+  outside Canifis to Vampyrium. Bones and coins left on a hall floor go with you to its boss.
+- Teleporters: once you've killed a room's boss, its hall has a portal straight to it (three a raid),
+  to get back to the boss you're learning quicker.
+- Beat the raid on hard for expert mode, with more of the real raid's mechanics, twice the coins
+  and Lil' Zik's looks.
 
 ### Changed
 

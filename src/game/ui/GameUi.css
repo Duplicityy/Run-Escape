@@ -236,6 +236,16 @@
     color: var(--ui-text);
 }
 
+/* A map's description keeps its line breaks, for its paragraphs */
+.ui-card-description {
+    white-space: pre-line;
+}
+
+.ui-card-description strong {
+    color: var(--ui-yellow);
+    font-weight: normal;
+}
+
 .ui-card-cost {
     color: var(--ui-yellow);
 }
@@ -927,6 +937,14 @@
     color: var(--ui-white);
 }
 
+/* A raid hall's colour over the world (RaidRoomDef.hall), under the HUD */
+.ui-hall-wash {
+    position: fixed;
+    inset: 0;
+    mix-blend-mode: multiply;
+    pointer-events: none;
+}
+
 .ui-hud-top {
     position: absolute;
     top: 24px;
@@ -1168,6 +1186,50 @@
     font-size: 18px;
     color: var(--ui-orange);
     text-shadow: 1px 1px 0 #000;
+}
+
+/* The chest at the end of a raid, on the result screen: purple, as the real one is */
+.ui-raid-chest {
+    margin: 6px auto 10px;
+    padding: 8px 14px;
+    max-width: 520px;
+    border: 1px solid #8a3fbf;
+    background: rgba(60, 20, 80, 0.45);
+    text-align: center;
+}
+
+.ui-raid-chest-title {
+    font-family: "OSRS Bold", sans-serif;
+    font-size: 20px;
+    color: #c77dff;
+    text-shadow: 1px 1px 0 #000;
+}
+
+.ui-raid-chest-items {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 6px;
+}
+
+.ui-raid-chest-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #e0b0ff;
+}
+
+/* A raid's points, under its room, and what the supply chest charges */
+.ui-raid-points,
+.ui-raid-price {
+    font-family: "OSRS Small", sans-serif;
+    color: var(--ui-yellow);
+    text-shadow: 1px 1px 0 #000;
+}
+
+.ui-raid-points {
+    font-size: 16px;
 }
 
 .ui-slots {
@@ -1456,6 +1518,31 @@
 
 .ui-boss-curse {
     color: #ff9ae6;
+}
+
+/* A raid hall's objective, where a campaign map's boss warning goes, red in its last minute */
+.ui-raid-objective {
+    position: absolute;
+    top: 70px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-family: "OSRS Bold", sans-serif;
+    font-size: 20px;
+    color: var(--ui-yellow);
+    text-shadow: 2px 2px 0 #000;
+    pointer-events: none;
+}
+
+.ui-raid-objective-soon {
+    color: var(--ui-red);
+}
+
+.ui-raid-objective-hint {
+    font-family: "OSRS Small", sans-serif;
+    font-size: 16px;
+    color: var(--ui-white);
+    text-shadow: 1px 1px 0 #000;
 }
 
 .ui-boss-warning {

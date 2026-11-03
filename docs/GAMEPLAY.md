@@ -176,6 +176,7 @@ version and how to run it.
     | Inferno        |                                                  | Toktz-mej-tal (JalTok-Jad)                                                                           |
     | Hallowed Night |                                                  | Inquisitor's mace and Volatile Nightmare staff (The Nightmare)                                       |
     | Phosani's      |                                                  | The Nightmare staff (Phosani's Nightmare)                                                            |
+    | ToB (raid)     | Ghrazi rapier; on hard, Holy Scythe of Vitur     |                                                                                                      |
 
 - **Fun maps**: the Grand Exchange, East Varrock, Falador, Last Man Standing, Castle Wars and Pest
   Control are open from the start and always endless. They have no final boss: a new round starts
@@ -314,6 +315,28 @@ version and how to run it.
       with you stood south of her, rooted until she's up, to The Bane of Ashihama, and comes at
       you the moment you're let go. Each of her totems' blasts heals you. It can't be endless; it has a hard mode
       once it's beaten.
+- **Raids**: the Theatre of Blood, open from the start. Six rooms one after another: each has five
+  waves in a hall on the way through Morytania (the woods outside Canifis, Burgh de Rott,
+  Meiyerditch, Darkmeyer, Slepe and Vampyrium, the vampyres' own), and at the next five minute
+  mark of the run (Verzik at thirty) the party's taken into the boss's real room from OSRS, cut out
+  of the cache. Killing it gives raid points (for clearing it, killing the boss fast and taking
+  little damage), coins for them, and a supply chest between rooms that sells food and potions
+  for points. The last boss's chest rolls for a purple,
+  more likely the more points you earned: the Theatre's uniques for the Collection log, and Lil'
+  Zik now and then. The bosses pray against missiles and magic, so melee hits hardest, and what
+  they fire from themselves starts a couple of tiles out, so there's a pocket up close that only
+  melee gets to stand in. A line at the top of the screen says what the hall wants of you, and
+  whatever bones and coins are still on its floor when the boss comes go with you.
+    - **Teleporters**: once you've killed a room's boss, in any run, its hall has a portal that
+      skips straight to it. Three a raid, solo only for now, so a run gets you back to the boss you
+      died to quicker.
+    - **Beaten once**: the Ghrazi rapier and hard mode.
+    - **Beaten on hard**: the Holy Scythe of Vitur, and **expert mode**: hard mode with more of the
+      real raid. The Nylocas only take their own style (grey melee, green ranged, blue magic),
+      Nylocas Vasilias changes colour, the Maiden's Matomenos crawl to her and heal her, Xarpus
+      stares one way and hurts whoever hits him from in front, and Verzik's spider throws a ball
+      that kills anyone outside its glowing circle. Twice the coins, and one of Lil' Zik's looks
+      each clear.
 - **Bosses** turn up during a run, each fighting the way it does in OSRS, and always drop an
   elite casket (now and then a master one). Big hits are wound up first, with a red circle
   showing where they'll land, and projectiles fly where you stood, so keep moving.
@@ -449,6 +472,10 @@ version and how to run it.
       seconds more, untouchable, with her sleepwalkers walking in, her claws on your tile and the
       lattice doubled under them, and falls when it's up. Everyone plays the **Inquisitor** there,
       made for the fight and played nowhere else; beating her brings the Nightmare staff.
+    - **The Theatre of Blood**: the **Maiden of Sugadinti**, the **Pestilent Bloat** (who only
+      really takes damage while he's down), **Nylocas Vasilias**, **Sotetseg** and his maze,
+      **Xarpus** and his acid, and **Verzik Vitur** in her three forms, each a bullet hell in its
+      own room.
 - **Gear** goes in the OSRS equipment slots (head, cape, neck, body, shield, legs, hands, feet,
   ring) and shows on your character: about ten pieces a slot, from Rune and Mystic to the
   Barrows brothers' armour, Armadyl, Ancestral, the Infernal cape, Pegasian boots and an Avernic

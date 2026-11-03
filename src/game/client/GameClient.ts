@@ -15,6 +15,7 @@ import {
     FUN_MAPS,
     MAPS,
     MAP_BY_ID,
+    RAID_MAPS,
     getArenaRegion,
     getMap,
     getMapCharacter,
@@ -24,6 +25,7 @@ import {
 import { formatPassiveValue, getPassive } from "../content/passives";
 import { getPowerUp } from "../content/powerups";
 import { QUESTS, canDoQuestOn, describeQuest } from "../content/quests";
+import { RAID_TELEPORTS } from "../content/raids";
 import { RARITIES, Rarity } from "../content/rarity";
 import { SHOP_UPGRADES } from "../content/shop";
 import { formatStats } from "../content/stats";
@@ -49,8 +51,10 @@ import {
     getFinishedQuests,
     getMetaStats,
     getQuestProgress,
+    getRaidPortals,
     isEndlessRecord,
     isEndlessUnlocked,
+    isExpertUnlocked,
     isHardUnlocked,
     isMapUnlocked,
     recordRun,
@@ -158,6 +162,11 @@ const RUN_DISTANCE = 18;
 // How long the camera takes to follow the ground up a slope on a dev map, in ms: without this,
 // it lurches at every crease in tall ground
 const CAMERA_GROUND_EASE = 110;
+// In a raid's boss room the camera leans this much of the way towards where the boss stands, up
+// to so many tiles, so a big boss isn't under the HUD at the top; and how long that takes, in ms
+const BOSS_LEAN = 0.4;
+const BOSS_LEAN_MAX = 2.5;
+const BOSS_LEAN_EASE = 350;
 // Closer on a phone held sideways: it shows as much to each side as a desktop
 // window does, and the player stays big enough to see
 const PHONE_RUN_DISTANCE = 15;
@@ -309,6 +318,9 @@ export type GameClientOptions = {
     stress: number;
     // Start a run with this character straight away (testing)
     autostart?: string;
+    // ?raidtest on the dev server: solo runs with a raid's rooms two minutes apart and every
+    // level up at its max (SimTesting); "short" for the rooms alone
+    raidTest?: "max" | "short";
 };
 
 export class GameClient implements GameFrameHandler {
@@ -393,7 +405,11 @@ export class GameClient implements GameFrameHandler {
     private lastHudUpdate = 0;
     // Where the camera thinks the ground is, on a dev map
     private cameraGround: number | undefined;
+    // How far the camera's leaning towards a raid boss (BOSS_LEAN)
+    private cameraLean = { x: 0, y: 0 };
     private shownDps = 0;
+    // The world's brightness as last set: a raid hall can draw darker than its map
+    private shownBrightness = 1;
     private shownDpsTick = 0;
     private readonly damageMeter = new DamageMeter();
     // Each hero's look, as last baked
@@ -549,6 +565,7 @@ export class GameClient implements GameFrameHandler {
             mapId,
             endless: snapshot.endless && isEndlessUnlocked(this.save, mapId),
             hard: snapshot.hard && isHardUnlocked(this.save, mapId),
+            expert: snapshot.expert && isExpertUnlocked(this.save, mapId),
         });
     }
 
@@ -579,6 +596,16 @@ export class GameClient implements GameFrameHandler {
         const { mapId, hard } = this.store.getSnapshot();
         if (hard || isHardUnlocked(this.save, mapId)) {
             this.store.set({ hard: !hard });
+        }
+    }
+
+    // A raid's expert mode, once it's been beaten on hard. Solo only for now: co-op's rooms
+    // don't carry it.
+    toggleExpert(): void {
+        const { mapId, expert, hard } = this.store.getSnapshot();
+        if (expert || isExpertUnlocked(this.save, mapId)) {
+            // Expert's hard mode too
+            this.store.set({ expert: !expert, hard: !expert || hard });
         }
     }
 
@@ -678,7 +705,7 @@ export class GameClient implements GameFrameHandler {
     // The maps this player has, and has endless and hard mode for, which rooms
     // go by
     private getUnlocks(): Unlocks {
-        const ids = [...MAPS, ...FUN_MAPS].map((m) => m.id);
+        const ids = [...MAPS, ...RAID_MAPS, ...FUN_MAPS].map((m) => m.id);
         return {
             maps: ids.filter((id) => isMapUnlocked(this.save, id)),
             endless: ids.filter((id) => isEndlessUnlocked(this.save, id)),
@@ -1071,6 +1098,7 @@ export class GameClient implements GameFrameHandler {
             map.fun !== undefined ||
             (this.store.getSnapshot().endless && isEndlessUnlocked(this.save, mapId));
         const hard = this.store.getSnapshot().hard && isHardUnlocked(this.save, mapId);
+        const expert = this.store.getSnapshot().expert && isExpertUnlocked(this.save, mapId);
         const characterId = getMapCharacter(map) ?? this.store.getSnapshot().characterId;
         if (!(await this.travelTo(mapId, "characters"))) {
             return;
@@ -1087,7 +1115,13 @@ export class GameClient implements GameFrameHandler {
             unlockedItems: new Set(this.save.unlockedItems),
             endless,
             hard,
+            expert,
+            raidTeleports: RAID_TELEPORTS,
+            raidPortals: getRaidPortals(this.save, mapId),
             armoury: { ...this.save.armoury },
+            testing: this.options.raidTest
+                ? { raidRoomSeconds: 120, maxLevelUps: this.options.raidTest === "max" }
+                : undefined,
         });
         for (let i = 0; i < this.options.stress; i++) {
             sim.spawnEnemy(getEnemy("goblin"), "normal");
@@ -1198,7 +1232,9 @@ export class GameClient implements GameFrameHandler {
         this.renderer.setSmoothTerrain(map.scaperune === true);
         this.grid.exactGround = map.scaperune === true;
         this.cameraGround = undefined;
+        this.cameraLean = { x: 0, y: 0 };
         this.renderer.setBrightness(map.brightness ?? 1);
+        this.shownBrightness = map.brightness ?? 1;
         this.minimap.setMap(map);
         const music = map.music && musicFor(map.music);
         if (music) {
@@ -1482,6 +1518,7 @@ export class GameClient implements GameFrameHandler {
         this.renderer.setPlane(this.grid.plane);
         this.renderer.setSmoothTerrain(false);
         this.renderer.setBrightness(1);
+        this.shownBrightness = 1;
         this.view.reset();
         this.cameraRig.pitch = ATTRACT_PITCH;
         this.cameraRig.distance = ATTRACT_DISTANCE;
@@ -1754,7 +1791,34 @@ export class GameClient implements GameFrameHandler {
             ground = last + (ground - last) * (1 - Math.exp(-deltaTimeMs / CAMERA_GROUND_EASE));
             this.cameraGround = ground;
         }
-        this.cameraRig.apply(camera, px, ground - 0.6, py);
+        const lean = this.getBossLean(sim, px, py);
+        const ease = 1 - Math.exp(-deltaTimeMs / BOSS_LEAN_EASE);
+        this.cameraLean.x += (lean.x - this.cameraLean.x) * ease;
+        this.cameraLean.y += (lean.y - this.cameraLean.y) * ease;
+        this.cameraRig.apply(camera, px + this.cameraLean.x, ground - 0.6, py + this.cameraLean.y);
+        // A raid hall can be drawn darker than the map (RaidRoomDef.hall)
+        const hallBrightness =
+            sim.map.raid && sim.raidStage === "waves"
+                ? sim.map.raid.rooms[sim.raidRoom].hall?.brightness
+                : undefined;
+        const brightness = hallBrightness ?? sim.map.brightness ?? 1;
+        if (brightness !== this.shownBrightness) {
+            this.shownBrightness = brightness;
+            this.renderer.setBrightness(brightness);
+        }
+    }
+
+    // Towards where a raid room's boss stands, while it's being fought
+    private getBossLean(sim: Sim, px: number, py: number): { x: number; y: number } {
+        const room = sim.map.raid?.rooms[sim.raidRoom];
+        if (!room || sim.raidStage !== "boss") {
+            return { x: 0, y: 0 };
+        }
+        const dx = (room.bossAt.x - px) * BOSS_LEAN;
+        const dy = (room.bossAt.y - py) * BOSS_LEAN;
+        const length = Math.hypot(dx, dy);
+        const scale = length > BOSS_LEAN_MAX ? BOSS_LEAN_MAX / length : 1;
+        return { x: dx * scale, y: dy * scale };
     }
 
     // Nothing but the scenery moves: the title screen, or a solo run that's stopped
@@ -2161,6 +2225,19 @@ export class GameClient implements GameFrameHandler {
         const numbers: HudNumbers = {
             // Whole seconds, as they're shown, so standing still changes nothing
             bossIn: Math.ceil(sim.timeLeftForBoss),
+            raidRoom: sim.map.raid && {
+                wash:
+                    sim.raidStage === "waves"
+                        ? sim.map.raid.rooms[sim.raidRoom].hall?.wash
+                        : undefined,
+                number: sim.raidRoom + 1,
+                count: sim.map.raid.rooms.length,
+                name: sim.map.raid.rooms[sim.raidRoom].name,
+                points: sim.raidPoints,
+                waves: sim.raidStage === "waves",
+                portal: sim.raidTeleporter !== undefined && sim.raidTeleportsLeft > 0,
+                first: (this.save.mapVictories[sim.map.id] ?? 0) === 0,
+            },
             hp: Math.max(0, Math.round(sim.player.hp)),
             maxHp: sim.player.maxHp,
             poisoned: sim.player.poisonEnd !== -1,

@@ -6,7 +6,7 @@ import { ItemIcon } from "./ItemIcon";
 type Props = { event: EventView; coins: number; client: GameClient };
 
 // A random event's visitor with something on offer: the Mysterious Old Man's
-// power-ups, or the Quiz Master's question
+// power-ups, or the Quiz Master's question. A raid's supply chest too, for raid points.
 export function EventModal({ event, coins, client }: Props): JSX.Element {
     const forSale = event.options.some((option) => option.price !== undefined);
     return (
@@ -30,14 +30,25 @@ export function EventModal({ event, coins, client }: Props): JSX.Element {
                             </div>
                             {option.price !== undefined && (
                                 <div className="ui-card-cost">
-                                    {option.sold ? "Sold" : <Coins amount={option.price} />}
+                                    {option.sold ? (
+                                        "Sold"
+                                    ) : event.points !== undefined ? (
+                                        <span className="ui-raid-price">{option.price} pts</span>
+                                    ) : (
+                                        <Coins amount={option.price} />
+                                    )}
                                 </div>
                             )}
                         </button>
                     ))}
                 </div>
                 <div className="ui-levelup-actions ui-event-actions">
-                    {forSale && <Coins amount={coins} />}
+                    {forSale &&
+                        (event.points !== undefined ? (
+                            <span className="ui-raid-price">{event.points} raid points</span>
+                        ) : (
+                            <Coins amount={coins} />
+                        ))}
                     <button className="ui-button" onClick={() => client.leaveEvent()}>
                         {event.leaveLabel}
                     </button>

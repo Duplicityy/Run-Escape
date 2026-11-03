@@ -1411,7 +1411,13 @@ lists what a map square is made of, level by level (the Sanctuary's floor is on 
 arena is square 60,155), and `loc-sheet.ts` and `model-bounds.ts` then say what each loc is. It's a boss
 room on purpose, against the rule above, because the ask was the real arena. Its chamber is scenery
 only, every tile of it blocked, since enemies turn up anywhere walkable within 24 tiles of the player
-and a ring of scenery would strand them outside: a sealed arena needs nothing walkable past its edge.
+and a ring of scenery would strand them outside: a sealed arena needs nothing walkable past its edge. The Theatre of Blood
+(`maps/theatreOfBlood.ts`) is a raid's: halls cut from real places (doors off, and in a town the one-tile props that
+block, which split its streets into pieces too small for waves), and real boss rooms cut from the
+cache onto pads beside them, sealed by what can be walked to from where the party's brought in.
+A raid on purpose uses raid locs, which the catalogue keeps off dev maps, so it's a shipped map.
+Its `bringDown` brings an upstairs room (Xarpus's, on plane 1) down to the ground floor, as only one
+plane is drawn.
 
 - List the recipe in `maps/shippedMaps.ts`. `getRecipe` and `check-maps` read that list. `check-maps` only picks
   up ids in it or starting `scaperune_` (but not the palette, prefabs and cliffs sheets).
