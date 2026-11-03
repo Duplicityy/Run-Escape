@@ -5629,7 +5629,11 @@ export class Sim {
                 return;
             }
             landed[index] = true;
-            hazard.hit.push(index);
+            // A grab's hands hurt each player once; a lingering mark hurts
+            // whoever's in it every time it comes round (GroundPatternDef.lingers)
+            if (hazard.lingerEnd === -1) {
+                hazard.hit.push(index);
+            }
             const enemy = this.enemies.find((e) => e.uid === hazard.enemyUid);
             if (hazard.damage > 0) {
                 // A full share (every map but the raid's) passes the damage through as it was
