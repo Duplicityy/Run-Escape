@@ -1,0 +1,8 @@
+/.gradle/
+/local.properties
+**/build/
+/app/src/main/assets/game/
+*.jks
+*.keystore
+*.apk
+*.aab

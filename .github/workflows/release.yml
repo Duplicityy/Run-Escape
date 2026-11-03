@@ -1,5 +1,5 @@
-# Builds the Windows desktop release when package.json's version has no release yet, and leaves it
-# as a draft: Dynny publishes it by hand, and only then do players get it. See Desktop in
+# Builds the desktop release, plus Android when enabled, for a version with no release yet.
+# Leaves it as a draft: Dynny publishes it by hand, and only then do players get it. See Desktop in
 # docs/DEVELOPMENT.md.
 name: Release
 
@@ -110,7 +110,7 @@ jobs:
                   key: osrs-cache-${{ steps.game-cache.outputs.name }}
 
             - run: npm test
-            # Where desktop players find co-op: the COOP_URL repository variable,
+            # Where desktop and Android players find co-op: the COOP_URL repository variable,
             # wss://example.com/coop. Without it, the app has no Multiplayer.
             - run: npm run build
               env:
@@ -132,9 +132,77 @@ jobs:
                   retention-days: 1
                   compression-level: 0
 
+    # Uses the same game zip as Windows, so co-op players have the same build id.
+    # Enable after setting the persistent signing key: see Android in docs/DEVELOPMENT.md.
+    android:
+        needs: [check, build]
+        if: needs.check.outputs.build == 'true' && vars.ANDROID_RELEASE_ENABLED == 'true'
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        env:
+            COOP_URL: ${{ vars.COOP_URL }}
+            VERSION: ${{ needs.check.outputs.version }}
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              with:
+                  name: desktop-release
+                  path: release
+
+            - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - run: npm ci --ignore-scripts
+            - run: node scripts/android/prepare-game.mjs release
+
+            - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+              with:
+                  distribution: temurin
+                  java-version: 21
+
+            - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+              with:
+                  packages: "platforms;android-36 build-tools;36.0.0"
+                  log-accepted-android-sdk-licenses: false
+
+            - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+              with:
+                  gradle-version: "8.13"
+                  cache-provider: basic
+
+            - name: Test and build Android
+              working-directory: android
+              run: gradle --no-daemon test :app:assembleRelease -PcoopUrl="$COOP_URL"
+
+            - name: Sign and verify the APK
+              env:
+                  ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+                  ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+                  ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+                  ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+              run: python3 scripts/android/sign-apk.py --version "$VERSION"
+
+            - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: android-release
+                  path: release/Run-Escape-*-android.apk
+                  if-no-files-found: error
+                  retention-days: 1
+                  compression-level: 0
+
     # Apart from the build, so the token that can write to releases never runs npm packages
     publish:
-        needs: [check, build]
+        needs: [check, build, android]
+        if: >-
+            always() && needs.check.result == 'success' && needs.build.result == 'success' &&
+            (needs.android.result == 'success' || needs.android.result == 'skipped')
         runs-on: ubuntu-latest
         permissions:
             contents: write
@@ -144,14 +212,24 @@ jobs:
                   name: desktop-release
                   path: release
 
+            - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              if: needs.android.result == 'success'
+              with:
+                  name: android-release
+                  path: release
+
             - name: Create the draft release
               env:
                   GH_TOKEN: ${{ github.token }}
                   GH_REPO: ${{ github.repository }}
                   VERSION: ${{ needs.check.outputs.version }}
                   DRAFT_EXISTS: ${{ needs.check.outputs.draft }}
+                  ANDROID_BUILT: ${{ needs.android.result == 'success' }}
               run: |
                   files=(release/Run-Escape-*-win-x64.zip release/game-*.zip release/game-manifest.json)
+                  if [ "$ANDROID_BUILT" = true ]; then
+                      files+=("release/Run-Escape-$VERSION-android.apk")
+                  fi
                   if [ "$DRAFT_EXISTS" = true ]; then
                       gh release upload "v$VERSION" "${files[@]}" --clobber
                       gh release edit "v$VERSION" --notes-file release/notes.md --target "$GITHUB_SHA"

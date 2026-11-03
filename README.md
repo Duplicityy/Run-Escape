@@ -134,6 +134,16 @@ plays offline, and updates the game by itself when it can. Saves are kept apart 
 and Export and Import in Settings carry one across.
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#desktop) covers building and releasing it.
 
+## Android
+
+The Android APK bundles the game and its slim cache, so solo play works in airplane mode,
+including the first launch. Online co-op uses the same relay and game build as the desktop app.
+It needs a current Android System WebView; the app checks support when opened and offers an
+update link if needed. Import and export in Settings carry saves between the app and a browser.
+
+Android builds can be enabled alongside the Windows ZIP in the same release. See
+[Android](docs/DEVELOPMENT.md#android) for building an APK, configuring co-op and signing releases.
+
 ## Contributing
 
 Issues and pull requests are welcome.

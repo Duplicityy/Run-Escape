@@ -1,0 +1,97 @@
+import groovy.json.JsonSlurper
+
+plugins {
+    id 'com.android.application'
+}
+
+def gamePackage = new JsonSlurper().parse(rootProject.file('../package.json'))
+def versionParts = (gamePackage.version as String) =~ /^(\d+)\.(\d+)\.(\d+)$/
+if (!versionParts.matches()) {
+    throw new GradleException('Android releases need a major.minor.patch game version.')
+}
+def (major, minor, patch) = (1..3).collect { versionParts.group(it).toInteger() }
+if (minor > 999 || patch > 999) {
+    throw new GradleException('Android version components must be less than 1000.')
+}
+// 0.24.1 -> 240010, leaving room for an Android rebuild of a game release.
+def androidRevision = providers.gradleProperty('androidRevision').getOrElse('0').toInteger()
+if (androidRevision < 0 || androidRevision > 9) {
+    throw new GradleException('androidRevision must be between 0 and 9.')
+}
+def gameVersionCode = major * 10000000L + minor * 10000L + patch * 10L + androidRevision
+if (gameVersionCode < 1 || gameVersionCode > 2100000000L) {
+    throw new GradleException('The game version exceeds the Android versionCode range.')
+}
+def coopUrl = providers.gradleProperty('coopUrl').getOrElse('').trim()
+if (!coopUrl.isEmpty()) {
+    URI relay
+    try {
+        relay = new URI(coopUrl)
+    } catch (Exception exception) {
+        throw new GradleException('coopUrl must be a secure WebSocket URL.', exception)
+    }
+    if (relay.scheme != 'wss' || !relay.host || relay.userInfo != null
+            || relay.rawQuery != null || relay.rawFragment != null
+            || (relay.port != -1 && (relay.port < 1 || relay.port > 65535))) {
+        throw new GradleException('coopUrl must be a wss URL with a valid port and no credentials, query or fragment.')
+    }
+}
+
+def signingKeys = ['ANDROID_KEYSTORE_PATH', 'ANDROID_KEYSTORE_PASSWORD',
+                   'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD']
+def releaseSigning = signingKeys.collectEntries { [(it): System.getenv(it)] }
+def hasSigning = signingKeys.every { releaseSigning[it] }
+if (!hasSigning && signingKeys.any { releaseSigning[it] }) {
+    throw new GradleException('All four ANDROID_KEYSTORE_* / ANDROID_KEY_* signing variables are required.')
+}
+
+android {
+    namespace 'io.jere.runescapearchive'
+    compileSdk 36
+    buildToolsVersion '36.0.0'
+
+    defaultConfig {
+        applicationId 'io.jere.runescapearchive'
+        minSdk 26
+        targetSdk 35
+        versionCode gameVersionCode.toInteger()
+        versionName gamePackage.version
+        buildConfigField 'String', 'COOP_URL', groovy.json.JsonOutput.toJson(coopUrl)
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    if (hasSigning) {
+        signingConfigs {
+            release {
+                storeFile file(releaseSigning.ANDROID_KEYSTORE_PATH)
+                storePassword releaseSigning.ANDROID_KEYSTORE_PASSWORD
+                keyAlias releaseSigning.ANDROID_KEY_ALIAS
+                keyPassword releaseSigning.ANDROID_KEY_PASSWORD
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (hasSigning) signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    androidResources {
+        noCompress += ['dat', 'dat2', 'idx', 'wasm']
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.18.0'
+    testImplementation 'junit:junit:4.13.2'
+}

@@ -26,3 +26,12 @@ yarn-debug.log*
 yarn-error.log*
 
 caches/
+
+# Android builds and private signing files
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/local.properties
+/android/app/src/main/assets/game/
+*.jks
+*.keystore

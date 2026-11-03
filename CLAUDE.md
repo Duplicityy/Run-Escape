@@ -21,6 +21,7 @@ go stale. Add anything that cost you time to work out.
 | ------------------------------------------------------ | ---------------------------------------------------------------------- |
 | How the code is laid out, scripts, URL flags, hosting  | `docs/DEVELOPMENT.md`                                                  |
 | The Windows app, its game updates, releases            | `docs/DEVELOPMENT.md`, Desktop                                         |
+| The Android app, its bundled game and release signing  | `android/`, `scripts/android/`, `docs/DEVELOPMENT.md`, Android         |
 | The app's main process and update code                 | `desktop/`                                                             |
 | The release workflow                                   | `.github/workflows/release.yml`                                        |
 | The checks on a pull request                           | `.github/workflows/check.yml`                                          |
@@ -91,6 +92,8 @@ npm run build && npm run slim-cache    # build for hosting (only when deploying)
 npm run serve              # serve the build, co-op's relay too (serve:singleplayer without)
 npm run desktop            # the Windows app, on that build
 npm run desktop:dist       # the app's zip, game zip and manifest, into release/
+node scripts/android/prepare-game.mjs --dist dist # bundle that build and its slim cache for Android
+cd android && ./gradlew test assembleDebug        # Android shell (Java 21 and Android SDK 36)
 ```
 
 There's no pre-commit hook, so run Prettier yourself. `npm run lint` formats the whole repository.
@@ -155,6 +158,21 @@ npx tsx scripts/cache/validate-decoders.ts    # after touching a decoder or chan
 ```
 
 ## Tests on the release build
+
+The Android wrapper is in `android/`; do not commit its generated game assets, caches, APKs or
+signing keys. `scripts/android/prepare-game.mjs` stages either the desktop release's verified
+game ZIP or an already-built `dist/` with its slim cache. The release workflow reuses the desktop
+ZIP, so Android and desktop have the same co-op build ID. Pass the same `COOP_URL` to the web
+build (`VITE_COOP_URL`) and Android (`-PcoopUrl`). Keep the Android application ID, its local HTTPS
+origin and save keys stable. The in-game Settings screen owns save import/export and its
+read-only protections; the wrapper supplies Android's document picker without bypassing them.
+
+`.github/workflows/android.yml` compiles and tests the wrapper on pull requests without the game
+cache. Its manual playable build bundles the cache and uploads an installable debug APK. Official
+Android release signing is opt-in; see Android in `docs/DEVELOPMENT.md`. A wrapper-only change
+does not need a gameplay simulation, but test the relay policy, offline asset staging and Android
+build. An Android device with current WebView is needed for final touch, online and airplane-mode
+checks; a passing shell compilation is not a device test.
 
 `.github/workflows/check.yml` runs the type check and `npm test` on every pull request, without
 the game's cache. The release workflow runs the tests with it, and a failure there stops the

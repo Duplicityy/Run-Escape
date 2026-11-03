@@ -262,6 +262,97 @@ only controls the game/relay listener and cannot make metrics listen publicly.
 Metrics contain aggregate numbers only, with no player names, addresses or room codes. The public
 `/coop` availability response contains only `{"coop":true}`, so it doesn't expose aggregate counts.
 
+## Android
+
+The Android APK carries the web build and its slim cache. It never needs the website to start,
+so solo play works in airplane mode, including the first launch. Co-op uses the existing relay
+when the device has a connection. No local HTTP server or first-run game download is needed.
+
+The shell is in `android/`, apart from the game. It needs Java 21, Android SDK Platform 36,
+Build-Tools 36.0.0 and a current Android System WebView. It checks cross-origin isolation,
+WebGL 2, shared memory transfer to a worker and the worker's access to the bundled cache before
+opening the game. An unsupported WebView shows an update link instead of a blank game.
+
+### Building an APK
+
+For a local playable debug build, first build the web game and its slim cache (these are deployment
+steps, not required for a wrapper compilation check):
+
+```sh
+npm ci
+npm run download-caches
+VITE_COOP_URL=wss://relay.example.com/coop npm run build
+npm run slim-cache
+node scripts/android/prepare-game.mjs --dist dist
+cd android
+./gradlew test assembleDebug -PcoopUrl=wss://relay.example.com/coop
+```
+
+The APK is in `android/app/build/outputs/apk/debug/`. Without the asset staging step the wrapper
+can still compile for CI, but it shows a missing-game message instead of playing. Keep generated
+assets, cache files and build outputs out of Git.
+
+`prepare-game.mjs <release directory>` instead reads `game-manifest.json`, checks its version
+and SHA-256, then extracts `game-<version>.zip`. The release workflow uses this form to package
+the exact desktop web build. Both forms require a slim cache with its data and index files.
+
+### Online and offline play
+
+Set the `COOP_URL` repository variable to the same `wss://.../coop` relay used by desktop releases.
+The web build gets it as `VITE_COOP_URL`; the wrapper gets it as `-PcoopUrl`. Both must match.
+An empty value means solo only, as it does on desktop. Desktop, web and Android share rooms only
+on the same game build, so build and deploy them from the same commit.
+
+The game runs at `https://appassets.androidplatform.net/assets/game/index.html`, intercepted
+inside the app. Keep that origin and the application ID `io.jere.runescapearchive` unchanged:
+Android's local saves belong to them. Only the configured relay's HTTPS origin may leave the
+asset interceptor, and `connect-src` allows only the local origin, local Blob reads for save
+export, and that relay's HTTPS/WSS origins. The same policy is sent with workers. No relay
+requests are required for solo play.
+
+AndroidX WebKit's profile allowlist and `Document-Isolation-Policy` enable the shared memory
+workers in Android WebView. COOP/COEP headers alone do not enable it there. This needs a WebView
+supporting `CROSS_ORIGIN_ISOLATED_ALLOWLIST`; the runtime check also verifies actual worker use.
+
+Settings owns save import, migration, blocked saves and export. The wrapper opens Android's file
+picker for file inputs and writes the exact exported Blob to a document the player chooses. It
+does not rewrite localStorage or bypass the game's read-only protections. Browser and Android
+saves remain separate; export/import carries one across. Uninstalling or clearing app storage
+removes the Android save, so export it first.
+
+### GitHub builds and releases
+
+The Android workflow checks wrapper compilation and unit tests on pull requests without game
+assets or signing secrets. Run it manually with **playable** enabled to build the game and slim
+cache, then download its APK from the Actions artifact. Its optional **coop_url** input overrides
+`COOP_URL`; if neither is set, this manual build uses the public game's `wss://jere.io/coop` relay.
+Official releases keep using the repository variable, including its solo-only empty value.
+That debug APK uses the runner's debug
+key, so a later run may require uninstalling an earlier debug build; export saves before doing so.
+
+Official APKs can join the Windows ZIP in the existing draft release. Set these repository
+Actions secrets, keeping the same private key for every update:
+
+- `ANDROID_KEYSTORE_BASE64`: base64-encoded signing keystore.
+- `ANDROID_KEYSTORE_PASSWORD`: keystore password.
+- `ANDROID_KEY_ALIAS`: signing key alias.
+- `ANDROID_KEY_PASSWORD`: signing key password.
+
+Then set the repository variable `ANDROID_RELEASE_ENABLED` to `true`. Without it, releases keep
+building the desktop app as before. When enabled, the Android job verifies and reuses the desktop
+game ZIP, builds the APK, signs it with `scripts/android/sign-apk.py`, and verifies its signature
+and alignment. The APK is `Run-Escape-<version>-android.apk` in the same draft. A failed Android
+build prevents drafting a partial enabled release. Publishing the draft remains manual.
+
+The signing script removes its temporary keystore even after a failure, and official release
+builds never substitute a new random or debug key. Local Gradle signing can use
+`ANDROID_KEYSTORE_PATH` plus the password and alias variables above; keep the keystore outside
+the checkout. A new key cannot update an installed app signed by the previous one.
+
+Version names come from `package.json`. Version codes encode its numeric components and an
+optional `-PandroidRevision=0` through `9` for rebuilding one game version; never decrease a
+published version code. Android does not currently update game files separately from the APK.
+
 ## Desktop
 
 **Co-op on desktop.** The app answers every https request itself, so it only reaches a relay built
