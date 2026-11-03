@@ -102,6 +102,7 @@ function getRoomUrl(code: string, ticket: string, param = "ticket"): string {
 const ROOM_MESSAGES: ReadonlySet<ClientMessage["t"]> = new Set([
     "leave",
     "me",
+    "rename",
     "settings",
     "kick",
     "disband",
@@ -161,6 +162,8 @@ export class CoopLobby {
         tries: number;
         socket?: WebSocket;
         timer?: number;
+        // Closes a try still connecting when the window's up
+        giveUp?: number;
         waiting: string[];
     };
     // The lobby's connection dropped while in a room, which carries on; it's
@@ -416,6 +419,19 @@ export class CoopLobby {
                 return;
             }
             resuming.socket = socket;
+            // A connection can hang while connecting (no signal, a captive
+            // portal) for far longer than the room holds the place
+            window.clearTimeout(resuming.giveUp);
+            resuming.giveUp = window.setTimeout(
+                () => {
+                    if (this.resuming === resuming && resuming.socket === socket) {
+                        resuming.socket = undefined;
+                        socket.close();
+                        this.tryResuming();
+                    }
+                },
+                Math.max(0, RESUME_WINDOW_MS - (Date.now() - resuming.since)) + 1,
+            );
             socket.onmessage = (event) => {
                 if (this.resuming !== resuming || resuming.socket !== socket) {
                     return;
@@ -428,6 +444,7 @@ export class CoopLobby {
                 }
                 if (received.t === "room") {
                     // Back: what waited goes now
+                    window.clearTimeout(resuming.giveUp);
                     this.resuming = undefined;
                     this.useRoomSocket(socket);
                     for (const text of resuming.waiting) {
@@ -455,6 +472,7 @@ export class CoopLobby {
         this.resuming = undefined;
         if (resuming) {
             window.clearTimeout(resuming.timer);
+            window.clearTimeout(resuming.giveUp);
             resuming.socket?.close();
         }
     }

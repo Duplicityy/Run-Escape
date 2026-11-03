@@ -104,7 +104,7 @@ what it had in memory, often more than once an hour. So:
   doesn't come back is let go, as if they'd left.
 - Frames the host sent meanwhile come again: each host message says where the one before it
   ended, and a guest that sees a gap asks the host for what it missed (`resend` in `protocol.ts`,
-  kept for a minute in `CoopRun`).
+  kept for 20 seconds in `CoopRun`, and answered once a second at most).
 - The lobby's connection dropping doesn't touch a room: the game makes it again after.
 
 `npm run check` tests coming back. To see a restart for yourself under `wrangler dev`, save any
@@ -141,6 +141,16 @@ four is around 37 a second. That works out to, for each hour a room is open:
 Check [Cloudflare's pricing](https://developers.cloudflare.com/durable-objects/platform/pricing)
 for the current numbers. Usage is under Workers & Pages, `run-escape-coop`, Metrics, in the
 dashboard.
+
+**Against abuse.** Workers Paid has no spending cap, so the relay keeps what one connection can cost
+bounded: a room connection that hasn't made or joined its room within 10 seconds is closed (an open
+socket keeps a room billed), a room's saved to storage at most once a second however often its
+host changes settings, and rooms are capped per address and in all, as on the Node relay. Before
+pointing a paid account at players, also:
+
+- set a billing notification (Manage account, Notifications), and
+- add a rate limiting rule (Security, WAF) on `/coop/room/` for each IP, say 20 requests a minute,
+  so room URLs can't be hammered before they reach a Durable Object.
 
 ## Differences from the Node relay
 

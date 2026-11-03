@@ -40,6 +40,12 @@ const ROOM_HEARTBEAT_MS = 30_000;
 // How long a player whose connection dropped keeps their place: longer than
 // their game keeps trying (RESUME_WINDOW_MS in CoopLobby.ts)
 const RESUME_GRACE_MS = 15_000;
+// A connection that hasn't made or joined the room by now is closed. An open
+// socket keeps this object running (and billed), and the lobby forgets a room
+// that never got made, so nothing else would end it.
+const ENTER_MS = 10_000;
+// The room's saved, and the lobby told, this often at most
+const SAVE_MS = 1000;
 
 export class Room extends DurableObject {
     constructor(ctx, env) {
@@ -77,6 +83,11 @@ export class Room extends DurableObject {
             roomName: who.roomName,
         });
         this.attach(member, server);
+        setTimeout(() => {
+            if (!member.closed && !this.room?.members.includes(member)) {
+                this.closeSocket(member, 1008);
+            }
+        }, ENTER_MS);
         return new Response(null, { status: 101, webSocket: client });
     }
 
@@ -188,12 +199,43 @@ export class Room extends DurableObject {
         this.startHeartbeat(room);
     }
 
+    // Saves the room and tells the lobby, now or, if that was done in the
+    // last SAVE_MS, once that's passed: a host flicking settings can't make
+    // a storage write of every message
+    persist() {
+        const room = this.room;
+        if (!room) {
+            return;
+        }
+        if (room.saveTimer) {
+            room.saveWaiting = true;
+            return;
+        }
+        this.tellLobby();
+        this.save();
+        room.saveTimer = setTimeout(() => {
+            room.saveTimer = undefined;
+            if (room.saveWaiting && this.room === room) {
+                room.saveWaiting = false;
+                this.persist();
+            }
+        }, SAVE_MS);
+    }
+
     save() {
         const room = this.room;
         if (!room) {
             return;
         }
-        const { members, heartbeat, updateTimer, updateWaiting, ...fields } = room;
+        const {
+            members,
+            heartbeat,
+            updateTimer,
+            updateWaiting,
+            saveTimer,
+            saveWaiting,
+            ...fields
+        } = room;
         this.ctx.storage
             .put("room", {
                 ...fields,
@@ -213,8 +255,11 @@ export class Room extends DurableObject {
             })
             .catch((e) => console.warn("Co-op room: couldn't save the room:", e));
         // Clears out a room everyone's gone from, should the relay restart
-        // with nobody coming back
-        this.ctx.storage.setAlarm(Date.now() + IDLE_MS).catch(() => {});
+        // with nobody coming back. Set once: alarm() sets the next.
+        if (!room.alarmSet) {
+            room.alarmSet = true;
+            this.ctx.storage.setAlarm(Date.now() + IDLE_MS).catch(() => {});
+        }
     }
 
     async alarm() {
@@ -314,8 +359,7 @@ export class Room extends DurableObject {
         for (const member of this.room.members) {
             this.send(member, { t: "room", room: view, you: member.id, token: member.token });
         }
-        this.tellLobby();
-        this.save();
+        this.persist();
     }
 
     broadcastMembers() {
@@ -367,6 +411,7 @@ export class Room extends DurableObject {
         }
         clearInterval(room.heartbeat);
         clearTimeout(room.updateTimer);
+        clearTimeout(room.saveTimer);
         this.room = undefined;
         this.kicked.clear();
         this.ctx.storage.deleteAll().catch(() => {});
@@ -483,9 +528,7 @@ export class Room extends DurableObject {
                 return;
             case "settings":
                 if (isHost && !room.started) {
-                    if (message.open !== undefined) {
-                        room.open = message.open === true;
-                    }
+                    const open = message.open !== undefined ? message.open === true : room.open;
                     const mapId =
                         message.mapId !== undefined
                             ? cleanId(message.mapId) || room.mapId
@@ -501,11 +544,22 @@ export class Room extends DurableObject {
                     );
                     if (missing) {
                         this.send(client, missing);
-                    } else {
+                    }
+                    const changed =
+                        open !== room.open ||
+                        (!missing && (mapId !== room.mapId || endless !== room.endless));
+                    room.open = open;
+                    if (!missing) {
                         room.mapId = mapId;
                         room.endless = endless;
                     }
-                    this.broadcastRoom();
+                    // Nothing to save or send for a setting as it was, and
+                    // as "me", only the latest of a burst every
+                    // MEMBER_UPDATE_MS (a refused map still gets the room
+                    // back, for the host's screen)
+                    if (changed || missing) {
+                        this.broadcastMembers();
+                    }
                 }
                 return;
             case "kick": {

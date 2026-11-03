@@ -563,7 +563,9 @@ Cloudflare restarts its objects now and then, dropping their connections, so the
 `RESUME_WINDOW_MS` when the room's connection drops, holding what's said meanwhile, and the room
 (kept in storage) holds the player's place a little longer. A guest that misses some of the host's
 frames sees it from `from` on the next `down` and asks for them with a `resend` up message; the
-host keeps a minute of what it's sent. That part works on either relay. The Node relay sends no
+host keeps 20 seconds of what it's sent (longer than the room holds a dropped player) and answers
+once a second at most, from the earliest frame asked for, to every guest; each takes only frames
+after the ones it has. That part works on either relay. The Node relay sends no
 token, so with it a dropped connection still ends a guest's run.
 
 The open rooms list comes a page at a time (8 rooms, the fullest first, then the ones waiting

@@ -44,84 +44,81 @@ type Delivery = { at: number; order: number; deliver: () => void };
 // A minute of a three player run over a lagging network, where `lose` says
 // which messages never arrive (by connection and tick)
 function playLaggingRun(lose: (channel: string, tick: number) => boolean = () => false) {
-    {
-        usePortableMath(true);
-        let now = 0;
-        let seed = 1;
-        const lag = () => {
-            seed = (seed * 16807) % 2147483647;
-            return 1 + (seed % 6);
+    usePortableMath(true);
+    let now = 0;
+    let seed = 1;
+    const lag = () => {
+        seed = (seed * 16807) % 2147483647;
+        return 1 + (seed % 6);
+    };
+    const queue: Delivery[] = [];
+    let order = 0;
+    // When each connection's last message arrives
+    const lastAt = new Map<string, number>();
+    const send = (channel: string, deliver: () => void) => {
+        if (lose(channel, now)) {
+            return;
+        }
+        const at = Math.max(lastAt.get(channel) ?? 0, now + lag());
+        lastAt.set(channel, at);
+        queue.push({ at, order: order++, deliver });
+    };
+    const runs: CoopRun[] = [];
+    const heroes = new Map(IDS.map((id, i) => [id, i]));
+    IDS.forEach((id, i) => {
+        const link: CoopLink = {
+            sendUp: (message: UpMessage) => send(`up:${id}`, () => runs[0].receiveUp(id, message)),
+            sendDown: (message: DownMessage) => {
+                runs.slice(1).forEach((run, guest) =>
+                    send(`down:${guest}`, () => run.receiveDown(message)),
+                );
+            },
         };
-        const queue: Delivery[] = [];
-        let order = 0;
-        // When each connection's last message arrives
-        const lastAt = new Map<string, number>();
-        const send = (channel: string, deliver: () => void) => {
-            if (lose(channel, now)) {
-                return;
-            }
-            const at = Math.max(lastAt.get(channel) ?? 0, now + lag());
-            lastAt.set(channel, at);
-            queue.push({ at, order: order++, deliver });
-        };
-        const runs: CoopRun[] = [];
-        const heroes = new Map(IDS.map((id, i) => [id, i]));
-        IDS.forEach((id, i) => {
-            const link: CoopLink = {
-                sendUp: (message: UpMessage) =>
-                    send(`up:${id}`, () => runs[0].receiveUp(id, message)),
-                sendDown: (message: DownMessage) => {
-                    runs.slice(1).forEach((run, guest) =>
-                        send(`down:${guest}`, () => run.receiveDown(message)),
-                    );
-                },
-            };
-            // A clock that goes with the ticks, so it plays the same every time
-            const clock = () => now * (1000 / TICKS_PER_SECOND);
-            runs.push(new CoopRun(createSim(i), i === 0, link, heroes, "host", clock));
-            if (i > 0) {
-                link.sendUp({ loaded: true });
-            }
-        });
+        // A clock that goes with the ticks, so it plays the same every time
+        const clock = () => now * (1000 / TICKS_PER_SECOND);
+        runs.push(new CoopRun(createSim(i), i === 0, link, heroes, "host", clock));
+        if (i > 0) {
+            link.sendUp({ loaded: true });
+        }
+    });
 
-        for (now = 0; now < 60 * TICKS_PER_SECOND; now++) {
-            queue.sort((a, b) => a.at - b.at || a.order - b.order);
-            while (queue.length > 0 && queue[0].at <= now) {
-                queue.shift()!.deliver();
+    for (now = 0; now < 60 * TICKS_PER_SECOND; now++) {
+        queue.sort((a, b) => a.at - b.at || a.order - b.order);
+        while (queue.length > 0 && queue[0].at <= now) {
+            queue.shift()!.deliver();
+        }
+        runs.forEach((run, i) => {
+            const sim = run.sim;
+            const angle = now / 40 + i * 2;
+            run.setMove(fm.cos(angle), fm.sin(angle));
+            if (sim.state === "levelUp" && sim.pendingLevelUps > 0 && now % 7 === i) {
+                run.act({ kind: "choose", index: 0 });
             }
-            runs.forEach((run, i) => {
-                const sim = run.sim;
-                const angle = now / 40 + i * 2;
-                run.setMove(fm.cos(angle), fm.sin(angle));
-                if (sim.state === "levelUp" && sim.pendingLevelUps > 0 && now % 7 === i) {
-                    run.act({ kind: "choose", index: 0 });
-                }
-                if (sim.state === "chest" && sim.chest && now % 7 === i) {
-                    run.act({ kind: "chest", action: "take" });
-                }
-                // A guest steps only what it has
-                while (run.canStep() && (run.isHost || run.behind > 0)) {
-                    run.stepFrame();
-                    sim.takeEvents();
-                    if (run.isHost) {
-                        break;
-                    }
-                }
-                run.flush();
-            });
-        }
-        // Everything still on its way arrives, and the guests catch up
-        runs[0].flush(true);
-        for (const delivery of queue.sort((a, b) => a.at - b.at || a.order - b.order)) {
-            delivery.deliver();
-        }
-        for (const run of runs.slice(1)) {
-            while (run.canStep()) {
+            if (sim.state === "chest" && sim.chest && now % 7 === i) {
+                run.act({ kind: "chest", action: "take" });
+            }
+            // A guest steps only what it has
+            while (run.canStep() && (run.isHost || run.behind > 0)) {
                 run.stepFrame();
+                sim.takeEvents();
+                if (run.isHost) {
+                    break;
+                }
             }
-        }
-        return runs;
+            run.flush();
+        });
     }
+    // Everything still on its way arrives, and the guests catch up
+    runs[0].flush(true);
+    for (const delivery of queue.sort((a, b) => a.at - b.at || a.order - b.order)) {
+        delivery.deliver();
+    }
+    for (const run of runs.slice(1)) {
+        while (run.canStep()) {
+            run.stepFrame();
+        }
+    }
+    return runs;
 }
 
 function expectInStep(runs: CoopRun[]): void {
@@ -178,6 +175,46 @@ describe("co-op lockstep", () => {
         run.receiveUp("guest1", { resend: 999 });
         run.receiveUp("guest1", { resend: "4" as unknown as number });
         expect(sent).toHaveLength(0);
+    });
+
+    it("resends once a second at most, from the earliest frame asked for", () => {
+        const clock = { now: 0 };
+        const { run, sent } = hostRun(clock);
+        for (let i = 0; i < 10; i++) {
+            run.setMove(i % 2, 0);
+            run.stepFrame();
+            run.flush(true);
+        }
+        sent.length = 0;
+        run.receiveUp("guest1", { resend: 6 });
+        expect(sent.map((m) => m.from)).toEqual([6]);
+        // A flood, from both guests: nothing until the second's up
+        for (let i = 0; i < 60; i++) {
+            run.receiveUp("guest1", { resend: 8 });
+            run.receiveUp("guest2", { resend: 4 });
+        }
+        run.flush(true);
+        expect(sent).toHaveLength(1);
+        clock.now += 1000;
+        run.flush(true);
+        expect(sent.map((m) => m.from)).toEqual([6, 4]);
+        clock.now += 1000;
+        run.flush(true);
+        expect(sent).toHaveLength(2);
+    });
+
+    it("a guest takes only the frames it hasn't had from a resend for someone else", () => {
+        const link: CoopLink = { sendUp: () => {}, sendDown: () => {} };
+        const heroes = new Map(IDS.map((id, i) => [id, i]));
+        const guest = new CoopRun(createSim(1), false, link, heroes, "host", () => 0);
+        const move = (frame: number) => ({ frame, hero: 0, move: [1, 0] as [number, number] });
+        guest.receiveDown({ from: 0, upTo: 2, events: [move(1), move(2)] });
+        guest.stepFrame();
+        guest.stepFrame();
+        // Another guest was further behind and asked from frame 1
+        guest.receiveDown({ from: 1, upTo: 4, events: [move(2), move(3), move(4)] });
+        expect(guest.stepFrame().map((e) => e.frame)).toEqual([3]);
+        expect(guest.stepFrame().map((e) => e.frame)).toEqual([4]);
     });
 
     it("a guest takes frames once, and asks for any that went missing", () => {
