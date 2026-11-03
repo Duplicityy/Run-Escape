@@ -499,7 +499,8 @@ tab. The worker sends buffers cut to their length, not the doubled ones it grew.
 
 A player is baked with the swings of the weapons they hold (`getRunAttackSeqs`) rather than every
 weapon's, so a new weapon re-bakes them (it changes their `appearanceVersion`). Until it lands
-the old model draws, and a swing it hasn't got shows the stance's animation instead.
+the old model draws, and a swing it hasn't got shows the stance's animation instead. The menus'
+look has the starting weapon's swings (`setCharacterLook`), so a solo run starts with it baked.
 `getPlayerAttackSeqs` is every weapon's, for the slim cache.
 
 A baked animation is a posed copy of the model per frame, so what an enemy costs is its triangles

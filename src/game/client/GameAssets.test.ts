@@ -15,6 +15,7 @@ import { Sim } from "../core/Sim";
 import { makeGrid } from "../core/world/testGrid";
 import {
     GameAssets,
+    getCharacterAttackSeqs,
     getEnemyModelKey,
     getPlayerAttackSeqs,
     getPowerUpLookRequests,
@@ -147,8 +148,7 @@ describe("bake tasks", () => {
 });
 
 describe("player bakes", () => {
-    function createRun(party: number): Sim {
-        const hero = CHARACTERS[0].id;
+    function createRun(party: number, hero = CHARACTERS[0].id): Sim {
         return new Sim({
             grid: makeGrid(["....", "....", "....", "...."], 1000, 1000),
             characterId: hero,
@@ -181,6 +181,13 @@ describe("player bakes", () => {
             special.special!.playerSeq,
         ]);
         expect(getRunAttackSeqs(sim)).not.toContain(REVIVE_SEQ);
+    });
+
+    test("on the menus have what a solo run starts with, so it needn't bake again", () => {
+        for (const character of CHARACTERS) {
+            const sim = createRun(1, character.id);
+            expect(getRunAttackSeqs(sim)).toEqual(getCharacterAttackSeqs(character.id));
+        }
     });
 
     test("in co-op have the reviver's emote", () => {

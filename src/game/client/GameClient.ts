@@ -62,13 +62,7 @@ import { GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer
 import { installRecipe } from "../scaperune/squares";
 import { DamageMeter } from "./DamageMeter";
 import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
-import {
-    GameAssets,
-    HITSPLAT_SPRITES,
-    getCharacterAppearance,
-    getRunAppearance,
-    getRunAttackSeqs,
-} from "./GameAssets";
+import { GameAssets, HITSPLAT_SPRITES, getRunAppearance, getRunAttackSeqs } from "./GameAssets";
 import { GameAudio } from "./GameAudio";
 import { GameInput } from "./GameInput";
 import { ChestCue, GameSounds, getGameSoundIds } from "./GameSounds";
@@ -292,7 +286,7 @@ export class GameClient implements GameFrameHandler {
             store.set({ loadingProgress: 10 + Math.round((done / total) * 70) });
         });
         store.set({ loadingText: "Dressing up", loadingProgress: 85 });
-        await assets.setPlayerAppearance(getCharacterAppearance(store.getSnapshot().characterId));
+        await assets.setCharacterLook(store.getSnapshot().characterId);
         store.set({ loadingText: `Building ${TITLE_MAP.name}`, loadingProgress: 95 });
         const grid = new ArenaGrid(await regionPromise);
         await soundsPromise;
@@ -458,7 +452,7 @@ export class GameClient implements GameFrameHandler {
         }
         this.store.set({ characterId });
         if (!this.sim) {
-            this.assets.setPlayerAppearance(getCharacterAppearance(characterId));
+            this.assets.setCharacterLook(characterId);
         }
         this.coop.setMe({ characterId });
     }
@@ -1387,9 +1381,7 @@ export class GameClient implements GameFrameHandler {
         this.view.reset();
         this.cameraRig.pitch = ATTRACT_PITCH;
         this.cameraRig.distance = ATTRACT_DISTANCE;
-        this.assets.setPlayerAppearance(
-            getCharacterAppearance(this.store.getSnapshot().characterId),
-        );
+        this.assets.setCharacterLook(this.store.getSnapshot().characterId);
         if (!show) {
             return;
         }

@@ -26,7 +26,7 @@ import { POWER_UPS, THRALLS, getPowerUp } from "../content/powerups";
 import { RANDOM_EVENTS, VISITOR_SPOTANIM } from "../content/randomEvents";
 import { PlayerStance, getPlayerStance } from "../content/stances";
 import { EnemyDef, EnemyOutfit, GearSlot, WeaponDef } from "../content/types";
-import { WEAPONS } from "../content/weapons";
+import { WEAPONS, getWeapon } from "../content/weapons";
 import { BLOOD_FURY_SPOTANIM, FREEZE_SPOTANIM, NUKE_SPOTANIM, Sim } from "../core/Sim";
 import { Pickup } from "../core/entities";
 import { GameWebGLRenderer } from "../render/GameWebGLRenderer";
@@ -199,6 +199,11 @@ export function getPlayerAttackSeqs(): number[] {
 export function getRunAttackSeqs(sim: Sim, hero = sim.focus): number[] {
     const seqs = getWeaponSeqs(sim.as(hero, () => sim.weapons.map((weapon) => weapon.def)));
     return sim.heroes.length > 1 ? [...seqs, REVIVE_SEQ] : seqs;
+}
+
+// The swings of a character's starting weapon, what a solo run starts with
+export function getCharacterAttackSeqs(characterId: string): number[] {
+    return getWeaponSeqs([getWeapon(getCharacter(characterId).startingWeapon)]);
 }
 
 // The player's look in a run: the character's outfit, the held weapon tier,
@@ -638,7 +643,8 @@ export class GameAssets {
     }
 
     // An NPC or player model to a task, the small ones (spot animations, items,
-    // scenery) a batch at a time
+    // scenery) a batch at a time. The ones with the most animations (the
+    // bosses) go first, so the workers don't end on one big model each.
     static getBakeTasks(requests: BakeRequest[]): BakeRequest[][] {
         const tasks: BakeRequest[][] = [];
         let small: BakeRequest[] = [];
@@ -656,7 +662,9 @@ export class GameAssets {
         if (small.length > 0) {
             tasks.push(small);
         }
-        return tasks;
+        const animations = (task: BakeRequest[]) =>
+            task.length === 1 && "seqIds" in task[0] ? task[0].seqIds.length : 0;
+        return tasks.sort((a, b) => animations(b) - animations(a));
     }
 
     async loadSprites(spriteIds: number[]): Promise<void> {
@@ -713,6 +721,16 @@ export class GameAssets {
         if (model && !this.players.some((bake) => bake?.model?.page === model.page)) {
             this.actors.removePage(model.page);
         }
+    }
+
+    // The character's look on the menus, with their starting weapon's swing:
+    // the look a run starts with, so it needn't bake again then
+    setCharacterLook(characterId: string): Promise<void> {
+        return this.setPlayerAppearance(
+            getCharacterAppearance(characterId),
+            0,
+            getCharacterAttackSeqs(characterId),
+        );
     }
 
     // Bakes a player model for this look unless it's already the current one.
