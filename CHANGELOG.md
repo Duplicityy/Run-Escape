@@ -60,6 +60,9 @@ the version in the corner).
 - Each class's skill page can spend the full gold budget without taking gold from the other pages.
 - Separate Melee, Ranged and Magic skill pages, kept in exported saves, with refunds limited to the selected class.
 - Refund a skill rank with its arrow button, or right-click on desktop, without resetting the rest.
+- Controller support: move with the stick or d-pad, use items with the shoulder buttons and
+  triggers, and pick level ups, caskets and menus with the d-pad and A. The hints show your
+  controller's buttons, Xbox, PlayStation or Switch.
 
 ### Changed
 

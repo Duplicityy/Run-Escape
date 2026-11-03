@@ -16,6 +16,7 @@ import { EquipSlot } from "../../rs/model/player/PlayerModelLoader";
 import { isCoarsePointer } from "../../util/DeviceUtil";
 import { FRAME_RATES, FrameRate } from "../client/DisplaySettings";
 import { GameClient } from "../client/GameClient";
+import { padLabel } from "../client/GamePad";
 import {
     BuffView,
     GameStore,
@@ -71,6 +72,7 @@ import { EventModal } from "./EventModal";
 import "./GameUi.css";
 import { ItemIcon } from "./ItemIcon";
 import { NoticePanel } from "./NoticePanel";
+import { KeyHint, PadControls, PadIcon, usePadKind } from "./PadHint";
 import { QuestScreen } from "./QuestScreen";
 import { RerollButton } from "./RerollButton";
 import { SaveBlockPanel, UnreadableSavePanel } from "./SavePanels";
@@ -513,6 +515,7 @@ function SettingsPanel({
     client,
     onClose,
 }: ScreenProps & { onClose: () => void }): JSX.Element {
+    const padKind = usePadKind();
     return (
         <div className="ui-panel rs-border rs-background ui-settings">
             <h2>Settings</h2>
@@ -538,6 +541,12 @@ function SettingsPanel({
                     <MovePredictionSetting ui={ui} client={client} />
                     <FrameRateSetting ui={ui} client={client} />
                 </section>
+                {padKind && (
+                    <section className="ui-settings-section">
+                        <h3>Controller</h3>
+                        <PadControls />
+                    </section>
+                )}
                 <section className="ui-settings-section">
                     <h3>Save</h3>
                     <SaveSetting ui={ui} client={client} />
@@ -709,11 +718,7 @@ function TitleScreen({ ui, client }: ScreenProps): JSX.Element {
                         <TitleStat name="Best level" value={save.bestLevel} />
                     </div>
                 </div>
-                <div className="ui-hint">
-                    {isCoarsePointer
-                        ? "Drag anywhere to move · weapons fire on their own"
-                        : "WASD to move · weapons fire on their own · Esc to pause · M to mute"}
-                </div>
+                <TitleHint />
             </div>
             <div className="ui-title-utils">
                 {ui.saveBlock && ui.saveBlockClosed && (
@@ -766,6 +771,28 @@ export function getStartingWeaponIcon(character: CharacterDef): number {
     return weapon.levels[0].objId ?? weapon.iconObjId;
 }
 
+// How to play, under the title's buttons: the controller's buttons once one's
+// in use (a browser shows no pad until a button's pressed)
+function TitleHint(): JSX.Element {
+    const pad = usePadKind();
+    if (pad) {
+        return (
+            <div className="ui-hint ui-hint-pad">
+                <PadIcon kind={pad} icon="move" label="Left stick" /> to move · weapons fire on
+                their own · <PadIcon kind={pad} icon="start" label={padLabel(pad, "start")} /> to
+                pause · <PadIcon kind={pad} icon="south" label={padLabel(pad, "south")} /> to pick
+            </div>
+        );
+    }
+    return (
+        <div className="ui-hint">
+            {isCoarsePointer
+                ? "Drag anywhere to move · weapons fire on their own"
+                : "WASD to move · weapons fire on their own · Esc to pause · M to mute"}
+        </div>
+    );
+}
+
 // Adventurers on the left and maps on the right, so the adventurer picked
 // stands in view between them
 function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
@@ -788,7 +815,7 @@ function CharacterScreen({ ui, client }: ScreenProps): JSX.Element {
                     className="ui-button ui-button-go ui-select-go"
                     onClick={() => client.startRun()}
                 >
-                    Enter {getMap(ui.mapId).name}
+                    <KeyHint pad="start" /> Enter {getMap(ui.mapId).name}
                     {ui.hard && " hard"}
                     {ui.endless && !getMap(ui.mapId).fun && " endless"}
                 </button>
@@ -1597,7 +1624,9 @@ const GearSlots = memo(function GearSlots({ gear }: { gear: GearSlotView[] }): J
     );
 });
 
-// Utility items, used with 1-4 or a click
+// Utility items, used with 1-4 (a controller's shoulder buttons) or a click
+const ITEM_BUTTONS = ["leftBumper", "rightBumper", "leftTrigger", "rightTrigger"] as const;
+
 const Inventory = memo(function Inventory({
     inventory,
     client,
@@ -1619,7 +1648,11 @@ const Inventory = memo(function Inventory({
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => client.useItem(i)}
                 >
-                    <span className="ui-inv-key">{i + 1}</span>
+                    <KeyHint
+                        keyLabel={String(i + 1)}
+                        pad={ITEM_BUTTONS[i]}
+                        className="ui-inv-key"
+                    />
                     {slot && <ItemIcon objId={slot.item.objId} size={30} />}
                     {slot && slot.count > 1 && <span className="ui-inv-count">{slot.count}</span>}
                 </button>
@@ -1920,7 +1953,7 @@ function LevelUpModal({ ui, client }: ScreenProps): JSX.Element {
                             style={choice.rarity ? { borderColor: choice.rarity.color } : undefined}
                             onClick={() => client.choose(i)}
                         >
-                            <span className="ui-choice-key">{i + 1}</span>
+                            <KeyHint keyLabel={String(i + 1)} />
                             <ItemIcon
                                 objId={choice.iconObjId}
                                 spriteId={choice.iconSpriteId}
@@ -2139,6 +2172,7 @@ function PauseModal({
     // Co-op's menu doesn't stop the run
     const coop = ui.party.length > 0;
     const quests = useHudNumber(client, (n) => n.quests) ?? [];
+    const padKind = usePadKind();
     // The host can remove anyone still in the run (one who's stopped playing)
     const kickable =
         coop && ui.coop.room?.hostId === ui.coop.you
@@ -2269,6 +2303,12 @@ function PauseModal({
                                         </div>
                                     ))}
                                 </div>
+                            </>
+                        )}
+                        {padKind && (
+                            <>
+                                <h3 className="ui-pause-heading">Controller</h3>
+                                <PadControls />
                             </>
                         )}
                         <h3 className="ui-pause-heading">Settings</h3>

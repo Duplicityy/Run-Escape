@@ -2,6 +2,7 @@ import { GameClient } from "../client/GameClient";
 import { EventView } from "../client/GameStore";
 import { Coins } from "./Coins";
 import { ItemIcon } from "./ItemIcon";
+import { KeyHint } from "./PadHint";
 
 type Props = { event: EventView; coins: number; client: GameClient };
 
@@ -22,7 +23,7 @@ export function EventModal({ event, coins, client }: Props): JSX.Element {
                             disabled={!option.enabled}
                             onClick={() => client.chooseEvent(i)}
                         >
-                            <span className="ui-choice-key">{i + 1}</span>
+                            <KeyHint keyLabel={String(i + 1)} />
                             <ItemIcon objId={option.iconObjId} size={44} />
                             <div className="ui-card-body">
                                 <div className="ui-card-title">{option.title}</div>
