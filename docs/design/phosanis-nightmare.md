@@ -1,10 +1,12 @@
 # Phosani's Nightmare: design and playtest record
 
-The fight's design, why it is the way it is, and the record of the session that made it hard:
+The fight's design, why it is the way it is, and the record of the two playtests that shaped
+it: the one that made it hard (sections 3 to 5) and the one on what's seen (section 6). For each:
 what was wrong, what was tried, what was kept and why. Written 2026-11-03 against pull request
 80 on the `phosanis-nightmare` branch. The numbers below are the ones the code had at the time;
 the data in `src/game/content/phosani.ts` is the truth if they drift. The plan the work followed
-is `docs/plans/phosani-harder.md`.
+is `docs/plans/phosani-harder.md`. Section 12 is the arena: where its pieces came from, what
+was tried, and what the player sent back.
 
 ## 1. What the fight is
 
@@ -15,7 +17,7 @@ it. Three phases of shield then totems, as the real fight has, then a desperatio
 meant to be learnt: every hit is wound up and shown first, and nothing heals but her totems, a
 little. It can't be endless. It has a hard mode once beaten, a quest, and one reward.
 
-The Inquisitor is hers alone: never in the roster anywhere else, and not a reward (section 8).
+The Inquisitor is hers alone: never in the roster anywhere else, and not a reward (section 9).
 
 ## 2. Principles
 
@@ -69,7 +71,7 @@ where it came from:
 
 Seven stages were planned. Stages 1 to 3 landed and then playtesting took over; stage 4 was
 done the other way round from the plan after playtesting (section 5); stages 5 to 7 are still
-open (section 9).
+open (section 10).
 
 ### Stage 1: safety nets off
 
@@ -202,7 +204,115 @@ The time she stands for a pattern counts the pauses.
    was already right: a healer goes to the most hurt thing it heals, her shield counts as hurt
    only in the shield stage and a totem only while it's being charged.
 
-## 6. The reward
+## 6. The other playtest: what's seen
+
+Alongside the hardening, in a session of its own on the same checkout, the player ran a second
+playtest about what's seen rather than what's dodged: her entrance, her hands, her summons and
+her totems. Its changes went into the hardening's commit, whose message doesn't list them. The
+rounds, in the order they came in; where the two playtests pulled against each other (how often
+the claws come), the hardening's round 4 had the last word.
+
+### Round 1
+
+1. **She rose wherever the player happened to be, and the player ran about while she woke.**
+   Fix: she rises at the middle of her square (`intro.atMiddle`) with the player 7 tiles south
+   of her, the map's spawn put on that tile so there's no jump, and the player rooted until
+   she's up (`intro.holds`, which co-op's movement prediction honours too). The real fight's
+   entrance.
+2. **Her eggs just appeared, with too many hitpoints and no bar, and a hit flashed all three.**
+   Fix: she flings them out of herself with her magic animation (`summon.thrown`), each a
+   second's flight on an arc to its own random spot about 11 tiles off, untouchable until it
+   lands, hatching 15 s after it does; 100 hitpoints, a few bolts, with a bar (`healthBar`);
+   only the egg that's hit flashes.
+3. **With her shield down the crossbow still went for her.** Fix: in the totems stage bolts fly
+   on through her to a totem, and breaking the shield clears her as the target. Pinned for
+   Hallowed Night as well.
+4. **She looked at the player while she charged.** Her yaw follows her lane from the windup on.
+5. **The totems were hard to make out.** Scale 2.5, with a 0.9-tile mark to hit for it.
+6. **The Inquisitor felt slow.** 20% faster.
+
+### Round 2
+
+1. **Her claws' hands were cut short, and the ones in the middle were small.** Fix: `grab` on a
+   ground attack plays the hands' spot animation (1761) out in full where each mark lands,
+   scaled to the mark. Its first form, hands drawn at twice the mark, was undone in round 7.
+2. **A ring's way through was wherever it fell.** `gapAt: "player"` on the closing ring and the
+   turning wall: it opens on the player's side.
+3. **She stood five seconds before her first attack.** Her cooldown doesn't count while she
+   rises, and the entrance set it to a second past its end. Fix: with `holds` it's 0 as she
+   rises, so she comes at the player the moment they're let go.
+4. **Her totems faced any way.** Each is turned to the middle, and the crowd code leaves a
+   totem's yaw alone. Round 3 found the scroll on the wrong side.
+5. **Her husks stood and shot.** Fix: hers run as quick as the Inquisitor, throw nothing, are
+   solid, and hold the player where they stand until they're dead (`holds` 30 s, a long stop).
+   The rooted husks are gone, and husks come in every phase.
+6. **Her charge tore her model apart.** 8604 (the absorb) and 8610 (the pit rise) are her other
+   form's, on skeleton 1904 (npc 9431); on 9425's model they tear it. Fix: the charge floats on
+   her walk animation, and the sleepwalkers' absorb uses her summon one. Hallowed Night's
+   Nightmare tore the same way and is fixed with it (the changelog's Fixed).
+7. **The player could push her and her summons about.** `solid`: the player is the one that
+   gives.
+
+### Round 3
+
+1. **The scroll on each totem faced away from the middle.** The totem model's scroll hangs 768
+   yaw units round from the model's facing, found by turning one in the browser. Fix:
+   `totems.yawOffset`, 768 for hers and for Hallowed Night's.
+2. **The hands were a mess.** In OSRS each hand is a tile on its own: the mark and the hand are
+   the same thing. Fix: the hands are the whole mark, with no model under them and the warning
+   the hands themselves, faint and still. Round 7 finished this.
+3. **The eggs were hard to find.** OSRS's own hint arrow (sprite archive 441, `headicons_hint`)
+   bobs over anything with `hintArrow`, and points from the screen's edge when it's off it.
+
+### Round 4
+
+1. **Husks took too long to shoot down.** 150 hitpoints, with a bar.
+2. **The arrows were too big.** 1.2 times the sprite.
+3. **"Flash the dash indicator for 1 second."** Read as a flash on the lane, which was wrong:
+   round 6 has what was meant.
+4. **Her leash just put her by the player.** Fix: `leash.jump`: she sinks (8607) where she is
+   and comes up (8609) by the player, 1.2 s in all, untouchable and still meanwhile
+   (`BossState.leap`). The flowers' jump to the middle (section 5, round 5) is the same jump.
+5. **Her sleepwalker summon tore her model.** The other-form animation again (round 2, item 6).
+6. **Parasites: too many hitpoints, no bar.** 400 and 200, a dozen bolts, bars on both, solid.
+7. **The next round of claws came while the hands were still up, and the hands didn't hurt
+   the player standing in them.** Fix: a grab holds her (`channelEnd`) for the hands'
+   animation, so a chain's next round waits, and each mark stays and hurts each hero once who
+   steps in while the hands are up (`GroundHazard.hit`).
+8. **The flowers came back too soon.** Cooldown 60 s: each one is a run to the right quarter.
+
+### Round 5
+
+**"The map is gone from the selection screen."** Not reproduced: the tile was under Boss fights
+on both dev servers. Left open (section 10).
+
+### Round 6
+
+1. **The lane: show it for a second, then take it away.** What round 4, item 3 meant. Fix: a
+   charge's lane shows for a second from the windup (`LANE_SHOW_SECONDS`, at 0.6 alpha) and
+   then it's gone; the charge itself draws no lane.
+2. **The ground attack is good: lose the outline and do a lot more of them.** The model under
+   the hands went. The claws' weights went to 9 and their cooldowns to 5, 7 and 6, and the
+   hardening's round 4 walked them back to 4 and 12, 14, 12: each round's hands are up for
+   seconds with nothing to do but stand clear.
+
+### Round 7
+
+1. **A black dot, then nothing, then the hands.** The hands' animation is under the ground for
+   its first half second and from 1.9 s of its 2.4, and the faint warning was that animation
+   from its first frame. Fix: the warning holds a frame with the hands up
+   (`GRAB_WARNING_TICK` 40) at 0.45 alpha, kept until the real hands have risen into sight,
+   where they take over in place.
+2. **The hitbox no longer matched the hands.** The hands were drawn at twice the mark.
+   Decision: shrink the mark to the hands, 0.75 tiles, rather than grow the hands to the mark,
+   and put more marks to a ring instead (12, 18 and 24 from 8, 12 and 16; two dozen scattered
+   from sixteen; eight round the player from six). A mark hurts only from 0.5 to 1.9 s after
+   it lands, while the hands are in sight (`grab.up`): nothing's hit by what can't be seen.
+
+The balance bot can't dodge, so its lifetime read only the density: 24, 29 and 42 s on three
+seeds before this playtest, 18, 21 and 24 after it.
+
+## 7. The reward
 
 **Asked:** what to give for beating her.
 
@@ -223,7 +333,7 @@ should be, with the usual caveat that it plays strikes badly.
 Now an adventurer can be one map's alone (`CharacterDef.only`): never in the roster, never
 unlocked, never counted. The Inquisitor is Phosani's, and the staff is the whole reward.
 
-## 7. What was good and what was bad
+## 8. What was good and what was bad
 
 **Good**
 
@@ -235,6 +345,9 @@ unlocked, never counted. The Inquisitor is Phosani's, and the staff is the whole
   claw's ring) without any new rule.
 - A unit test went in with every change, so the fight's behaviour is pinned: 48 tests in
   `Phosani.test.ts` at the end.
+- Everything in the second playtest was seen in the browser before it was called done. A pane
+  throttled out of view can be stepped by hand from the console (`game.sim.step`), with
+  auto-pause off.
 
 **Bad**
 
@@ -248,26 +361,52 @@ unlocked, never counted. The Inquisitor is Phosani's, and the staff is the whole
   without being seen, because the browser pane can't load while the session isn't in view.
 - The suite's 30-seconds-per-adventurer test times out on a loaded machine and had to be rerun
   alone three times.
+- "Flash the dash indicator" was read as a flash and cost a round. A word with two meanings
+  should have been asked about.
+- The hands' animation went in as a warning before anyone had looked at it frame by frame, so
+  the first frame, under the ground, was a black dot for a round.
+- The two playtests pulled against each other on the claws: one asked for a lot more, the other
+  for fewer. Settle how often the set pieces come before tuning how they look.
+- Her opener is often a charge, which leaves her at the edge, and a leash then swallows the
+  attack a test was waiting for: the tests needed a `startFight` helper that resets her state
+  and puts her back by the player. The flow field is stale after a test teleports the player,
+  and her cooldown doesn't count while she rises.
 
-## 8. Decisions, in one place
+## 9. Decisions, in one place
 
-| Decision                                            | Why                                                                                                    |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Grace 0.3 s, not 0                                  | One volley's touching petals shouldn't double-hit; standing in a spiral should still kill              |
-| Tempo on pattern windups only                       | The big hits' warnings are what make deaths explainable                                                |
-| Leash later, speed up, not closer                   | The player preferred being chased to being teleported to                                               |
-| Range 18 on patterns                                | Past it she walks or charges; standing far was free                                                    |
-| Charge weighted as the top pick                     | It's the answer to a player who keeps away                                                             |
-| Claws weight 4, long cooldowns, two rounds          | Each round's hands are up for seconds with nothing to do but stand clear; too many made them the fight |
-| Bursts for sweeps                                   | A fast stream's gaps must be longer than a crossing takes; spacing single needles can't do that        |
-| Hit radius 0.25 for the red streak, 0.3 for needles | Drawn width, not bounding radius                                                                       |
-| Red flash as a colour overlay                       | Asked for by name; the flowers don't say which side is which until they hurt                           |
-| Nothing drops in a fight map                        | Simpler than marking each summon; the fight has no loot by design                                      |
-| Her death played before the win                     | Asked for; `fallSeconds` is general and defaults off                                                   |
-| Nightmare staff as the reward                       | The unused base staff, her own claws, nothing new from the cache                                       |
-| Inquisitor not a reward                             | Played nowhere else; the staff is enough                                                               |
+| Decision                                                | Why                                                                                                    |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Grace 0.3 s, not 0                                      | One volley's touching petals shouldn't double-hit; standing in a spiral should still kill              |
+| Tempo on pattern windups only                           | The big hits' warnings are what make deaths explainable                                                |
+| Leash later, speed up, not closer                       | The player preferred being chased to being teleported to                                               |
+| Range 18 on patterns                                    | Past it she walks or charges; standing far was free                                                    |
+| Charge weighted as the top pick                         | It's the answer to a player who keeps away                                                             |
+| Claws weight 4, long cooldowns, two rounds              | Each round's hands are up for seconds with nothing to do but stand clear; too many made them the fight |
+| Bursts for sweeps                                       | A fast stream's gaps must be longer than a crossing takes; spacing single needles can't do that        |
+| Hit radius 0.25 for the red streak, 0.3 for needles     | Drawn width, not bounding radius                                                                       |
+| Red flash as a colour overlay                           | Asked for by name; the flowers don't say which side is which until they hurt                           |
+| Nothing drops in a fight map                            | Simpler than marking each summon; the fight has no loot by design                                      |
+| Her death played before the win                         | Asked for; `fallSeconds` is general and defaults off                                                   |
+| Nightmare staff as the reward                           | The unused base staff, her own claws, nothing new from the cache                                       |
+| Inquisitor not a reward                                 | Played nowhere else; the staff is enough                                                               |
+| She rises at the middle, the player south and rooted    | The real fight's entrance; no running about while she wakes, and she attacks the moment it's over      |
+| Eggs flung out of her, with a bar and OSRS's hint arrow | Seen to come from her; the player asked for the game's own arrow                                       |
+| Hands are the whole mark, 0.75 tiles, more to a ring    | What's drawn is what's hit, kept by shrinking the mark rather than growing the hands                   |
+| A mark hurts only while the hands are in sight          | Nothing's hit by what can't be seen                                                                    |
+| The warning holds a frame of the hands up               | The animation's first frame is under the ground                                                        |
+| The lane shows a second, then goes                      | Asked for; the windup animation is the warning after that                                              |
+| The leash as a sink and a rise                          | Asked for; being there was a teleport                                                                  |
+| Husks run, hold, and shoot nothing                      | Asked for: something to shoot down on the way, that costs the fight if it arrives                      |
+| Nothing of hers can be pushed                           | Asked for; the player is the one that gives                                                            |
+| Her charge on her walk animation                        | The charge's animation is her other form's, and tears her                                              |
+| Totem yaw offset 768                                    | The scroll hangs behind the model's facing                                                             |
+| The chamber round the square is all blocked             | Enemies and summons turn up anywhere walkable within 24 tiles; a walkable chamber strands them outside |
+| An indigo floor, not the dream's black                  | The real floor is `#030303` under black slabs; her warnings are drawn faint                            |
+| The Sanctuary's wall round the square, not the dream's  | The dream's ring pieces don't read from the play camera (section 12, round 2)                          |
+| The sleepers lifted by a loc override                   | In the cache they stand on an upper level over the void; here there is no upper level                  |
+| Boss-room locs, against the ScapeRune rule              | The ask was the real arena; the guide now says why                                                     |
 
-## 9. Open
+## 10. Open
 
 - **The human playtest in the plan's section 5** with its targets: a first run dies in phase 1
   or 2, a learnt run takes 5 to 6 minutes and finishes under half hitpoints, most hits are
@@ -279,11 +418,119 @@ unlocked, never counted. The Inquisitor is Phosani's, and the staff is the whole
 - **Unseen in the browser**: the curse's end flash, her death animation before the screen, the
   flash's new timing.
 - **Keep distance** is still 6; the plan's 3 was never tried.
+- **The map gone from the map screen**, reported once in the second playtest and not reproduced.
+  The arena session met the same thing once with a cause of its own: the main checkout had been
+  moved to `main`, which has no fight at all (section 12).
+- **The arena on a phone**: its layout wasn't checked at a phone's size, and the north gate's
+  view is the heaviest at about 68,000 world triangles against 34,000 in the middle.
+- **The sleepers from above**: a figure a tile and a half tall, lifted, reads as a pale elongated
+  shape from the play camera, as it does in the real arena. Nothing better was found.
 
-## 10. Fields added
+## 11. Fields added
 
 For anyone building on this: `BossDef.bulletGrace`, `fallSeconds`; `BulletPatternDef.channel`,
 `burst`; `BossPhasesDef.phases[i].ambient`, `tempo`, `speed` and `finale`; `around: "player"`
 on a ring of ground marks; `radius` on projectile attacks; `WeaponDef.impactFit`;
-`CharacterDef.only`; `Hero.damageByAttack`. Each is described in `docs/DEVELOPMENT.md` under
-Boss fights as data and in `.claude/rules/adding-content.md`.
+`CharacterDef.only`; `Hero.damageByAttack`. From the second playtest: `BossIntroDef.atMiddle`
+and `holds` (and `Sim.introHolds`); `EnemyDef.healthBar`, `solid` and `hintArrow`;
+`summon.thrown` (`Enemy.flung`); `GroundPatternDef.grab` with `seconds`, `fit` and `up`
+(`GroundHazard.grabEnd`, `hit`; `Effect.fitRadius`); `BossPhasesDef.totems.yawOffset`;
+`leash.jump` (`BossState.leap`); `HINT_ARROW_SPRITE`. Each is described in `docs/DEVELOPMENT.md`
+under Boss fights as data and in `.claude/rules/adding-content.md`. From the arena:
+`LocOverride.height` (lifts a model off the ground, in `src/rs/config/loctype/LocOverrides.ts`)
+and `scripts/cache/dump-square.ts`, which lists what a real map square is made of, level by
+level; both are in `src/game/scaperune/CLAUDE.md` under Shipping a map.
+
+## 12. The arena: the Sisterhood Sanctuary
+
+The arena is `src/game/scaperune/maps/sisterhoodSanctuary.ts`, which replaced the Inquisitor's
+Field in a session of its own while the fight was being hardened. The ask was the real place: the
+arena as OSRS has it, the cave in Slepe round it, the Theatre of Blood's dead adventurers, and
+dead inquisitors if the cache had any.
+
+### Where the pieces came from
+
+Nothing was taken from the wiki's pictures. The cache's own map squares were read with
+`dump-square.ts`, and each loc drawn with `loc-sheet.ts` and measured with `model-bounds.ts`:
+
+- **The fight is a dream, not the Sanctuary.** "Disturb" sends you to map square 60,155: a
+  22-tile square with a pure black floor (file underlay 72, which is the cache's 71) laid in 3x3
+  slab locs, a ring of dark stone pieces stacked over three map levels, a gate north and south
+  closed by an energy barrier, four totem locs in the corners, and round it an island of dead
+  grass, nightmare flowers, dead trees, black fallen trunks and bats over the void (overlay 42).
+  Six small armoured figures hang round it on the top level, bobbing.
+- **The Sanctuary's chamber is on level 1 of square 59,152**, not level 0, which is why a first
+  dump of it showed only her bed: a mosaic of solid slab locs. The chamber is the Sisterhood's
+  masonry (37746 and its family), rock blocks (37754), Lumiere's candles, braziers, hooded and
+  scythe statues, standing and lying coffins, chains and broken chains, rubble, the Pool of
+  Nightmares and Phosani's coffin north of her bed, stairs and a camp.
+- **The Theatre of Blood's dead** are the skeletons in Verzik's hall (32735), the armoured one in
+  Ver Sinhaza (32741), a third (32742), and from Xarpus's room, which its script lays out rather
+  than its square, the mercenaries' bodies (32754) and the corpses he exhumes (32743).
+- **There is no dead inquisitor in the cache**, as loc or NPC. The Sisterhood's dead are their
+  coffins and tombs, and the Inquisitor herself is Phosani, in hers north of the gate.
+- Floor ids in a recipe are the map files' numbers, one above the cache's. Looking a floor up by
+  the recipe's number reads the wrong floor, which is how the black came as a surprise.
+
+### What it is
+
+The one square in the middle is the dream, 64 tiles so the fight stays as tuned: a deep indigo
+and slate floor with dead grass and the nightmare's flowers, and the middle kept clear where she
+rises. Round it the chamber, 9 tiles of floor and then the Sanctuary's wall, rock blocks behind
+it and the cave climbing to its roof. Beyond the north gate the pool, Phosani's coffin, two tombs
+and two hooded statues; beyond the south one the scythe statues and the stairs, the camp to the
+east and coffins to the west; all round, braziers, small statues, candles, chains, rubble, the
+dream's dead trees and bats, forty of the Theatre's dead in their blood, and sixteen sleepers
+hanging in the dark.
+
+**Every tile of the chamber is blocked.** Enemies and scattered summons turn up anywhere walkable
+19 to 24 tiles from the player, so a walkable chamber behind a ring would strand them outside.
+The real arena is sealed by its barriers; this one is sealed by its collision, and the fight's
+numbers didn't move: the balance bot dies at 0:41, 0:51 and 0:44 on three seeds on the old
+arena and the new.
+
+### Rounds
+
+1. **The first build had a black arena, no gates, no statues and no barrier.** The black was the
+   real floor, and the slabs over it draw black too; the indigo is Hallowed Night's palette.
+   The gates, posts, barrier, pool and coffin had been refused by the recipe's own rule that
+   keeps clutter off the gateway, and the big statues by a gap that reached into rock; a
+   painted floor also counts as reserved, which quietly dropped anything on a dirt patch.
+   Decision: things that belong on a gateway say so (`onWay`), and placement checks what's built
+   (`footprint`), not what's painted.
+2. **"There's a lot of broken map pieces scattered around."** Three screenshots. Each piece
+   traced to an id: the dream's spikes are fragments of a wall stacked over three levels and
+   draw as loose grey shards alone; its posts draw as flat framed plates; its fallen trunks as
+   solid black bars; its Torii gates as a dark canopy from above; and the Sanctuary's cracked
+   flags as chequered tiles. Decision: the ring is the Sanctuary's own wall on the tile past the
+   arena's edge, facing in, a pilaster at each corner and either side of each gate, and the
+   barrier kept, the one piece of the dream's ring that reads. The lesson: the loc sheet draws
+   a small model small and a tall one by its bounds, so a piece has to be looked at in the game
+   at a size that shows it.
+3. **"Put the dead adventurers in the empty areas, and the floating inquisitors from the actual
+   nightmare map."** The figures stand on the ground in their own model and float in the cache
+   only by level. `LocOverride.height` lifts a model (model space points down, so the offset is
+   negative), and each of the six gets a different lift. The raiders went from twelve to forty,
+   each with blood on the tiles beside it. Two faults came out in the looking: the chequered
+   plates still there were ids the sheet had shown as bones and pebbles (37786 to 37793), and
+   the scatter helper had been putting half its placements on half tiles (an odd width divided
+   by two), which is why some scatter counts had been low. Finding a lifted figure in a dark
+   chamber took setting the renderer's brightness to 3 from the console; at the map's own it is
+   a pale shape, as intended.
+4. **"I meant dead adventurers as well from the Xarpus room."** His square holds only walls and
+   battlements, so the bodies are the loc ids above. A floor list meant to drop the chequered
+   flags in round 3 had missed, since Prettier had wrapped it onto two lines and the edit
+   matched one; the build was counted before calling it done this time.
+
+### Good and bad
+
+- Reading the squares was the right research. Every id in the recipe is from the real places,
+  and the wiki's text had none of the layout.
+- The arena's test builds without the cache and pins what's placed: the wall ring to the tile,
+  the gates, the pool, the coffin, the statues, the stairs, the dead and the sleepers.
+- Three rounds were spent on pieces that looked right on the loc sheet and wrong in the game.
+  Look in the game first, at a close camera, before building a ring out of anything.
+- An edit that didn't apply went out as done once. Count the build.
+- The session's worktree needed its own `node_modules` and a copied cache to run the game, and
+  the branch had to be moved to the main checkout for the player to see it; that move is what
+  took the map off the menu once.
