@@ -436,6 +436,13 @@ gives a ScapeRune map a loc a different model or size, and two bugs were fixed (
 map square, and a resize during loading leaving the 3D view in a corner). `?viewer=1` still loads
 map squares its own way (see below).
 
+The main thread and every worker decode the cache's tables for themselves, so they're kept small:
+an index's reference table is decoded the first time something reads the index, into flat arrays
+(`ReferenceTable`); a group's files stay in one array (`Archive`), so a file's data can be part of
+a bigger buffer (mind its `byteOffset`); and `MapViewer`'s loaders are made the first time they're
+used. The game's main thread only needs the textures, the seqs of animated scenery and the map
+index, plus the locs when a ScapeRune recipe runs.
+
 ### Boss fights as data
 
 A boss's fight is in its `BossDef` and `BossAttackDef`, with no boss named in `Sim.ts`. The Nightmare
@@ -482,8 +489,8 @@ never in front of anything but the sky. `GameWebGLRenderer.setPlayArea` works th
 from `CAMERA_REACH` in `GameClient` (a run's camera can be 15 tiles south of the player, zoomed all
 the way out; the title screen's circles closer in). The worker leaves out terrain, scenery and
 animated scenery wholly outside it (`SdMapLoaderInput.keepArea`), and `MapManager` doesn't load a
-square that's all outside. That's around half of the world's geometry on a real map. Collision
-doesn't come from these squares (it's `RegionDataLoader`'s), so it isn't touched. If the camera's
+square that's all outside. Collision doesn't come from these squares (it's `RegionDataLoader`'s),
+so it isn't touched. If the camera's
 pitch or zoom changes, `CAMERA_REACH` has to follow it, or the hole where something was left out
 can show.
 

@@ -802,9 +802,7 @@ export class WebGLMapViewerRenderer extends MapViewerRenderer<WebGLMapSquare> {
             mapX,
             mapY,
             WebGLMapSquare.load(
-                this.mapViewer.seqTypeLoader,
-                this.mapViewer.npcTypeLoader,
-                this.mapViewer.basTypeLoader,
+                this.mapViewer,
                 this.app,
                 mainProgram,
                 mainAlphaProgram,

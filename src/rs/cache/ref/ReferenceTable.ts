@@ -2,62 +2,43 @@ import { ByteBuffer } from "../../io/ByteBuffer";
 import { StringUtil } from "../../util/StringUtil";
 import { ArchiveReference } from "./ArchiveReference";
 
+// What's known of an index's groups (archives) and their files. Kept in flat
+// arrays rather than an object per group: the cache has about 150,000 groups,
+// and the main thread and every worker keep their own copy. Group checksums
+// (whirlpool) aren't kept, as nothing reads them.
 export class ReferenceTable {
     static INVALID_TABLE = new ReferenceTable(
         -1,
         -1,
         false,
         false,
-        0,
-        -1,
-        new Map(),
         new Int32Array(),
         new Int32Array(),
-        [],
-        new DataView(new ArrayBuffer(0)),
-        new DataView(new ArrayBuffer(0)),
         new Int32Array(),
         new Int32Array(),
-        [],
-        [],
+        new Int32Array(1),
+        new Int32Array(),
+        undefined,
     );
 
+    // An old (dat) cache's index lists no files
     static fromArchiveCount(archiveCount: number): ReferenceTable {
         const archiveIds = new Int32Array(archiveCount);
-        const archiveIdIndexMap: Map<number, number> = new Map();
         for (let i = 0; i < archiveCount; i++) {
             archiveIds[i] = i;
-            archiveIdIndexMap.set(i, i);
         }
-        const lastArchiveId = archiveCount - 1;
-
-        const archiveNameHashes = new Int32Array(archiveCount);
-        const archiveWhirlpools = new Array<Int8Array>(archiveCount);
-
-        const archiveFileCounts = new Int32Array(archiveCount).fill(-1);
-
-        const archiveFileIds = new Array<Int32Array>(archiveCount);
-        const archiveLastFileIds = new Int32Array(archiveCount);
-
-        const archiveFileNameHashes = new Array<Int32Array>(archiveCount);
-
         return new ReferenceTable(
             -1,
             -1,
             false,
             false,
-            archiveCount,
-            lastArchiveId,
-            archiveIdIndexMap,
             archiveIds,
-            archiveNameHashes,
-            archiveWhirlpools,
-            new DataView(new ArrayBuffer(archiveCount * 4)),
-            new DataView(new ArrayBuffer(archiveCount * 4)),
-            archiveFileCounts,
-            archiveLastFileIds,
-            archiveFileIds,
-            archiveFileNameHashes,
+            new Int32Array(archiveCount),
+            new Int32Array(archiveCount),
+            new Int32Array(archiveCount),
+            undefined,
+            new Int32Array(),
+            undefined,
         );
     }
 
@@ -71,24 +52,15 @@ export class ReferenceTable {
         const hasNames = (flag & 0x1) !== 0;
         const hasWhirlpool = (flag & 0x2) !== 0;
         const hasSizes = (flag & 0x4) !== 0;
-        const hasUncompressedCrcs = (flag & 0x8) !== 0;
-        const archiveCount = protocol === 7 ? buffer.readBigSmart() : buffer.readUnsignedShort();
+        const readCount = (): number =>
+            protocol === 7 ? buffer.readBigSmart() : buffer.readUnsignedShort();
+        const archiveCount = readCount();
 
         let lastArchiveId = 0;
         const archiveIds = new Int32Array(archiveCount);
-        const archiveIdIndexMap: Map<number, number> = new Map();
-        if (protocol === 7) {
-            for (let i = 0; i < archiveCount; i++) {
-                lastArchiveId += buffer.readBigSmart();
-                archiveIds[i] = lastArchiveId;
-                archiveIdIndexMap.set(lastArchiveId, i);
-            }
-        } else {
-            for (let i = 0; i < archiveCount; i++) {
-                lastArchiveId += buffer.readUnsignedShort();
-                archiveIds[i] = lastArchiveId;
-                archiveIdIndexMap.set(lastArchiveId, i);
-            }
+        for (let i = 0; i < archiveCount; i++) {
+            lastArchiveId += readCount();
+            archiveIds[i] = lastArchiveId;
         }
 
         const archiveNameHashes = new Int32Array(archiveCount);
@@ -98,52 +70,44 @@ export class ReferenceTable {
             }
         }
 
-        const archiveWhirlpools = new Array<Int8Array>(archiveCount);
         if (hasWhirlpool) {
-            for (let i = 0; i < archiveCount; i++) {
-                archiveWhirlpools[i] = buffer.readBytes(64);
-            }
+            buffer.offset += archiveCount * 64;
         }
 
-        const archiveCrcs = new DataView(buffer.data.buffer, buffer.offset, archiveCount * 4);
-        buffer.offset += archiveCrcs.byteLength;
+        const archiveCrcs = new Int32Array(archiveCount);
+        for (let i = 0; i < archiveCount; i++) {
+            archiveCrcs[i] = buffer.readInt();
+        }
 
         if (hasSizes) {
             buffer.offset += archiveCount * 8;
         }
 
-        const archiveRevisions = new DataView(buffer.data.buffer, buffer.offset, archiveCount * 4);
-        buffer.offset += archiveRevisions.byteLength;
-
-        const archiveFileCounts = new Int32Array(archiveCount);
+        const archiveRevisions = new Int32Array(archiveCount);
         for (let i = 0; i < archiveCount; i++) {
-            archiveFileCounts[i] =
-                protocol === 7 ? buffer.readBigSmart() : buffer.readUnsignedShort();
+            archiveRevisions[i] = buffer.readInt();
         }
 
-        const archiveFileIds = new Array<Int32Array>(archiveCount);
-        const archiveLastFileIds = new Int32Array(archiveCount);
+        // Each group's files are fileIds[fileOffsets[i]] to fileIds[fileOffsets[i + 1]]
+        const fileOffsets = new Int32Array(archiveCount + 1);
         for (let i = 0; i < archiveCount; i++) {
-            archiveFileIds[i] = new Int32Array(archiveFileCounts[i]);
+            fileOffsets[i + 1] = fileOffsets[i] + readCount();
         }
+
+        const fileIds = new Int32Array(fileOffsets[archiveCount]);
         for (let archiveIdx = 0; archiveIdx < archiveCount; archiveIdx++) {
             let lastFileId = 0;
-            for (let fileIdx = 0; fileIdx < archiveFileCounts[archiveIdx]; fileIdx++) {
-                lastFileId += protocol === 7 ? buffer.readBigSmart() : buffer.readUnsignedShort();
-                archiveFileIds[archiveIdx][fileIdx] = lastFileId;
+            for (let i = fileOffsets[archiveIdx]; i < fileOffsets[archiveIdx + 1]; i++) {
+                lastFileId += readCount();
+                fileIds[i] = lastFileId;
             }
-            archiveLastFileIds[archiveIdx] = lastFileId;
         }
 
-        const archiveFileNameHashes = new Array<Int32Array>(archiveCount);
+        let fileNameHashes: Int32Array | undefined;
         if (hasNames) {
-            for (let i = 0; i < archiveCount; i++) {
-                archiveFileNameHashes[i] = new Int32Array(archiveFileCounts[i]);
-            }
-            for (let archiveIdx = 0; archiveIdx < archiveCount; archiveIdx++) {
-                for (let fileIdx = 0; fileIdx < archiveFileCounts[archiveIdx]; fileIdx++) {
-                    archiveFileNameHashes[archiveIdx][fileIdx] = buffer.readInt();
-                }
+            fileNameHashes = new Int32Array(fileIds.length);
+            for (let i = 0; i < fileNameHashes.length; i++) {
+                fileNameHashes[i] = buffer.readInt();
             }
         }
 
@@ -152,85 +116,128 @@ export class ReferenceTable {
             revision,
             hasNames,
             hasWhirlpool,
-            archiveCount,
-            lastArchiveId,
-            archiveIdIndexMap,
             archiveIds,
             archiveNameHashes,
-            archiveWhirlpools,
             archiveCrcs,
             archiveRevisions,
-            archiveFileCounts,
-            archiveLastFileIds,
-            archiveFileIds,
-            archiveFileNameHashes,
+            fileOffsets,
+            fileIds,
+            fileNameHashes,
         );
     }
+
+    readonly archiveCount: number;
+    readonly lastArchiveId: number;
+
+    // Group id to its index here, when the ids are packed close enough for a
+    // table; otherwise a binary search (the ids are in order)
+    private readonly idToIndex?: Int32Array;
+    // Group name hash to group id, made the first time a group's asked for by name
+    private nameHashToId?: Map<number, number>;
 
     constructor(
         readonly protocol: number,
         readonly revision: number,
         readonly named: boolean,
         readonly usesWhirlpool: boolean,
-        readonly archiveCount: number,
-        readonly lastArchiveId: number,
-        private readonly _archiveIdIndexMap: Map<number, number>,
         readonly archiveIds: Int32Array,
-        private readonly _archiveNameHashes: Int32Array,
-        private readonly _archiveWhirlpools: Int8Array[],
-        private readonly _archiveCrcs: DataView,
-        private readonly _archiveRevisions: DataView,
-        private readonly _archiveFileCounts: Int32Array,
-        private readonly _archiveLastFileIds: Int32Array,
-        private readonly _archiveFileIds: Int32Array[],
-        private readonly _archiveFileNameHashes: Int32Array[],
-        private readonly _archiveNameHashIdMap: Map<number, number> = new Map(),
+        private readonly archiveNameHashes: Int32Array,
+        private readonly archiveCrcs: Int32Array,
+        private readonly archiveRevisions: Int32Array,
+        // Unset when the files aren't listed (fromArchiveCount)
+        private readonly fileOffsets: Int32Array | undefined,
+        private readonly fileIds: Int32Array,
+        private readonly fileNameHashes: Int32Array | undefined,
     ) {
-        if (named) {
-            for (let i = 0; i < this.archiveIds.length; i++) {
-                this._archiveNameHashIdMap.set(this._archiveNameHashes[i], this.archiveIds[i]);
+        this.archiveCount = archiveIds.length;
+        this.lastArchiveId = this.archiveCount > 0 ? archiveIds[this.archiveCount - 1] : -1;
+        if (this.archiveCount > 0 && this.lastArchiveId < Math.max(this.archiveCount * 4, 1024)) {
+            this.idToIndex = new Int32Array(this.lastArchiveId + 1).fill(-1);
+            for (let i = 0; i < this.archiveCount; i++) {
+                this.idToIndex[archiveIds[i]] = i;
             }
         }
     }
 
+    private indexOf(id: number): number {
+        if (this.idToIndex) {
+            return id >= 0 && id < this.idToIndex.length ? this.idToIndex[id] : -1;
+        }
+        const ids = this.archiveIds;
+        let low = 0;
+        let high = ids.length - 1;
+        while (low <= high) {
+            const mid = (low + high) >>> 1;
+            const value = ids[mid];
+            if (value < id) {
+                low = mid + 1;
+            } else if (value > id) {
+                high = mid - 1;
+            } else {
+                return mid;
+            }
+        }
+        return -1;
+    }
+
     getArchiveId(name: string): number | undefined {
-        return this._archiveNameHashIdMap.get(StringUtil.hashDjb2(name));
+        if (!this.named) {
+            return undefined;
+        }
+        if (!this.nameHashToId) {
+            this.nameHashToId = new Map();
+            for (let i = 0; i < this.archiveCount; i++) {
+                this.nameHashToId.set(this.archiveNameHashes[i], this.archiveIds[i]);
+            }
+        }
+        return this.nameHashToId.get(StringUtil.hashDjb2(name));
     }
 
     archiveExists(id: number): boolean {
-        return this._archiveIdIndexMap.has(id);
+        return this.indexOf(id) !== -1;
+    }
+
+    // The number of files in a group, 0 if there's no such group (and -1 when
+    // the files aren't listed)
+    getFileCount(id: number): number {
+        const i = this.indexOf(id);
+        if (i === -1) {
+            return 0;
+        }
+        return this.fileOffsets ? this.fileOffsets[i + 1] - this.fileOffsets[i] : -1;
     }
 
     getArchiveReference(id: number): ArchiveReference | undefined {
-        const i = this._archiveIdIndexMap.get(id);
-        if (i === undefined) {
+        const i = this.indexOf(id);
+        if (i === -1) {
             return undefined;
         }
-
-        const nameHash = this._archiveNameHashes[i];
-        const whirlpool = this._archiveWhirlpools[i];
-        const crc = this._archiveCrcs.getInt32(i * 4, false);
-        const revision = this._archiveRevisions.getInt32(i * 4, false);
-        const fileCount = this._archiveFileCounts[i];
-        const lastFileId = this._archiveLastFileIds[i];
-        const fileIds = this._archiveFileIds[i];
-        const fileNameHashes = this._archiveFileNameHashes[i];
-
-        const fileIdIndexMap: Map<number, number> = new Map();
-        for (let fileIdx = 0; fileIdx < fileCount; fileIdx++) {
-            fileIdIndexMap.set(fileIds[fileIdx], fileIdx);
+        const offsets = this.fileOffsets;
+        if (!offsets) {
+            return new ArchiveReference(
+                id,
+                this.archiveNameHashes[i],
+                this.archiveCrcs[i],
+                this.archiveRevisions[i],
+                -1,
+                0,
+                undefined as unknown as Int32Array,
+                undefined as unknown as Int32Array,
+            );
         }
+        const start = offsets[i];
+        const end = offsets[i + 1];
+        const fileIds = this.fileIds.subarray(start, end);
         return new ArchiveReference(
             id,
-            nameHash,
-            whirlpool,
-            crc,
-            revision,
-            fileCount,
-            lastFileId,
-            fileIdIndexMap,
+            this.archiveNameHashes[i],
+            this.archiveCrcs[i],
+            this.archiveRevisions[i],
+            end - start,
+            end > start ? fileIds[fileIds.length - 1] : 0,
             fileIds,
-            fileNameHashes,
+            // Unnamed, it's undefined, as it always was
+            this.fileNameHashes?.subarray(start, end) as Int32Array,
         );
     }
 

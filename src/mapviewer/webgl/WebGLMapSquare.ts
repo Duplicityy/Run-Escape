@@ -46,9 +46,13 @@ export class WebGLMapSquare {
     npcDataTextureOffsets: number[];
 
     static load(
-        seqTypeLoader: SeqTypeLoader,
-        npcTypeLoader: NpcTypeLoader,
-        basTypeLoader: BasTypeLoader,
+        // Read only if the square has what they're for (the map viewer's
+        // MapViewer, whose loaders are made when they're first read)
+        loaders: {
+            readonly seqTypeLoader: SeqTypeLoader;
+            readonly npcTypeLoader: NpcTypeLoader;
+            readonly basTypeLoader: BasTypeLoader;
+        },
         app: PicoApp,
         mainProgram: Program,
         mainAlphaProgram: Program,
@@ -190,7 +194,7 @@ export class WebGLMapSquare {
 
         const locsAnimated: LocAnimated[] = [];
         for (const loc of mapData.locsAnimated) {
-            const seqType = seqTypeLoader.load(loc.seqId);
+            const seqType = loaders.seqTypeLoader.load(loc.seqId);
             locsAnimated.push(
                 new LocAnimated(
                     loc.drawRangeIndex,
@@ -215,6 +219,7 @@ export class WebGLMapSquare {
 
         const npcs: Npc[] = [];
         for (const npc of mapData.npcs) {
+            const { npcTypeLoader, basTypeLoader } = loaders;
             const npcType = npcTypeLoader.load(npc.id);
 
             npcs.push(
