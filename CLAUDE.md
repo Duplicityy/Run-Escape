@@ -69,12 +69,13 @@ go stale. Add anything that cost you time to work out.
 changes the sim directly.
 
 Co-op guests can predict movement, only for display (`client/coop/MovementPrediction.ts` and
-`PlayerPose.ts`). It's a trial, off unless the player turns on `movePrediction` in
-`DisplaySettings`, so a guest's `CoopRun.prediction` is often undefined. Keep predicted positions
+`PlayerPose.ts`). It's on by default, but a player can turn `movePrediction` off in
+`DisplaySettings`, so a guest's `CoopRun.prediction` can be undefined. Keep predicted positions
 out of `Sim` and its hashes. Movement sequence echoes are acknowledged when their host frame is
 applied; preserve them when coalescing queued moves. Movement rules shared by simulation and
 prediction live in `core/PlayerMovement.ts`. Keep the delayed-network tests in
-`MovementPrediction.test.ts` covering corrections, fallbacks and changes to movement.
+`MovementPrediction.test.ts` covering corrections, fallbacks, changes to movement, stalls and
+resends, and the camera's steadiness (an echo of an unchanged move mustn't re-time the picture).
 
 ## Commands
 

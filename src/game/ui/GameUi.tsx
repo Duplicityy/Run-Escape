@@ -311,7 +311,7 @@ function AutoAlchSetting({ ui, client }: ScreenProps): JSX.Element {
 function MovePredictionSetting({ ui, client }: ScreenProps): JSX.Element {
     return (
         <Setting
-            name="Movement prediction (trial)"
+            name="Movement prediction"
             text="Joining a co-op game, you move as soon as you press, then correct to the host"
         >
             <Toggle

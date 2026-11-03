@@ -70,7 +70,7 @@ function createClient(sim: Sim, autoAlch: boolean) {
 }
 
 describe("movement prediction", () => {
-    test("is off unless it's been turned on, and is remembered", () => {
+    test("is on unless it's been turned off, and is remembered", () => {
         const stored = new Map<string, string>();
         vi.stubGlobal("window", {
             matchMedia: () => ({ matches: false }),
@@ -79,10 +79,19 @@ describe("movement prediction", () => {
                 setItem: (key: string, value: string) => stored.set(key, value),
             },
         });
-        expect(loadDisplaySettings().movePrediction).toBe(false);
+        expect(loadDisplaySettings().movePrediction).toBe(true);
         // Settings saved before there was such a thing
         stored.set("rune-survivors-display", JSON.stringify({ menuSpin: false }));
+        expect(loadDisplaySettings().movePrediction).toBe(true);
+        // Saved while it was a trial, off by default: that off wasn't a choice
+        stored.set(
+            "rune-survivors-display",
+            JSON.stringify({ menuSpin: false, movePrediction: false }),
+        );
+        expect(loadDisplaySettings().movePrediction).toBe(true);
+        saveDisplaySettings({ ...loadDisplaySettings(), movePrediction: false });
         expect(loadDisplaySettings().movePrediction).toBe(false);
+        expect(loadDisplaySettings().menuSpin).toBe(false);
         saveDisplaySettings({ ...loadDisplaySettings(), movePrediction: true });
         expect(loadDisplaySettings().movePrediction).toBe(true);
         vi.unstubAllGlobals();

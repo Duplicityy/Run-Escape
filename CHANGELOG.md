@@ -45,6 +45,9 @@ the version in the corner).
 
 ### Changed
 
+- Co-op movement prediction, by trippy22: on by default when you join a game, and smoother: no
+  camera nudges as you walk, no creeping or sliding back after you stop, and a glide rather than a
+  jump after a dropped connection. It can still be turned off in Settings.
 - Evolutions, rebalanced by trippy22: most gain less damage over their maxed base weapons, while
   keeping an upgrade at every level.
 - Endless runs, by Okaeri: from about round 4, levels come about a dozen a round rather than

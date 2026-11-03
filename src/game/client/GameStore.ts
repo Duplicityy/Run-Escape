@@ -439,7 +439,7 @@ export class GameStore {
                 questTracker: true,
                 damagePanel: false,
                 autoAlch: false,
-                movePrediction: false,
+                movePrediction: true,
                 coopFlag: true,
                 frameRate: "auto",
             },
