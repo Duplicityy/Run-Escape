@@ -1,15 +1,18 @@
 import { Ground } from "../Ground";
 import { blockTile, findReachable, getCollisionFlags } from "../collision";
 import { MAP_SQUARE_SIZE, TILE_BLOCKED, TileGrid, createTileGrid } from "../format";
-import { LOC_NORMAL } from "../mapBuild";
-import { createNoise, createRng } from "../noise";
-import { cutPrefab } from "../prefab";
+import { createRng } from "../noise";
+import { cutPrefab, rotatePrefab } from "../prefab";
+import { isDoor } from "../prefabs";
 import { BuildContext, MapRecipe } from "../recipe";
 
 // The Theatre of Blood, as a raid (MapDef.raid): six rooms, one for each of its bosses, walled off
 // from each other in the dark, so the only way between them is the sim's teleport. Each room is a
 // hall to fight its waves in, and above it the real boss room from the cache, cut out and stood on
 // a pad of its own: the party's brought in there for the boss, and it's too small for a crowd.
+//
+// The halls are the way there, cut from the real world: the woods outside Canifis, Burgh de Rott,
+// Meiyerditch, Darkmeyer, and Vampyrium's wilds and town, the vampyres' own, where Verzik waits.
 //
 // Rooms are cells of CELL_X by CELL_Y tiles, three across and two up. A cell's hall is its lower
 // part and its boss room the upper. Everything that isn't a hall or a boss room is blocked, and
@@ -38,17 +41,40 @@ const PAD_HEIGHT = 48;
 
 const FLOOR_HEIGHT = 24;
 
-// Underlays, as the map files store them: the Theatre's own floors (Maiden's room)
-const FLOOR = 118;
-const FLOOR_PATCH = 57;
-// Blood, and the Theatre's small floor clutter, which nothing stands on
-const BLOOD = [652, 653, 654];
-const CLUTTER = [16201, 16202, 16203];
-// Solid, 2 by 2: the Theatre's own pillars and rubble, for something to kite round
-const PILLARS = [32763, 32764, 32974];
-// Each hall's teleporter (RaidRoomDef.teleporter), 2 by 2, this many tiles east of the start
-const PORTAL = 4525;
-const PORTAL_EAST = 5;
+// A hall: a rectangle of the real world, HALL_X by HALL_Y once it's turned (a quarter turn
+// clockwise for each of `turns`, so a cut that's taller than it's wide goes in on its side), and
+// where in it the party starts and the teleporter stands, in tiles from its south-west corner as
+// it lies in the hall. Each start's in the biggest piece of ground that can be walked round, with
+// room about it. Doors come off, so the ways through houses are open; in a `clear` hall (a town's
+// streets) so do the one-tile things that block, lamps, stools and counters, which otherwise cut
+// the streets into pieces too small for waves.
+type HallCut = {
+    x: number;
+    y: number;
+    turns: number;
+    clear?: boolean;
+    // The share of its open floor with blood on it (Bloodsplatter, BLOOD)
+    blood?: number;
+    start: [x: number, y: number];
+    portal: [x: number, y: number];
+};
+
+// The teleporter (RaidRoomDef.teleporter) is 2 by 2, drawn by the game (RAID_PORTAL_LOC) only once
+// there are teleports to use, so it isn't in the map.
+const HALLS: Record<TobRoomId, HallCut> = {
+    // The swamp woods between Canifis and Port Phasmatys, where the vampyres hunt
+    maiden: { x: 3525, y: 3430, turns: 0, blood: 0.07, start: [56, 50], portal: [58, 46] },
+    // Burgh de Rott, and the open ground east of it
+    bloat: { x: 3468, y: 3172, turns: 0, start: [63, 48], portal: [68, 45] },
+    // Meiyerditch's slums, on their side, as they run north to south
+    nylocas: { x: 3572, y: 3230, turns: 1, clear: true, start: [62, 50], portal: [64, 45] },
+    // Darkmeyer's streets
+    sotetseg: { x: 3570, y: 3310, turns: 0, clear: true, start: [59, 53], portal: [52, 52] },
+    // Slepe, the last village before the vampyres' own land
+    xarpus: { x: 3660, y: 3260, turns: 0, start: [55, 51], portal: [56, 55] },
+    // Vampyrium, east of its castle (whose floor's the cache's hidden overlay, and draws nothing)
+    verzik: { x: 2543, y: 7790, turns: 0, clear: true, start: [57, 48], portal: [52, 47] },
+};
 
 // A boss room: a rectangle of the real world, in world tiles, with its plane (Xarpus is upstairs),
 // and where in it the party's brought to and the boss turns up, in tiles from its south-west corner
@@ -70,7 +96,7 @@ const ROOMS: { id: TobRoomId; cut: RoomCut }[] = [
     // She's chained to the west wall, so she's beside her platform
     {
         id: "maiden",
-        cut: { x: 3158, y: 4433, sizeX: 32, sizeY: 28, plane: 0, arrive: [14, 10], boss: [13, 14] },
+        cut: { x: 3158, y: 4433, sizeX: 32, sizeY: 28, plane: 0, arrive: [13, 11], boss: [13, 14] },
     },
     // A loop round a solid middle: in on the west side, the Bloat at the top
     {
@@ -91,7 +117,7 @@ const ROOMS: { id: TobRoomId; cut: RoomCut }[] = [
     },
     {
         id: "verzik",
-        cut: { x: 3152, y: 4300, sizeX: 33, sizeY: 25, plane: 0, arrive: [16, 11], boss: [16, 17] },
+        cut: { x: 3152, y: 4300, sizeX: 33, sizeY: 25, plane: 0, arrive: [16, 14], boss: [16, 17] },
     },
 ];
 
@@ -144,15 +170,9 @@ function placeRooms(): RoomPlace[] {
             id,
             hall,
             chamber,
-            start: {
-                x: Math.floor((hall.x0 + hall.x1) / 2),
-                y: Math.floor((hall.y0 + hall.y1) / 2),
-            },
+            start: { x: hall.x0 + HALLS[id].start[0], y: hall.y0 + HALLS[id].start[1] },
             arrive: { x: chamberX + cut.arrive[0], y: chamberY + cut.arrive[1] },
-            portal: {
-                x: Math.floor((hall.x0 + hall.x1) / 2) + PORTAL_EAST,
-                y: Math.floor((hall.y0 + hall.y1) / 2) - 1,
-            },
+            portal: { x: hall.x0 + HALLS[id].portal[0], y: hall.y0 + HALLS[id].portal[1] },
             boss: { x: chamberX + cut.boss[0], y: chamberY + cut.boss[1] },
         };
     });
@@ -204,54 +224,62 @@ function inRect(rect: Rect, x: number, y: number): boolean {
     return x >= rect.x0 && y >= rect.y0 && x <= rect.x1 && y <= rect.y1;
 }
 
-function paintHall(ground: Ground, place: RoomPlace, seed: number): void {
-    const noise = createNoise(seed, 2);
+// Bloodsplatter as ground decoration (type 22): 13312 only has a wall's model
+const BLOOD = [652, 653, 654];
+
+// Blood over a hall's open floor: on tiles that aren't blocked (water, rock) and have nothing
+// already on the ground level, as a tile holds one ground decoration
+function spillBlood(ground: Ground, place: RoomPlace, share: number, seed: number): void {
     const { hall } = place;
+    const taken = new Set<number>();
+    for (const loc of ground.grid.locs) {
+        if (loc.level === 0 && inRect(hall, loc.x, loc.y)) {
+            taken.add(ground.tile(loc.x, loc.y));
+        }
+    }
+    const rng = createRng(seed);
     for (let y = hall.y0; y <= hall.y1; y++) {
         for (let x = hall.x0; x <= hall.x1; x++) {
-            ground.level0.underlays[ground.tile(x, y)] =
-                noise(x / 24, y / 24) > 0.25 ? FLOOR_PATCH : FLOOR;
+            const i = ground.tile(x, y);
+            if (rng() >= share || taken.has(i) || ground.level0.flags[i] & TILE_BLOCKED) {
+                continue;
+            }
+            const id = BLOOD[Math.floor(rng() * BLOOD.length)];
+            ground.place({ id, type: 22, rotation: Math.floor(rng() * 4), level: 0, x, y }, 1, 1);
         }
     }
 }
 
-// Pillars here and there, never near where the party starts; blood and clutter everywhere
-function dressHall(ground: Ground, place: RoomPlace, seed: number): void {
-    const rng = createRng(seed);
-    const { hall, start } = place;
-    for (let y = hall.y0 + 2; y <= hall.y1 - 3; y += 2) {
-        for (let x = hall.x0 + 2; x <= hall.x1 - 3; x += 2) {
-            const roll = rng();
-            const nearStart = Math.hypot(x - start.x, y - start.y) < 14;
-            if (roll < 0.018 && !nearStart && ground.isClear(x - 1, y - 1, 4, 4)) {
-                const id = PILLARS[Math.floor(rng() * PILLARS.length)];
-                ground.place({ id, type: LOC_NORMAL, rotation: 0, level: 0, x, y }, 2, 2);
+// A hall's real ground, turned to lie across it, as the world has it: its own heights, stood so
+// that its lowest corner's at the floor's height, with what's on it. What can't be walked to from
+// the start is blocked later.
+function stampHall(ground: Ground, context: BuildContext, place: RoomPlace): void {
+    const cut = HALLS[place.id];
+    const [sizeX, sizeY] = cut.turns & 1 ? [HALL_Y, HALL_X] : [HALL_X, HALL_Y];
+    const hall = rotatePrefab(
+        cutPrefab(context.maps, cut.x, cut.y, sizeX, sizeY),
+        cut.turns,
+        context.locs,
+    );
+    ground.stamp(hall, place.hall.x0, place.hall.y0, {
+        skipLoc: (loc) => {
+            if (isDoor(context, loc)) {
+                return true;
             }
-        }
-    }
-    for (let y = hall.y0; y <= hall.y1; y++) {
-        for (let x = hall.x0; x <= hall.x1; x++) {
-            const roll = rng();
-            if (!ground.isClear(x, y, 1, 1)) {
-                continue;
-            }
-            if (roll < 0.05) {
-                const id = BLOOD[Math.floor(rng() * BLOOD.length)];
-                ground.place(
-                    { id, type: 22, rotation: Math.floor(rng() * 4), level: 0, x, y },
-                    1,
-                    1,
-                );
-            } else if (roll < 0.08) {
-                const id = CLUTTER[Math.floor(rng() * CLUTTER.length)];
-                ground.place(
-                    { id, type: 22, rotation: Math.floor(rng() * 4), level: 0, x, y },
-                    1,
-                    1,
-                );
-            }
-        }
-    }
+            const info = context.locs(loc.id);
+            return (
+                cut.clear === true &&
+                loc.type >= 10 &&
+                info.sizeX * info.sizeY === 1 &&
+                info.clipType > 0
+            );
+        },
+        floor: "all",
+        feather: 0,
+        flatten: false,
+        height: FLOOR_HEIGHT,
+        anchor: Math.min(...hall.levels[0].heights),
+    });
 }
 
 function build(context: BuildContext): TileGrid {
@@ -262,7 +290,11 @@ function build(context: BuildContext): TileGrid {
         }
     }
     PLACES.forEach((place, i) => {
-        paintHall(ground, place, 7100 + i);
+        stampHall(ground, context, place);
+        const blood = HALLS[place.id].blood;
+        if (blood) {
+            spillBlood(ground, place, blood, 7200 + i);
+        }
         const { cut } = ROOMS[i];
         const room = bringDown(
             cutPrefab(context.maps, cut.x, cut.y, cut.sizeX, cut.sizeY),
@@ -275,11 +307,6 @@ function build(context: BuildContext): TileGrid {
             height: FLOOR_HEIGHT,
         });
     });
-    // The teleporters go down first, so nothing's scattered on them
-    for (const { portal } of PLACES) {
-        ground.place({ id: PORTAL, type: LOC_NORMAL, rotation: 0, level: 0, ...portal }, 2, 2);
-    }
-    PLACES.forEach((place, i) => dressHall(ground, place, 7200 + i));
 
     // Only a hall, or what can be walked to in a boss room from where the party's brought in, is
     // open: the rest is blocked, the boss rooms' doorways and corridors included

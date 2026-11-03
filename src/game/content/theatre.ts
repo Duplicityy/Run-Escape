@@ -612,7 +612,7 @@ function vasilias(): EnemyDef {
         onlyStyle: "melee",
         spawnMessage: "Nylocas Vasilias crawls out of the pillars!",
         boss: {
-            attackInterval: 2.2,
+            attackInterval: 2.0,
             keepDistance: 4,
             colours: { every: 8, forms: VASILIAS_FORMS },
             enrage: { message: "Nylocas Vasilias shrieks!" },
@@ -621,20 +621,47 @@ function vasilias(): EnemyDef {
                 { hp: 0.5, enemyId: "nylocas_toxobolos", count: 6 },
                 { hp: 0.25, enemyId: "nylocas_hagios", count: 6 },
             ],
-            attacks: VASILIAS_ATTACKS,
+            attacks: oftener(VASILIAS_ATTACKS, 2.2, 2.0),
         },
     };
 }
 
+// ToB's a melee raid: what a boss fires from itself starts this many tiles out, so there's a
+// pocket up close that its rings, spreads and walls never cross. Ranged and magic fight from
+// where they're thick, for a fifth of the damage (PROTECTS).
+const MELEE_POCKET = 2.5;
+const POCKETED = new Set(["ring", "spiral", "spread", "wall"]);
+
+// A raid boss's attacks: the melee pocket, and when it attacks more often than its hits were
+// tuned for (every `from` seconds), each one lighter to match, for more to dodge and the same
+// damage over time. Expert mode's own attacks keep their damage, as the green ball's meant to kill.
+function oftener(attacks: BossAttackDef[], from: number, to: number): BossAttackDef[] {
+    return attacks.map((attack) => {
+        const pattern = attack.pattern;
+        return {
+            ...attack,
+            damage: attack.expert ? attack.damage : (attack.damage * to) / from,
+            pattern:
+                pattern && POCKETED.has(pattern.shape)
+                    ? { ...pattern, from: pattern.from ?? MELEE_POCKET }
+                    : pattern,
+        };
+    });
+}
+
 // A boss from elsewhere as the raid has it: its own self, a raid id, and its fight with more on top
-// (or instead, when replace is set)
+// (or instead, when replace is set). A new attackInterval lightens its hits to match what they
+// were tuned at (tunedAt, its own interval unless said).
 function raidVersion(
     base: EnemyDef,
     id: string,
     attacks: BossAttackDef[],
     extra: Partial<BossDef> = {},
     replace = false,
+    tunedAt = base.boss!.attackInterval,
 ): EnemyDef {
+    const all = replace ? attacks : [...base.boss!.attacks, ...attacks];
+    const interval = extra.attackInterval ?? tunedAt;
     return {
         ...base,
         id,
@@ -642,9 +669,16 @@ function raidVersion(
         boss: {
             ...base.boss!,
             ...extra,
-            attacks: replace ? attacks : [...base.boss!.attacks, ...attacks],
+            attacks: oftener(all, tunedAt, interval),
         },
     };
+}
+
+// Bigger than Morytania has them, as the raid's rooms are bigger. Drawn only: what can be hit
+// (radius) stays as it was. The Bloat, Nylocas Vasilias and Verzik's spider fight in small rooms,
+// so they stay as they are.
+function withScale(scale: number, enemy: EnemyDef): EnemyDef {
+    return { ...enemy, scale };
 }
 
 // The raid's own bosses. The Bloat, Sotetseg and Verzik need Morytania's, from enemies.ts.
@@ -667,14 +701,15 @@ export function getTheatreBosses(byId: (id: string) => EnemyDef): EnemyDef[] {
             radius: 0.5,
             xp: 1000,
             sounds: { attack: 3605, hit: 3607, death: 3606 },
-            // Six tiles across in OSRS, and she stands still, so she can be big
-            scale: 1,
+            // Six tiles across in OSRS, and she stands still, so she can be big. Drawn only: what
+            // can be hit (radius) stays small, and her room's floor with it.
+            scale: 1.25,
             knockbackResist: 1,
             stationary: true,
             protects,
             spawnMessage: "The Maiden of Sugadinti strains at her chains!",
             boss: {
-                attackInterval: 2.4,
+                attackInterval: 2,
                 enrage: { message: "The Maiden's blood boils!" },
                 summonsAt: [
                     {
@@ -691,7 +726,8 @@ export function getTheatreBosses(byId: (id: string) => EnemyDef): EnemyDef[] {
                         message: "More Nylocas crawl out to the Maiden!",
                     },
                 ],
-                attacks: MAIDEN_ATTACKS,
+                // Lighter again: a hit's moment of safety used to soak up more of her bullets
+                attacks: oftener(MAIDEN_ATTACKS, 2.4, 1.8),
             },
         },
         // He walks his loop with his guard up, and goes down now and then: that's when to hit him
@@ -700,6 +736,8 @@ export function getTheatreBosses(byId: (id: string) => EnemyDef): EnemyDef[] {
             "tob_pestilent_bloat",
             BLOAT_ATTACKS,
             {
+                // Morytania's is 3.4
+                attackInterval: 3,
                 naps: {
                     every: 9,
                     seconds: 5,
@@ -732,12 +770,16 @@ export function getTheatreBosses(byId: (id: string) => EnemyDef): EnemyDef[] {
                 onlyStyle,
             }),
         ),
-        raidVersion(
-            byId("sotetseg"),
-            "tob_sotetseg",
-            SOTETSEG_ATTACKS,
-            { attackInterval: 2.4 },
-            true,
+        withScale(
+            1,
+            raidVersion(
+                byId("sotetseg"),
+                "tob_sotetseg",
+                SOTETSEG_ATTACKS,
+                { attackInterval: 1.9 },
+                true,
+                2.4,
+            ),
         ),
         {
             id: "xarpus",
@@ -753,13 +795,14 @@ export function getTheatreBosses(byId: (id: string) => EnemyDef): EnemyDef[] {
             radius: 0.5,
             xp: 1200,
             sounds: { attack: 3605, hit: 3607, death: 3606 },
-            scale: 0.85,
+            // Big, as he's five tiles across in OSRS; drawn only, as the Maiden
+            scale: 1.35,
             knockbackResist: 1,
             stationary: true,
             protects,
             spawnMessage: "Xarpus rises from his pool!",
             boss: {
-                attackInterval: 2.2,
+                attackInterval: 1.7,
                 enrage: { message: "Xarpus screeches, poison spraying everywhere!" },
                 // Expert mode: he stares one way, and hitting him from in front hurts you
                 stare: {
@@ -768,18 +811,32 @@ export function getTheatreBosses(byId: (id: string) => EnemyDef): EnemyDef[] {
                     damage: 4,
                     message: "Xarpus turns to stare! Don't hit him from in front.",
                 },
-                attacks: XARPUS_ATTACKS,
+                attacks: oftener(XARPUS_ATTACKS, 2.2, 1.7),
             },
         },
-        raidVersion(verzikOne, "tob_verzik_vitur", VERZIK_ONE_ATTACKS, {
-            rises: { ...verzikOne.boss!.rises!, into: "tob_verzik_vitur_risen" },
-        }),
-        raidVersion(verzikTwo, "tob_verzik_vitur_risen", VERZIK_TWO_ATTACKS, {
-            rises: { ...verzikTwo.boss!.rises!, into: "tob_verzik_vitur_spider" },
-        }),
-        // Her room's small for all she throws: she throws it a little slower
-        raidVersion(byId("verzik_vitur_spider"), "tob_verzik_vitur_spider", VERZIK_THREE_ATTACKS, {
-            attackInterval: 2.9,
-        }),
+        // Morytania's Verzik attacks every 2.6s
+        withScale(
+            1,
+            raidVersion(verzikOne, "tob_verzik_vitur", VERZIK_ONE_ATTACKS, {
+                attackInterval: 2,
+                rises: { ...verzikOne.boss!.rises!, into: "tob_verzik_vitur_risen" },
+            }),
+        ),
+        withScale(
+            1.3,
+            raidVersion(verzikTwo, "tob_verzik_vitur_risen", VERZIK_TWO_ATTACKS, {
+                attackInterval: 2,
+                rises: { ...verzikTwo.boss!.rises!, into: "tob_verzik_vitur_spider" },
+            }),
+        ),
+        // Her room's small for all she throws: she throws it a little slower than her other forms
+        raidVersion(
+            byId("verzik_vitur_spider"),
+            "tob_verzik_vitur_spider",
+            VERZIK_THREE_ATTACKS,
+            { attackInterval: 2.6 },
+            false,
+            2.9,
+        ),
     ];
 }

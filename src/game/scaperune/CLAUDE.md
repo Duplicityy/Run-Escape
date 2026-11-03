@@ -1403,7 +1403,8 @@ Measured in Node on this VM, on a forest-bound meadow with default settings othe
 ### Shipping a map
 
 Hallowed Night (`maps/hallowedNight.ts`) is the worked example. The Theatre of Blood
-(`maps/theatreOfBlood.ts`) is a raid's: halls of our own ground, and real boss rooms cut from the
+(`maps/theatreOfBlood.ts`) is a raid's: halls cut from real places (doors off, and in a town the one-tile props that
+block, which split its streets into pieces too small for waves), and real boss rooms cut from the
 cache onto pads beside them, sealed by what can be walked to from where the party's brought in.
 A raid on purpose uses raid locs, which the catalogue keeps off dev maps, so it's a shipped map.
 Its `bringDown` brings an upstairs room (Xarpus's, on plane 1) down to the ground floor, as only one

@@ -40,8 +40,10 @@ export function getRoomPoints(bossSeconds: number, damageTaken: number, maxHp: n
     );
 }
 
-// Teleports a raid gives, once it's been beaten: rooms whose waves can be skipped
-export const RAID_TELEPORTS = 2;
+// Teleports a raid gives: halls whose waves can be skipped, once their boss has been killed
+export const RAID_TELEPORTS = 3;
+// The teleporter's portal (2 by 2), drawn by the game in each hall once there are teleports
+export const RAID_PORTAL_LOC = 4525;
 
 // The supply chest between rooms
 export const RAID_SUPPLIES: RaidSupplyDef[] = [
@@ -186,6 +188,9 @@ const TOB_ROOMS: RaidRoomDef[] = [
                 ],
             ]),
             events: roomEvents("nylocas_matomenos", "blood_spawn", 24),
+            // Canifis's woods by night, where the vampyres hunt: darker and redder than the
+            // village itself, so it doesn't read as a stroll past Canifis
+            hall: { brightness: 0.75, wash: "#e09090" },
             boss: "maiden_of_sugadinti",
             bossHp: 12000,
         },
@@ -236,6 +241,8 @@ const TOB_ROOMS: RaidRoomDef[] = [
                 ],
             ]),
             events: roomEvents("big_nylocas_ischyros", "nylocas_ischyros", 40),
+            // Meiyerditch is dark stone: brighter than the rest, or its alleys are lost
+            hall: { brightness: 1.1 },
             boss: "nylocas_vasilias",
             bossHp: 20000,
         },
@@ -343,16 +350,19 @@ export const RAID_MAPS: MapDef[] = [
         id: "theatre_of_blood",
         name: "Theatre of Blood",
         description:
-            "A raid: six rooms one after another, each with its own waves and then its boss. The " +
-            "Maiden of Sugadinti, the Pestilent Bloat, Nylocas Vasilias, Sotetseg, Xarpus, and " +
-            "Verzik Vitur at the end. Beat a room's boss to move on to the next. They pray against " +
-            "missiles and magic: it's a melee raid. The faster and " +
-            "cleaner, the more raid points: they pay coins, buy supplies between rooms, and " +
-            "better your chances at a purple in the chest at the end. Beat it once for two " +
-            "teleports a raid, in the halls, to skip a room's waves. Beat it on hard for expert " +
-            "mode: the Nylocas only take their own style, the Maiden's heal her, Xarpus stares " +
-            "and Verzik's ball must be hidden from, for twice the coins and one of Lil' Zik's " +
-            "looks each clear.",
+            "**A melee raid in six rooms.** Survive each room's waves on the way through " +
+            "Morytania, then kill its boss to move on: the Maiden, the Bloat, Nylocas Vasilias, " +
+            "Sotetseg, Xarpus, then Verzik in Vampyrium.\n\n" +
+            "**Bosses pray against missiles and magic**, and their bullets leave a gap up close.\n\n" +
+            "**Raid points** come from fast, clean rooms. They pay coins, buy supplies between " +
+            "rooms, and raise your chance of a purple at the end.\n\n" +
+            "**Portals:** once you've killed a room's boss, its hall has a portal straight to it " +
+            "(three a raid).\n\n" +
+            "**Hard mode** opens when you beat the raid.\n\n" +
+            "**Expert mode** opens when you beat it on hard. It's hard mode with more of the real " +
+            "raid's mechanics: the Nylocas only take their own style, the Maiden's Nylocas heal " +
+            "her, Xarpus stares, and Verzik's ball must be hidden from. Twice the coins, and a " +
+            "Lil' Zik look each clear.",
         // Lil' Zik
         iconObjId: 22473,
         arena: getRecipeArena(THEATRE_OF_BLOOD),

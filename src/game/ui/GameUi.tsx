@@ -815,6 +815,40 @@ function HardSwitch({ ui, client }: ScreenProps): JSX.Element {
     );
 }
 
+// What a raid's hall wants of you: hold out until its boss comes (or take the portal). The first
+// time through, a line on how the raid goes, as it's not like a campaign map.
+function RaidObjective({
+    room,
+    bossIn,
+}: {
+    room: NonNullable<HudView["raidRoom"]>;
+    bossIn: number;
+}): JSX.Element {
+    const boss = room.name.replace(/^The /, "the ");
+    return (
+        <div
+            className={
+                bossIn <= 60 ? "ui-raid-objective ui-raid-objective-soon" : "ui-raid-objective"
+            }
+        >
+            <div>
+                Survive the waves: {boss} in {formatTime(Math.ceil(bossIn))}
+            </div>
+            {room.portal && (
+                <div className="ui-raid-objective-hint">
+                    Or step into the portal to face {boss} now
+                </div>
+            )}
+            {room.first && room.number === 1 && (
+                <div className="ui-raid-objective-hint">
+                    {room.count} rooms, each with its waves and then its boss. Kill the boss to move
+                    on.
+                </div>
+            )}
+        </div>
+    );
+}
+
 // The chest at the end of a raid: what it was rolled with, and what came out
 function RaidChestView({ chest }: { chest: RaidChest }): JSX.Element {
     const found = chest.found.map((id) => TROPHY_BY_ID.get(id)!).filter(Boolean);
@@ -1114,9 +1148,23 @@ function MapDetails({ save, map }: { save: SaveData; map: MapDef }): JSX.Element
                     )}
                 </div>
             </div>
-            <div className="ui-card-text">{map.description}</div>
+            <div className="ui-card-text ui-card-description">
+                <RichText text={map.description} />
+            </div>
             <MapTasks save={save} mapId={map.id} />
         </div>
+    );
+}
+
+// A description's own formatting: a blank line between paragraphs (the CSS keeps line breaks),
+// and **bold**
+function RichText({ text }: { text: string }): JSX.Element {
+    return (
+        <>
+            {text
+                .split(/\*\*(.+?)\*\*/g)
+                .map((part, i) => (i % 2 === 1 ? <strong key={i}>{part}</strong> : part))}
+        </>
     );
 }
 
@@ -1429,6 +1477,9 @@ function Hud({
     const bossIn = hud.bossIn;
     return (
         <>
+            {hud.raidRoom?.wash && (
+                <div className="ui-hall-wash" style={{ backgroundColor: hud.raidRoom.wash }} />
+            )}
             <div className="ui-xp">
                 <div className="ui-xp-fill" style={{ width: `${hud.xpFraction * 100}%` }} />
                 <span className="ui-xp-level">Level {hud.level}</span>
@@ -1518,14 +1569,12 @@ function Hud({
                         </div>
                     )}
                 </div>
+            ) : hud.raidRoom ? (
+                hud.raidRoom.waves && <RaidObjective room={hud.raidRoom} bossIn={bossIn} />
             ) : (
-                bossIn <= 60 &&
-                (!hud.raidRoom || hud.raidRoom.waves) && (
+                bossIn <= 60 && (
                     <div className="ui-boss-warning">
-                        {hud.raidRoom && hud.raidRoom.number < hud.raidRoom.count
-                            ? `${hud.raidRoom.name} awaits...`
-                            : getMap(hud.mapId).finalBossWarning}{" "}
-                        {Math.ceil(bossIn)}s
+                        {getMap(hud.mapId).finalBossWarning} {Math.ceil(bossIn)}s
                     </div>
                 )
             )}

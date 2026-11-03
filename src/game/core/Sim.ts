@@ -487,8 +487,10 @@ export type SimOptions = {
     // which of them this copy plays
     party?: HeroOptions[];
     focus?: number;
-    // A raid's teleporters: how many rooms' waves can be skipped (none until it's been beaten)
+    // A raid's teleporters: how many rooms' waves can be skipped, and which rooms' halls have one
+    // (those whose boss has been killed before)
     raidTeleports?: number;
+    raidPortals?: boolean[];
     // For trying things out on the dev server (?raidtest): a raid's rooms this many seconds
     // apart, and every level up's pick straight to its max
     testing?: SimTesting;
@@ -760,6 +762,7 @@ export class Sim {
     // once whoever it asked has stepped away)
     raidTeleportsLeft = 0;
     private readonly raidTeleports: number;
+    private readonly raidPortals: boolean[];
     private teleporterArmed = true;
     // Endless runs' round, and the tick it started; killing the final boss
     // starts the next
@@ -1041,6 +1044,7 @@ export class Sim {
         this.testing = options.testing;
         this.raidTeleports = this.map.raid ? (options.raidTeleports ?? 0) : 0;
         this.raidTeleportsLeft = this.raidTeleports;
+        this.raidPortals = options.raidPortals ?? [];
         this.hardScale = this.hard ? getHardScale(this.map) : { hp: 1, damage: 1 };
         const party: HeroOptions[] = options.party ?? [
             {
@@ -3890,29 +3894,54 @@ export class Sim {
                 this.openNextRaidShop();
             }
         } else if (this.tick - this.raidStageTick >= RAID_CLEARED_SECONDS * TICKS_PER_SECOND) {
-            this.raidRoom++;
-            const next = raid.rooms[this.raidRoom];
-            this.raidStage = "waves";
-            this.raidStageTick = this.tick;
-            this.raidRoomStartTick = this.tick;
-            this.raidShopQueue = [];
-            this.eventIndex = 0;
-            this.spawnAccumulator = 0;
-            this.moveParty(next.start);
-            for (const hero of this.heroes) {
-                hero.raidDamageAtStart = hero.damageTaken;
-            }
-            this.emit({
-                type: "notice",
-                message: `Room ${this.raidRoom + 1} of ${raid.rooms.length}: ${next.name}`,
-            });
+            this.beginRaidRoom(this.raidRoom + 1);
         }
+    }
+
+    // A room's waves, from the top, in its hall
+    private beginRaidRoom(index: number): void {
+        const raid = this.map.raid!;
+        this.raidRoom = index;
+        const next = raid.rooms[index];
+        this.raidStage = "waves";
+        this.raidStageTick = this.tick;
+        this.raidRoomStartTick = this.tick;
+        this.raidShopQueue = [];
+        this.eventIndex = 0;
+        this.spawnAccumulator = 0;
+        this.moveParty(next.start);
+        for (const hero of this.heroes) {
+            hero.raidDamageAtStart = hero.damageTaken;
+        }
+        this.emit({
+            type: "notice",
+            message: `Room ${index + 1} of ${raid.rooms.length}: ${next.name}`,
+        });
+    }
+
+    // A hall has a teleporter once its room's boss has been killed before, in a solo raid (co-op's
+    // relays don't carry them yet). A first run has none, so a portal that does nothing doesn't
+    // puzzle anyone.
+    private get teleportersOn(): boolean {
+        return (
+            this.raidTeleports > 0 &&
+            this.heroes.length === 1 &&
+            this.raidPortals[this.raidRoom] === true
+        );
+    }
+
+    // Where this hall's teleporter stands, for the game to draw, while there is one
+    get raidTeleporter(): { x: number; y: number } | undefined {
+        if (!this.teleportersOn || this.raidStage !== "waves") {
+            return undefined;
+        }
+        return this.raidRoomDef?.teleporter;
     }
 
     // The hall's teleporter: walking up to it asks whether to skip the room's waves
     private stepTeleporter(room: RaidRoomDef): void {
         const at = room.teleporter;
-        if (!at || this.state !== "playing") {
+        if (!at || !this.teleportersOn || this.state !== "playing") {
             return;
         }
         const near = this.heroes.find(
@@ -3943,12 +3972,7 @@ export class Sim {
             this.emit(
                 {
                     type: "notice",
-                    message:
-                        this.heroes.length > 1
-                            ? "The teleporters are for solo raids, for now."
-                            : this.raidTeleports === 0
-                              ? "The teleporter's dormant. Beat the raid once to use it."
-                              : "The teleporter's dormant: you've used all your teleports this raid.",
+                    message: "The teleporter's dormant: you've used all your teleports this raid.",
                 },
                 true,
             );
@@ -3962,7 +3986,7 @@ export class Sim {
                 name: "Teleporter",
                 weight: 0,
                 speech:
-                    `Skips the rest of this room's waves and takes you straight to ${room.name}. ` +
+                    `Skips the rest of this room's waves and takes you straight to ${midSentence(room.name)}. ` +
                     `You can use ${left === 1 ? "1 more teleport" : `${left} more teleports`} this raid.`,
                 effect: { kind: "shop", leaveLabel: "Cancel" },
             },
@@ -3983,6 +4007,7 @@ export class Sim {
         this.clearBossAttacks();
         this.enemyProjectiles = [];
         this.funBossGroup = [];
+        this.gatherHall();
         this.moveParty(room.arrive);
         this.useSpawnHero();
         const boss = this.spawnBoss(
@@ -4004,6 +4029,36 @@ export class Sim {
                     message: `${boss.def.name} protects from ${styles.join(" and ")}!`,
                 });
             }
+        }
+    }
+
+    // Bones and coins still on the hall's floor when the boss comes would be lost, as the party
+    // doesn't go back, so they come along: each to whoever's nearest, as a magnet's do. Caskets
+    // and power-ups stay, as they need walking over.
+    private gatherHall(): void {
+        const current = this.hero;
+        let gathered = 0;
+        for (const pickup of this.pickups) {
+            if (
+                pickup.value < 0 ||
+                pickup.disguise ||
+                pickup.kind === "casket" ||
+                pickup.kind === "powerUp"
+            ) {
+                continue;
+            }
+            this.use(this.nearestUpHero(pickup.x, pickup.y));
+            this.collect(pickup);
+            pickup.value = -1;
+            gathered++;
+        }
+        this.use(current);
+        this.pickups = this.pickups.filter((p) => p.value >= 0);
+        if (gathered > 0) {
+            this.emit({
+                type: "notice",
+                message: "What was left on the floor comes with you.",
+            });
         }
     }
 
@@ -4888,11 +4943,12 @@ export class Sim {
         const spread = pattern.shape === "spread";
         const step = spread ? (pattern.arc ?? 1) / Math.max(1, count - 1) : (Math.PI * 2) / count;
         const first = spread ? emitter.angle - (pattern.arc ?? 1) / 2 : emitter.angle;
+        const from = pattern.from ?? 0;
         for (let i = 0; i < count; i++) {
             const angle = first + i * step;
             this.bullets.add(
-                boss.x,
-                boss.y,
+                boss.x + fm.cos(angle) * from,
+                boss.y + fm.sin(angle) * from,
                 fm.cos(angle) * speed,
                 fm.sin(angle) * speed,
                 turn,
@@ -4941,14 +4997,17 @@ export class Sim {
         if (pattern.shape === "wall") {
             const spacing = pattern.spacing ?? pattern.radius * 2.5;
             const across = emitter.angle + Math.PI / 2;
+            const from = pattern.from ?? 0;
+            const startX = boss.x + fm.cos(emitter.angle) * from;
+            const startY = boss.y + fm.sin(emitter.angle) * from;
             for (let i = 0; i < count; i++) {
                 if (inGap(i)) {
                     continue;
                 }
                 const offset = (i - (count - 1) / 2) * spacing;
                 add(
-                    boss.x + fm.cos(across) * offset,
-                    boss.y + fm.sin(across) * offset,
+                    startX + fm.cos(across) * offset,
+                    startY + fm.sin(across) * offset,
                     emitter.angle,
                     life,
                 );
@@ -9148,7 +9207,7 @@ export class Sim {
             this.leaveEvent();
             this.emit({
                 type: "notice",
-                message: `Teleported to ${room.name}. ${this.raidTeleportsLeft} ${this.raidTeleportsLeft === 1 ? "teleport" : "teleports"} left.`,
+                message: `Teleported to ${midSentence(room.name)}. ${this.raidTeleportsLeft} ${this.raidTeleportsLeft === 1 ? "teleport" : "teleports"} left.`,
             });
             this.startRaidBoss(room, this.raidRoom === raid.rooms.length - 1);
             return true;
@@ -9340,6 +9399,11 @@ export class Sim {
         }
         return Math.max(0, RUN_LENGTH - this.mapSeconds);
     }
+}
+
+// A name with "The" in front, as it reads partway through a sentence
+function midSentence(name: string): string {
+    return name.replace(/^The /, "the ");
 }
 
 function addStats(stats: Stats, add: Partial<Stats>): void {

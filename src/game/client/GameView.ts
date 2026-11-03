@@ -8,6 +8,7 @@ import { REVIVE_SECONDS, REVIVE_SEQ } from "../content/coop";
 import { getEnemy } from "../content/enemies";
 import { CASKETS } from "../content/items";
 import { POWER_UP_BLINK, POWER_UP_COLOR, POWER_UP_LIFETIME, getPowerUp } from "../content/powerups";
+import { RAID_PORTAL_LOC } from "../content/raids";
 import { VISITOR_BLINK, VISITOR_COLOR } from "../content/randomEvents";
 import {
     DEATH_SINK_TICKS,
@@ -533,6 +534,11 @@ export class GameView {
             this.drawPool(actors, sim, pool);
         }
 
+        const teleporter = sim.raidTeleporter;
+        if (teleporter) {
+            this.drawTeleporter(actors, sim, teleporter);
+        }
+
         for (const glyph of sim.glyphs) {
             this.drawGlyph(actors, sim, glyph, alpha);
         }
@@ -625,6 +631,17 @@ export class GameView {
                 scale: FLAME_SCALE,
             });
         });
+    }
+
+    // A raid hall's teleporter, once the raid's been beaten
+    private drawTeleporter(actors: ActorRenderer, sim: Sim, at: { x: number; y: number }): void {
+        const model = this.assets.get("loc:" + RAID_PORTAL_LOC);
+        if (!model) {
+            return;
+        }
+        const anim = model.anims[0];
+        const height = this.ground(sim, at.x, at.y);
+        actors.draw(model, anim, anim.getFrame(sim.tick, true), at.x, height, at.y, 0);
     }
 
     // A boss's pool: the real thing on the ground, spreading as it lands and

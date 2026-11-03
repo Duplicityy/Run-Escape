@@ -14,8 +14,12 @@ the version in the corner).
   a supply chest between rooms, and better your chance of a purple from the chest at the end.
 - The Theatre's uniques for the Collection log, Lil' Zik, and two weapons: the Ghrazi rapier for
   beating it, and the Holy Scythe of Vitur for beating it on hard.
-- Beat the raid once for two teleports a raid, to skip a room's waves; beat it on hard for expert
-  mode, with more of the real raid's mechanics, twice the coins and Lil' Zik's looks.
+- The raid runs through Morytania: each room fights its waves in a real place, from the woods
+  outside Canifis to Vampyrium. Bones and coins left on a hall floor go with you to its boss.
+- Teleporters: once you've killed a room's boss, its hall has a portal straight to it (three a raid),
+  to get back to the boss you're learning quicker.
+- Beat the raid on hard for expert mode, with more of the real raid's mechanics, twice the coins
+  and Lil' Zik's looks.
 
 ## 0.23.0 - 2026-11-02
 

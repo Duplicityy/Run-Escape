@@ -127,7 +127,18 @@ export type HudView = {
     round?: number;
     // A raid's room: which of how many, and its boss's name
     // waves: still in its waves, so its boss is on the way (not fought or beaten)
-    raidRoom?: { number: number; count: number; name: string; points: number; waves: boolean };
+    // portal: the hall's teleporter can be used; first: the player's never beaten it
+    raidRoom?: {
+        // The hall's colour wash, while its waves are on (RaidRoomDef.hall)
+        wash?: string;
+        number: number;
+        count: number;
+        name: string;
+        points: number;
+        waves: boolean;
+        portal: boolean;
+        first: boolean;
+    };
     // Seconds until this round's final boss
     bossIn: number;
     hp: number;

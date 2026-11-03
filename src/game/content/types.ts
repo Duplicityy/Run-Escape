@@ -363,6 +363,9 @@ export type BulletPatternDef = {
     gap?: number;
     spacing?: number;
     distance?: number;
+    // Tiles out from the boss's middle a ring, spiral or spread starts, and a wall in front of it:
+    // a pocket by the boss the volley never crosses, for whoever fights up close
+    from?: number;
     // Model scale, when its hit size would leave it too thin to dodge, and how
     // much it's lit up against dark ground (0 to 1)
     scale?: number;
@@ -1072,6 +1075,9 @@ export type RaidRoomDef = {
     events: RunEventDef[];
     boss: string;
     bossHp?: number;
+    // How its hall looks while its waves are on: drawn this bright (as MapDef.brightness, lower
+    // darker), and the screen washed with this colour (multiplied over it, so white is no change)
+    hall?: { brightness?: number; wash?: string };
 };
 
 // A fun map runs endless from the start: there's no final boss, and a new

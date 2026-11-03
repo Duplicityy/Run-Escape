@@ -236,6 +236,16 @@
     color: var(--ui-text);
 }
 
+/* A map's description keeps its line breaks, for its paragraphs */
+.ui-card-description {
+    white-space: pre-line;
+}
+
+.ui-card-description strong {
+    color: var(--ui-yellow);
+    font-weight: normal;
+}
+
 .ui-card-cost {
     color: var(--ui-yellow);
 }
@@ -897,6 +907,14 @@
     color: var(--ui-white);
 }
 
+/* A raid hall's colour over the world (RaidRoomDef.hall), under the HUD */
+.ui-hall-wash {
+    position: fixed;
+    inset: 0;
+    mix-blend-mode: multiply;
+    pointer-events: none;
+}
+
 .ui-hud-top {
     position: absolute;
     top: 24px;
@@ -1463,6 +1481,31 @@
 
 .ui-boss-curse {
     color: #ff9ae6;
+}
+
+/* A raid hall's objective, where a campaign map's boss warning goes, red in its last minute */
+.ui-raid-objective {
+    position: absolute;
+    top: 70px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-family: "OSRS Bold", sans-serif;
+    font-size: 20px;
+    color: var(--ui-yellow);
+    text-shadow: 2px 2px 0 #000;
+    pointer-events: none;
+}
+
+.ui-raid-objective-soon {
+    color: var(--ui-red);
+}
+
+.ui-raid-objective-hint {
+    font-family: "OSRS Small", sans-serif;
+    font-size: 16px;
+    color: var(--ui-white);
+    text-shadow: 1px 1px 0 #000;
 }
 
 .ui-boss-warning {

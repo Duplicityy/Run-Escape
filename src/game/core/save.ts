@@ -11,6 +11,7 @@ import {
     ALL_MAPS,
     MAPS,
     RAID_MAPS,
+    getMap,
     isDevMap,
     isFunMap,
     isRaidMap,
@@ -537,6 +538,32 @@ export function isHardUnlocked(save: SaveData, mapId: string): boolean {
 // A raid's expert mode, once it's been beaten on hard
 export function isExpertUnlocked(save: SaveData, mapId: string): boolean {
     return isRaidMap(mapId) && (save.hardVictories[mapId] ?? 0) > 0;
+}
+
+// Which of a raid's halls have a teleporter: the rooms whose boss has been killed before, in any
+// of its forms (Nylocas Vasilias's colours, what Verzik rises into)
+export function getRaidPortals(save: SaveData, mapId: string): boolean[] {
+    const raid = getMap(mapId).raid;
+    if (!raid) {
+        return [];
+    }
+    return raid.rooms.map((room) => {
+        const seen = new Set<string>();
+        const ids = [room.boss];
+        while (ids.length > 0) {
+            const id = ids.pop()!;
+            if (seen.has(id)) {
+                continue;
+            }
+            seen.add(id);
+            const boss = ENEMY_BY_ID.get(id)?.boss;
+            ids.push(...(boss?.colours?.forms ?? []));
+            if (boss?.rises?.into) {
+                ids.push(boss.rises.into);
+            }
+        }
+        return [...seen].some((id) => (save.enemyKills[id] ?? 0) > 0);
+    });
 }
 
 // A piece's next upgrade in the Armoury: what it becomes, what that costs,

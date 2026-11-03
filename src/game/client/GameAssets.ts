@@ -23,6 +23,7 @@ import { ENEMIES } from "../content/enemies";
 import { CASKETS, GEAR_SLOT_BY_ID, getItem } from "../content/items";
 import { getPassive } from "../content/passives";
 import { POWER_UPS, THRALLS, getPowerUp } from "../content/powerups";
+import { RAID_PORTAL_LOC } from "../content/raids";
 import { RANDOM_EVENTS, VISITOR_SPOTANIM } from "../content/randomEvents";
 import { PlayerStance, getPlayerStance } from "../content/stances";
 import { EnemyDef, EnemyOutfit, GearSlot } from "../content/types";
@@ -432,6 +433,13 @@ export class GameAssets {
         for (const locId of locIds) {
             requests.push({ kind: "loc", key: "loc:" + locId, locId });
         }
+        // A raid hall's teleporter, swirling
+        requests.push({
+            kind: "loc",
+            key: "loc:" + RAID_PORTAL_LOC,
+            locId: RAID_PORTAL_LOC,
+            animated: true,
+        });
         // Fire flickers, so it's baked on its own animation
         for (const { burns } of WEAPONS) {
             if (burns) {

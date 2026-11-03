@@ -9,6 +9,7 @@ import { Sim, TICKS_PER_SECOND } from "./Sim";
 import {
     createSave,
     getEarnedUnlocks,
+    getRaidPortals,
     isEndlessUnlocked,
     isExpertUnlocked,
     isHardUnlocked,
@@ -63,12 +64,14 @@ afterAll(() => {
     MAP_BY_ID.delete(TEST_RAID.id);
 });
 
-function raid(expert = false, raidTeleports = 0): Sim {
+// raidTeleports: with a teleporter in every hall, as if each boss had been killed before
+function raid(expert = false, raidTeleports = 0, raidPortals?: boolean[]): Sim {
     const sim = new Sim({
         grid: makeGrid(field(), 1000, 1000),
         mapId: TEST_RAID.id,
         expert,
         raidTeleports,
+        raidPortals: raidPortals ?? TEST_RAID.raid!.rooms.map(() => raidTeleports > 0),
         characterId: "warrior",
         metaStats: emptyStats(),
         seed: 1,
@@ -113,6 +116,23 @@ function killBosses(sim: Sim): void {
 }
 
 describe("raids", () => {
+    it("brings what's left on the hall's floor to the boss, but not caskets", () => {
+        const sim = raid();
+        toRoomSecond(sim, 20);
+        const { x, y } = sim.player;
+        sim.dropPickup("bones", x + 12, y, 40);
+        sim.dropPickup("coins", x - 12, y, 7);
+        sim.dropPickup("casket", x, y + 12, 1);
+        const xp = sim.xp;
+        const coins = sim.coins;
+        toRoomSecond(sim, 31);
+        expect(sim.raidStage).toBe("boss");
+        expect(sim.xp).toBeGreaterThan(xp);
+        expect(sim.coins).toBeGreaterThan(coins);
+        expect(sim.pickups.some((p) => p.kind === "bones" || p.kind === "coins")).toBe(false);
+        expect(sim.pickups.some((p) => p.kind === "casket")).toBe(true);
+    });
+
     it("has its waves in the first room, then takes the party into the boss's room", () => {
         const sim = raid();
         toRoomSecond(sim, 20);
@@ -292,6 +312,20 @@ describe("raids", () => {
     });
 });
 
+// Every boss the Theatre has, each form of each
+const TEST_BOSS_IDS = [
+    "maiden_of_sugadinti",
+    "tob_pestilent_bloat",
+    "nylocas_vasilias",
+    "nylocas_vasilias_ranged",
+    "nylocas_vasilias_magic",
+    "tob_sotetseg",
+    "xarpus",
+    "tob_verzik_vitur",
+    "tob_verzik_vitur_risen",
+    "tob_verzik_vitur_spider",
+];
+
 describe("the Theatre's bullet shapes", () => {
     // One volley of a boss's attack, from its own spot
     function volley(attackName: string, bossId: string) {
@@ -329,9 +363,9 @@ describe("the Theatre's bullet shapes", () => {
         const { attack, shot } = volley("The maze", "tob_sotetseg");
         const pattern = attack.pattern!;
         expect(shot).toHaveLength(pattern.count - pattern.gap!);
-        // Across the way it's going (south, at the player), side by side
+        // Across the way it's going (south, at the player), side by side, in front of the boss
         for (const bullet of shot) {
-            expect(bullet.y).toBeCloseTo(1040.5);
+            expect(bullet.y).toBeCloseTo(1040.5 - pattern.from!);
             expect(bullet.vx).toBeCloseTo(0);
             expect(bullet.vy).toBeLessThan(0);
         }
@@ -339,6 +373,35 @@ describe("the Theatre's bullet shapes", () => {
         const steps = xs.slice(1).map((x, i) => Math.round((x - xs[i]) / pattern.spacing!));
         // One step's the gap's, the rest are next to each other
         expect(steps.filter((step) => step !== 1)).toEqual([pattern.gap! + 1]);
+    });
+
+    it("a spread starts out past the melee pocket by the boss", () => {
+        const { attack, shot } = volley("Blood throw", "maiden_of_sugadinti");
+        expect(shot).toHaveLength(attack.pattern!.count);
+        for (const bullet of shot) {
+            expect(Math.hypot(bullet.x - 1018.5, bullet.y - 1040.5)).toBeCloseTo(
+                attack.pattern!.from!,
+            );
+            // Going away from the boss
+            expect(
+                (bullet.x - 1018.5) * bullet.vx + (bullet.y - 1040.5) * bullet.vy,
+            ).toBeGreaterThan(0);
+        }
+    });
+
+    it("leaves every raid boss a melee pocket: nothing it fires from itself starts up close", () => {
+        const bosses = TEST_BOSS_IDS.map((id) => getEnemy(id));
+        for (const boss of bosses) {
+            for (const attack of boss.boss!.attacks) {
+                const shape = attack.pattern?.shape;
+                if (shape && shape !== "closing") {
+                    expect(
+                        attack.pattern!.from,
+                        `${boss.id}: ${attack.name}`,
+                    ).toBeGreaterThanOrEqual(2);
+                }
+            }
+        }
     });
 
     it("a closing ring forms round the player and comes in on them, with its gap", () => {
@@ -646,15 +709,65 @@ describe("raid teleporters", () => {
         expect(sim.raidTeleportsLeft).toBe(2);
     });
 
-    it("do nothing until the raid's been beaten", () => {
-        const sim = raid(false, 0);
+    it("are only in the halls of bosses killed before, any of their forms counting", () => {
+        const save = createSave();
+        expect(getRaidPortals(save, "theatre_of_blood")).toEqual([
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+        ]);
+        save.enemyKills.maiden_of_sugadinti = 1;
+        // Expert's blue Vasilias, and Verzik's last form
+        save.enemyKills.nylocas_vasilias_magic = 1;
+        save.enemyKills.tob_verzik_vitur_spider = 2;
+        expect(getRaidPortals(save, "theatre_of_blood")).toEqual([
+            true,
+            false,
+            true,
+            false,
+            false,
+            true,
+        ]);
+        // Morytania's Verzik isn't the raid's
+        expect(
+            getRaidPortals({ ...save, enemyKills: { verzik_vitur: 5 } }, "theatre_of_blood")[5],
+        ).toBe(false);
+        const sim = raid(false, 2, [false, true]);
+        expect(sim.raidTeleporter).toBeUndefined();
+        walkUp(sim);
+        expect(sim.state).toBe("playing");
+    });
+
+    it("aren't there before any boss is killed", () => {
+        const sim = raid(false, 2, []);
+        expect(sim.raidTeleporter).toBeUndefined();
+        sim.takeEvents();
+        walkUp(sim);
+        expect(sim.state).toBe("playing");
+        expect(sim.takeEvents().some((e) => e.type === "notice")).toBe(false);
+    });
+
+    it("stand in the hall while its waves are on, and go once the boss is up", () => {
+        const sim = raid(false, 2);
+        expect(sim.raidTeleporter).toEqual(room().teleporter);
+        walkUp(sim);
+        sim.chooseEventOption(0);
+        expect(sim.raidTeleporter).toBeUndefined();
+    });
+
+    it("say so once they're used up", () => {
+        const sim = raid(false, 2);
+        sim.raidTeleportsLeft = 0;
         sim.takeEvents();
         walkUp(sim);
         expect(sim.state).toBe("playing");
         expect(
             sim
                 .takeEvents()
-                .some((e) => e.type === "notice" && e.message.includes("Beat the raid once")),
+                .some((e) => e.type === "notice" && e.message.includes("used all your teleports")),
         ).toBe(true);
     });
 });

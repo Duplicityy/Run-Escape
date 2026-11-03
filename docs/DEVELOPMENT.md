@@ -469,7 +469,11 @@ supply chest (`openNextRaidShop`, an event offer paid in raid points) and the ne
 The last room's boss is the final boss, and its chest (`openRaidChest`) goes on the result.
 Raid wins are kept by the save like a campaign map's; hard opens after one, endless never does, and
 expert mode (`SimOptions.expert`, solo only for now) after a hard one. A hall's teleporter
-(`stepTeleporter`) asks before skipping to its boss, `SimOptions.raidTeleports` times a raid.
+(`stepTeleporter`) asks before skipping to its boss, `SimOptions.raidTeleports` times a raid, in
+the halls `SimOptions.raidPortals` says (`getRaidPortals`: rooms whose boss the save has a kill of,
+in any form). The game draws the portal (`raidTeleporter`), as it isn't in the map. Raid bosses'
+rings, spreads and walls start `MELEE_POCKET` tiles out (`BulletPatternDef.from`), and their
+hits are lightened to match a faster `attackInterval` (`oftener` in `theatre.ts`).
 
 `?raidtest` (dev server only) puts a raid's rooms two minutes apart and every level up's pick at
 its max; `?raidtest=short` does only the first.
