@@ -9,6 +9,7 @@ import { MAX_PARTY } from "../content/coop";
 import { FUN_MAPS, MAPS, MAP_BY_ID, RAID_MAPS, getMap, getMapCharacter } from "../content/maps";
 import { isEndlessUnlocked, isHardUnlocked, isMapUnlocked } from "../core/save";
 import "./CoopScreen.css";
+import { CountryFlag } from "./CountryFlag";
 import { AdventurerPanel, Toggle, getStartingWeaponIcon } from "./GameUi";
 import { ItemIcon } from "./ItemIcon";
 
@@ -17,6 +18,15 @@ import { ItemIcon } from "./ItemIcon";
 // the party's frames and who it's waiting on.
 
 type Props = { ui: UiSnapshot; client: GameClient };
+
+// An open room shows its host's flag even if they've hidden it (it's where the
+// room is, for whoever's picking one), so making one says so
+function openRoomTitle(ui: UiSnapshot): string {
+    return (
+        "Open rooms are listed for anyone" +
+        (ui.coop.country && !ui.display.coopFlag ? ", showing your flag" : "")
+    );
+}
 
 export function CoopScreen({ ui, client }: Props): JSX.Element {
     const room = ui.coop.room;
@@ -35,6 +45,9 @@ function CoopMenu({ ui, client }: Props): JSX.Element {
     const canJoin = online;
     // Rooms on maps this game hasn't got (a newer game's) can't be joined
     const rooms = coop.rooms.filter((listing) => MAP_BY_ID.has(listing.mapId));
+    // With a relay that knows where players are, a room without a flag (its
+    // host's hidden it) keeps the space, so the rest stay in line
+    const flags = rooms.some((listing) => listing.country);
     // Unless the relay takes anyone, a room on a map this player hasn't got
     // can't be joined: what's missing, or nothing
     const missing = ({ mapId, endless, hard }: RoomListing) =>
@@ -65,7 +78,13 @@ function CoopMenu({ ui, client }: Props): JSX.Element {
                     <div className="ui-coop-row">
                         <span className="ui-coop-label">Your name</span>
                         {/* The relay gives everyone a name; another's a click away */}
-                        <span className="ui-coop-name">{coop.name || "..."}</span>
+                        <span className="ui-coop-name">
+                            <CountryFlag
+                                country={ui.display.coopFlag ? coop.country : undefined}
+                                label="Other players see you playing from"
+                            />
+                            {coop.name || "..."}
+                        </span>
                         <button
                             className="ui-button ui-button-small"
                             disabled={!online}
@@ -91,6 +110,7 @@ function CoopMenu({ ui, client }: Props): JSX.Element {
                                     "ui-button ui-button-small" + (open ? " ui-toggle-on" : "")
                                 }
                                 aria-pressed={open}
+                                title={openRoomTitle(ui)}
                                 onClick={() => setOpen(true)}
                             >
                                 Open to all
@@ -155,6 +175,11 @@ function CoopMenu({ ui, client }: Props): JSX.Element {
                                 className="ui-coop-room"
                                 title={`Hosted by ${listing.host}`}
                             >
+                                <CountryFlag
+                                    country={listing.country}
+                                    label="Hosted from"
+                                    keepSpace={flags}
+                                />
                                 <ItemIcon objId={map.iconObjId} size={20} />
                                 <span className="ui-coop-room-name">
                                     <span className="ui-coop-room-host">{listing.name}</span>
@@ -287,7 +312,7 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
                         {copied ? "Copied!" : "Copy invite"}
                     </button>
                     {isHost ? (
-                        <span className="ui-coop-open" title="Open rooms are listed for anyone">
+                        <span className="ui-coop-open" title={openRoomTitle(ui)}>
                             Open
                             <Toggle
                                 on={room.open}
@@ -325,7 +350,14 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
                                             </span>
                                         )}
                                     </span>
-                                    <span className="ui-card-style">{character.name}</span>
+                                    {/* Under the name, which needs the room */}
+                                    <span className="ui-card-style">
+                                        <CountryFlag
+                                            country={member.country}
+                                            label="Playing from"
+                                        />
+                                        {character.name}
+                                    </span>
                                 </span>
                                 <span
                                     className={

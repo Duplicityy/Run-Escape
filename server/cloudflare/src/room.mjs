@@ -28,6 +28,7 @@ import {
     RateLimit,
     cleanId,
     cleanUnlocks,
+    countryCode,
     isAnyMapOn,
     lobbyStub,
     missingMap,
@@ -46,6 +47,14 @@ const RESUME_GRACE_MS = 15_000;
 const ENTER_MS = 10_000;
 // The room's saved, and the lobby told, this often at most
 const SAVE_MS = 1000;
+
+// A player's country, for their flag, unless they've hidden it. An open
+// room's host shows theirs anyway: it's where the room is, for whoever's
+// picking one from the list.
+function shownCountry(member, room) {
+    const openHost = room.open && room.hostId === member.id;
+    return member.hideCountry && !openHost ? undefined : member.country;
+}
 
 export class Room extends DurableObject {
     constructor(ctx, env) {
@@ -79,6 +88,7 @@ export class Room extends DurableObject {
             id: who.id,
             name: who.name,
             address: request.headers.get("x-address") ?? who.address,
+            country: countryCode(request.headers.get("x-country")),
             kind: who.kind,
             roomName: who.roomName,
         });
@@ -98,6 +108,9 @@ export class Room extends DurableObject {
             loadout: undefined,
             unlocks: cleanUnlocks(undefined),
             build: undefined,
+            // For their flag (index.mjs), and whether they've hidden it
+            country: undefined,
+            hideCountry: false,
             // Given on making or joining the room, to come back with
             token: undefined,
             ...fields,
@@ -248,6 +261,8 @@ export class Room extends DurableObject {
                     id: m.id,
                     name: m.name,
                     address: m.address,
+                    country: m.country,
+                    hideCountry: m.hideCountry,
                     kind: m.kind,
                     characterId: m.characterId,
                     ready: m.ready,
@@ -356,6 +371,7 @@ export class Room extends DurableObject {
                 ready: client.ready,
                 loadout: client.loadout,
                 unlocks: client.unlocks,
+                country: shownCountry(client, room),
             })),
         };
     }
@@ -405,6 +421,7 @@ export class Room extends DurableObject {
                 endless: room.endless,
                 hard: room.hard === true,
                 host: host?.name ?? "",
+                country: host ? shownCountry(host, room) : undefined,
                 hostAddress: host?.address ?? "",
                 order: room.order,
             })
@@ -483,6 +500,9 @@ export class Room extends DurableObject {
         }
         if (typeof message.build === "string") {
             client.build = message.build.slice(0, 64);
+        }
+        if (message.hideCountry !== undefined) {
+            client.hideCountry = message.hideCountry === true;
         }
     }
 

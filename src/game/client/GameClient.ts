@@ -657,6 +657,7 @@ export class GameClient implements GameFrameHandler {
             characterId: this.store.getSnapshot().characterId,
             loadout: this.getLoadout(),
             unlocks: this.getUnlocks(),
+            hideCountry: !this.display.coopFlag,
         });
         await this.coop.connect();
     }
@@ -904,6 +905,13 @@ export class GameClient implements GameFrameHandler {
     toggleMovePrediction(): void {
         this.setDisplay({ movePrediction: !this.display.movePrediction });
         this.coopRun?.setPrediction(this.display.movePrediction);
+    }
+
+    // The room hears at once, and the rooms list from the next update. An open
+    // room's host shows theirs either way (the relays' shownCountry).
+    toggleCoopFlag(): void {
+        this.setDisplay({ coopFlag: !this.display.coopFlag });
+        this.coop.setMe({ hideCountry: !this.display.coopFlag });
     }
 
     // Takes hold from the next frame (update)

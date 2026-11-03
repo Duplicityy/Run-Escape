@@ -2,6 +2,8 @@ import {
     CLOUDFLARE_IPS_URL,
     addressList,
     clientAddress,
+    clientCountry,
+    countryCode,
     fetchCloudflareRanges,
     plainAddress,
     proxyMode,
@@ -115,6 +117,41 @@ describe("client addresses, with Cloudflare set", () => {
         expect(plainAddress("[2001:db8::7]:443")).toBe("2001:db8::7");
         expect(plainAddress("not an address")).toBeUndefined();
         expect(from("127.0.0.1", { "x-forwarded-for": "garbage" })).toBe("127.0.0.1");
+    });
+});
+
+describe("client countries", () => {
+    const countryFrom = (
+        remoteAddress: string,
+        headers: Record<string, string>,
+        mode = "cloudflare",
+    ) => clientCountry({ headers }, { remoteAddress }, mode, PROXIES, CLOUDFLARE);
+
+    it("are Cloudflare's word, from Cloudflare", () => {
+        expect(countryFrom("173.245.48.10", { "cf-ipcountry": "FI" })).toBe("FI");
+        // Through a proxy of ours, from Cloudflare
+        expect(
+            countryFrom("127.0.0.1", {
+                "x-forwarded-for": "173.245.48.10",
+                "cf-ipcountry": "se",
+            }),
+        ).toBe("SE");
+    });
+
+    it("aren't believed from anyone else, or without Cloudflare set", () => {
+        expect(countryFrom("198.51.100.7", { "cf-ipcountry": "FI" })).toBeUndefined();
+        expect(countryFrom("127.0.0.1", { "cf-ipcountry": "FI" })).toBeUndefined();
+        expect(countryFrom("173.245.48.10", { "cf-ipcountry": "FI" }, "local")).toBeUndefined();
+        expect(countryFrom("173.245.48.10", { "cf-ipcountry": "FI" }, "none")).toBeUndefined();
+        expect(countryFrom("173.245.48.10", {})).toBeUndefined();
+    });
+
+    it("are two letters, and not Cloudflare's unknown or Tor", () => {
+        expect(countryCode(" gb ")).toBe("GB");
+        expect(countryCode("XX")).toBeUndefined();
+        expect(countryCode("T1")).toBeUndefined();
+        expect(countryCode("FIN")).toBeUndefined();
+        expect(countryCode(undefined)).toBeUndefined();
     });
 });
 

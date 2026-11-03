@@ -5,7 +5,7 @@
 //
 //   /coop            the lobby (lobby.mjs); a plain GET says co-op's here
 //   /coop/room/CODE  a room (room.mjs), with the ticket the lobby gave
-import { CODE_LENGTH, addressKey, lobbyStub } from "./shared.mjs";
+import { CODE_LENGTH, addressKey, countryCode, lobbyStub } from "./shared.mjs";
 
 export { Lobby } from "./lobby.mjs";
 export { Room } from "./room.mjs";
@@ -21,10 +21,12 @@ export default {
     async fetch(request, env) {
         const url = new URL(request.url);
         const upgrade = request.headers.get("Upgrade")?.toLowerCase() === "websocket";
-        // Who's connecting, for the limits on each address. Only the
-        // Worker sets this: whatever a player sent in its place is replaced.
+        // Who's connecting, for the limits on each address, and their
+        // country, for their flag. Only the Worker sets these: whatever a
+        // player sent in their place is replaced.
         const headers = new Headers(request.headers);
         headers.set("x-address", addressKey(request.headers.get("CF-Connecting-IP") ?? "unknown"));
+        headers.set("x-country", countryCode(request.cf?.country) ?? "");
 
         if (url.pathname === "/coop") {
             if (upgrade) {

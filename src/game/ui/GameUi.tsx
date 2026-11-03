@@ -322,6 +322,21 @@ function MovePredictionSetting({ ui, client }: ScreenProps): JSX.Element {
     );
 }
 
+function CoopFlagSetting({ ui, client }: ScreenProps): JSX.Element {
+    return (
+        <Setting
+            name="Co-op flag"
+            text="Other co-op players see your country's flag (an open room shows its host's either way)"
+        >
+            <Toggle
+                on={ui.display.coopFlag}
+                label="Co-op flag"
+                onToggle={() => client.toggleCoopFlag()}
+            />
+        </Setting>
+    );
+}
+
 const FRAME_RATE_NAMES: Record<FrameRate, string> = {
     auto: "Auto",
     "30": "30",
@@ -539,6 +554,7 @@ function SettingsPanel({
                     <AutoPauseSetting ui={ui} client={client} />
                     <AutoAlchSetting ui={ui} client={client} />
                     <MovePredictionSetting ui={ui} client={client} />
+                    <CoopFlagSetting ui={ui} client={client} />
                     <FrameRateSetting ui={ui} client={client} />
                 </section>
                 {padKind && (

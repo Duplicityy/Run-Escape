@@ -131,6 +131,11 @@ in the code to go out of date. Until the first fetch comes back (or if it fails,
 then tries again a minute later), players look like Cloudflare to the limits; a failed refresh
 keeps the last list. `CLOUDFLARE_IPS` gives the list instead, and then nothing's fetched.
 
+Players' flags (see Co-op below) come from Cloudflare too: with `cloudflare`, the relay takes its
+`CF-IPCountry` header, from Cloudflare's addresses only, as with `CF-Connecting-IP`. Cloudflare
+adds it while IP Geolocation is on (Network, in the dashboard). Behind anything else the relay
+can't tell where anyone is, and nobody gets a flag.
+
 Its limits, at the top of `server/coop-relay.mjs`:
 
 | What                          | Limit                                                                                                 |
@@ -428,7 +433,8 @@ src/game/
               guest), protocol (the messages)
   render/   GameWebGLRenderer (the map viewer's renderer with the game's passes), CameraRig
   ui/       React screens and HUD, ChestModal (the casket opening), EventModal (a random event's
-            offer), ItemIcon, CoopScreen (the rooms, the lobby, the party in a run),
+            offer), ItemIcon, CountryFlag (a co-op player's flag), CoopScreen (the rooms, the
+            lobby, the party in a run),
             formatCompact (short numbers like 9.5K and 1.2B, for the damage panel)
   client/GameTouch.ts, ui/TouchControls.tsx, ui/Mobile.css   touch screens (see Touch screens)
   client/GamePad.ts, ui/PadHint.tsx                          controllers (see Controllers)
@@ -970,6 +976,19 @@ still ends a guest's run.
 The open rooms list comes a page at a time (8 rooms, the fullest first, then the ones waiting
 longest), worked out once after each change rather than for every request; the menu asks for its
 page every 5 seconds, and again when joining fails (a room that filled up or started meanwhile).
+
+**Flags.** A relay that knows where a player is sends it as `country` (ISO 3166's two letters): in
+`welcome` for their own, on each room member, and on a room in the list for its host. The Cloudflare
+relay's Worker gets it from `request.cf.country` and hands it on as `x-country`, replacing whatever
+a player sent; the Node relay gets it only behind Cloudflare (`PROXY`, above). A player who turns
+off **Co-op flag** in Settings sends `hideCountry` with what they say about themselves, and the
+relay leaves their country out, except while they host an open room: then it shows in the room and
+the list anyway (`shownCountry` in each relay), and the game says so on Open to all. The game draws
+a flag with `CountryFlag` (`ui/CountryFlag.tsx`): the login screen's world list flags (sprite 815, a
+frame for each country it has, in `content/flags.ts`), or the country's letters where there's no
+flag, with its name from `Intl.DisplayNames` as the tooltip. Emoji flags won't do: Windows has none,
+so they show as two letters there anyway. A room's flag is its host's, which on the Cloudflare relay
+is roughly where the room runs too.
 
 To try it locally, `npm start` and open the game in two windows (one private, for a
 save of its own), make a room in one and join it from the other. A second ordinary window says the

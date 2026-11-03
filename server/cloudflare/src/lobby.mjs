@@ -26,6 +26,7 @@ import {
     clampInt,
     cleanId,
     cleanUnlocks,
+    countryCode,
     guesserKey,
     isAnyMapOn,
     missingMap,
@@ -84,8 +85,16 @@ export class Lobby extends DurableObject {
         };
         this.ctx.acceptWebSocket(server);
         server.serializeAttachment(player);
+        // country: for their own flag, as others see it (rooms find it for
+        // themselves, from their own connection)
         server.send(
-            JSON.stringify({ t: "welcome", id: player.id, name: player.name, anyMap: this.anyMap }),
+            JSON.stringify({
+                t: "welcome",
+                id: player.id,
+                name: player.name,
+                anyMap: this.anyMap,
+                country: countryCode(request.headers.get("x-country")),
+            }),
         );
         return new Response(null, { status: 101, webSocket: client });
     }
@@ -224,9 +233,17 @@ export class Lobby extends DurableObject {
         const changed =
             !previous ||
             previous.pending ||
-            ["name", "open", "started", "players", "mapId", "endless", "hard", "host"].some(
-                (key) => previous[key] !== entry[key],
-            );
+            [
+                "name",
+                "open",
+                "started",
+                "players",
+                "mapId",
+                "endless",
+                "hard",
+                "host",
+                "country",
+            ].some((key) => previous[key] !== entry[key]);
         if (changed) {
             await this.putRoom({ ...entry, order: previous?.order ?? entry.order });
         } else {
@@ -284,6 +301,7 @@ export class Lobby extends DurableObject {
                 code: room.code,
                 name: room.name,
                 host: room.host ?? "",
+                country: room.country,
                 players: room.players,
                 max: MAX_PARTY,
                 mapId: room.mapId,

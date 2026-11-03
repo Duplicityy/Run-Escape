@@ -17,7 +17,13 @@ import { createServer } from "node:http";
 import { isIP } from "node:net";
 import { fileURLToPath } from "node:url";
 
-import { clientAddress, proxyMode, viaProxy, watchCloudflareRanges } from "./client-ip.mjs";
+import {
+    clientAddress,
+    clientCountry,
+    proxyMode,
+    viaProxy,
+    watchCloudflareRanges,
+} from "./client-ip.mjs";
 import { playerName, roomName } from "./name-gen.mjs";
 
 export const RELAY_PATH = "/coop";
@@ -813,8 +819,17 @@ export function createRelay(limits = {}) {
                 ready: client.ready,
                 loadout: client.loadout,
                 unlocks: client.unlocks,
+                country: shownCountry(client, room),
             })),
         };
+    }
+
+    // A player's country, for their flag, unless they've hidden it. An open
+    // room's host shows theirs anyway: it's where the room is, for whoever's
+    // picking one from the list.
+    function shownCountry(client, room) {
+        const openHost = room.open && room.hostId === client.id;
+        return client.hideCountry && !openHost ? undefined : client.country;
     }
 
     // The view's encoded once, for everyone. The open rooms list catches up
@@ -862,6 +877,7 @@ export function createRelay(limits = {}) {
             code: room.code,
             name: room.name,
             host: host?.name ?? "",
+            country: host ? shownCountry(host, room) : undefined,
             players: room.members.length,
             max: MAX_PARTY,
             mapId: room.mapId,
@@ -998,6 +1014,9 @@ export function createRelay(limits = {}) {
         }
         if (typeof message.build === "string") {
             client.build = message.build.slice(0, 64);
+        }
+        if (message.hideCountry !== undefined) {
+            client.hideCountry = message.hideCountry === true;
         }
     }
 
@@ -1409,6 +1428,9 @@ export function createRelay(limits = {}) {
             connection: undefined,
             address,
             network,
+            // Only known behind Cloudflare (see client-ip.mjs)
+            country: clientCountry(req, socket, proxy),
+            hideCountry: false,
             lastActive: Date.now(),
             upSecond: 0,
             upsThisSecond: 0,
@@ -1430,8 +1452,14 @@ export function createRelay(limits = {}) {
         counters.peakPlayers = Math.max(counters.peakPlayers, clients.size);
         playerNames.add(client.name);
         // anyMap: the game shows rooms on maps the player hasn't got as locked
-        // unless it's on
-        client.connection.send({ t: "welcome", id: client.id, name: client.name, anyMap });
+        // unless it's on. country: for their own flag, as others see it.
+        client.connection.send({
+            t: "welcome",
+            id: client.id,
+            name: client.name,
+            anyMap,
+            country: client.country,
+        });
         if (head && head.length > 0) {
             client.connection.receive(head);
         }

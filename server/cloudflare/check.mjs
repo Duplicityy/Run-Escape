@@ -1,6 +1,7 @@
 // Checks a relay end to end, as two games would use it: the host makes a room,
-// a guest joins by code, the run starts, frames and inputs go both ways, the
-// guest leaves and the host disbands. Then it times round trips.
+// a guest joins by code, each is shown where they are until the host hides it,
+// the run starts, frames and inputs go both ways, the guest leaves and the host
+// disbands. Then it times round trips.
 //
 //   npm run check -- ws://127.0.0.1:8787/coop                          # wrangler dev
 //   npm run check -- wss://run-escape-coop.<subdomain>.workers.dev/coop # deployed
@@ -126,6 +127,17 @@ ok(/no room/.test(wrong.message), "a wrong code says there's no room");
 const joined = await guest.enter({ t: "join", code: goto.code, me });
 ok(joined.room.room.members.length === 2, "guest joined; the room has two");
 await host.next("room", (m) => m.room.members.length === 2);
+
+// Where each player is, for their flag, as Cloudflare says (wrangler dev asks
+// Cloudflare for this machine's), until they hide it
+const where = (update, id) => update.room.members.find((member) => member.id === id)?.country;
+ok(
+    where(joined.room, host.id) === hw.country,
+    `the room shows where the host is (${hw.country ?? "Cloudflare didn't say"})`,
+);
+host.room.send(JSON.stringify({ t: "me", hideCountry: true }));
+await guest.next("room", (m) => where(m, host.id) === undefined);
+ok(true, "a host who hides their flag isn't shown anywhere");
 
 host.room.send(JSON.stringify({ t: "start", game: { seed: 1 } }));
 await guest.next("start");

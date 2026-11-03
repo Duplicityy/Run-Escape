@@ -57,6 +57,7 @@ function createClient(sim: Sim, autoAlch: boolean) {
             damagePanel: false,
             autoAlch,
             movePrediction: false,
+            coopFlag: true,
         },
         sounds: { onEvents() {}, levelUp() {}, playerDied() {} },
         view: { onEvents() {} },
@@ -96,6 +97,39 @@ describe("movement prediction", () => {
         expect(setPrediction).toHaveBeenLastCalledWith(true);
         client.toggleMovePrediction();
         expect(setPrediction).toHaveBeenLastCalledWith(false);
+        vi.unstubAllGlobals();
+    });
+});
+
+describe("the co-op flag", () => {
+    test("shows unless it's been turned off, and is remembered", () => {
+        const stored = new Map<string, string>();
+        vi.stubGlobal("window", {
+            matchMedia: () => ({ matches: false }),
+            localStorage: {
+                getItem: (key: string) => stored.get(key) ?? null,
+                setItem: (key: string, value: string) => stored.set(key, value),
+            },
+        });
+        expect(loadDisplaySettings().coopFlag).toBe(true);
+        // Settings saved before there was such a thing
+        stored.set("rune-survivors-display", JSON.stringify({ menuSpin: false }));
+        expect(loadDisplaySettings().coopFlag).toBe(true);
+        saveDisplaySettings({ ...loadDisplaySettings(), coopFlag: false });
+        expect(loadDisplaySettings().coopFlag).toBe(false);
+        vi.unstubAllGlobals();
+    });
+
+    test("the toggle tells the relay", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const { client } = createClient(createSim(), false);
+        const setMe = vi.fn();
+        Object.assign(client, { coop: { setMe } });
+        displayOf(client).coopFlag = true;
+        client.toggleCoopFlag();
+        expect(setMe).toHaveBeenLastCalledWith({ hideCountry: true });
+        client.toggleCoopFlag();
+        expect(setMe).toHaveBeenLastCalledWith({ hideCountry: false });
         vi.unstubAllGlobals();
     });
 });

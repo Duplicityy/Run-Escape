@@ -69,6 +69,43 @@
     text-overflow: ellipsis;
 }
 
+/* Where a player's playing from (CountryFlag): the world list's round flag,
+   or the country's letters where there's no flag for it */
+.ui-flag {
+    display: inline-block;
+    width: 17px;
+    height: 19px;
+    flex-shrink: 0;
+    vertical-align: -4px;
+    image-rendering: pixelated;
+}
+
+.ui-flag-code {
+    width: auto;
+    min-width: 17px;
+    height: auto;
+    box-sizing: border-box;
+    padding: 1px 2px 0;
+    border: 1px solid var(--ui-edge);
+    font-family: "OSRS Small", sans-serif;
+    font-size: 13px;
+    line-height: 14px;
+    letter-spacing: 0;
+    text-align: center;
+    vertical-align: 1px;
+    color: #b8aa8a;
+    text-shadow: 1px 1px 0 #000;
+}
+
+.ui-coop-name .ui-flag {
+    margin-right: 5px;
+}
+
+/* Beside a party member's adventurer, without making the row taller */
+.ui-coop-member-name .ui-flag {
+    margin: -3px 4px -2px 0;
+}
+
 .ui-coop-code-input {
     font-family: "OSRS Bold", sans-serif;
     letter-spacing: 3px;

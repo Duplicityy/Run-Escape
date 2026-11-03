@@ -4,7 +4,8 @@ import { RenderDataLoader, RenderDataResult } from "./RenderDataLoader";
 import { WorkerState } from "./RenderDataWorker";
 
 // Interface sprites from the cache (hitsplats and the like) as ARGB images, the
-// first frame of each sprite id.
+// first frame of each sprite id unless another's asked for (a flag of the world
+// list's).
 
 export type SpriteImage = {
     id: number;
@@ -14,12 +15,13 @@ export type SpriteImage = {
     pixels: Int32Array;
 };
 
-export type SpriteDataInput = { spriteIds: number[] };
+// frames: the frame of each sprite id, in the same order (the first, without)
+export type SpriteDataInput = { spriteIds: number[]; frames?: number[] };
 
-export function loadSpriteImage(state: WorkerState, id: number): SpriteImage {
+export function loadSpriteImage(state: WorkerState, id: number, frame: number = 0): SpriteImage {
     const empty = { id, width: 0, height: 0, pixels: new Int32Array(0) };
     const spriteIndex = state.cacheSystem.getIndex(IndexType.DAT2.sprites);
-    const sprite = SpriteLoader.loadIntoIndexedSprite(spriteIndex, id);
+    const sprite = SpriteLoader.loadIntoIndexedSprite(spriteIndex, id, frame);
     if (!sprite || sprite.width <= 0 || sprite.height <= 0) {
         return empty;
     }
@@ -49,9 +51,9 @@ export class SpriteDataLoader implements RenderDataLoader<SpriteDataInput, Sprit
         state: WorkerState,
         input: SpriteDataInput,
     ): Promise<RenderDataResult<SpriteImage[]>> {
-        const sprites = input.spriteIds.map((id) => {
+        const sprites = input.spriteIds.map((id, i) => {
             try {
-                return loadSpriteImage(state, id);
+                return loadSpriteImage(state, id, input.frames?.[i] ?? 0);
             } catch (e) {
                 console.error("Failed loading sprite", id, e);
                 return { id, width: 0, height: 0, pixels: new Int32Array(0) };

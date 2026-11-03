@@ -22,11 +22,24 @@ function spriteFile(flags: number, pixels: number[], alphas: number[] = []): Int
     return Int8Array.from(bytes, (b) => (b > 127 ? b - 256 : b));
 }
 
-function load(data: Int8Array) {
+// Two 1x1 frames on a 1x1 canvas: red, then green
+function twoFrames(): Int8Array {
+    const bytes = [0, 1, 0, 2, 0xff, 0, 0, 0, 0xff, 0];
+    const short = (v: number) => bytes.push((v >> 8) & 0xff, v & 0xff);
+    short(1);
+    short(1);
+    bytes.push(2);
+    // x and y offsets, widths and heights, two of each
+    [0, 0, 0, 0, 1, 1, 1, 1].forEach(short);
+    short(2);
+    return Int8Array.from(bytes, (b) => (b > 127 ? b - 256 : b));
+}
+
+function load(data: Int8Array, frame?: number) {
     const state = {
         cacheSystem: { getIndex: () => ({ getFile: () => ({ data }) }) },
     } as any;
-    return loadSpriteImage(state, 1359);
+    return loadSpriteImage(state, 1359, frame);
 }
 
 describe("sprites", () => {
@@ -36,6 +49,12 @@ describe("sprites", () => {
         expect(Array.from(sprite.pixels, (p) => p >>> 0)).toEqual([
             0, 0xffff0000, 0, 0, 0xff00ff00, 0xffff0000,
         ]);
+    });
+
+    test("any frame of a sprite, and nothing for one it hasn't got", () => {
+        expect(load(twoFrames()).pixels[0] >>> 0).toBe(0xffff0000);
+        expect(load(twoFrames(), 1).pixels[0] >>> 0).toBe(0xff00ff00);
+        expect(load(twoFrames(), 2).width).toBe(0);
     });
 
     test("column by column, with an alpha channel", () => {

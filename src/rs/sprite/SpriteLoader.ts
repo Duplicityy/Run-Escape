@@ -172,9 +172,15 @@ export class SpriteLoader {
         return sprite;
     }
 
-    static loadIntoIndexedSprite(spriteIndex: CacheIndex, id: number): IndexedSprite | undefined {
+    // frame: which of the sprite's images (a flag of the world list's), the first by default
+    static loadIntoIndexedSprite(
+        spriteIndex: CacheIndex,
+        id: number,
+        frame: number = 0,
+    ): IndexedSprite | undefined {
         if (
             SpriteLoader.loadFromIndex(spriteIndex, id) &&
+            frame < SpriteLoader.spriteCount &&
             SpriteLoader.xOffsets &&
             SpriteLoader.yOffsets &&
             SpriteLoader.widths &&
@@ -186,18 +192,19 @@ export class SpriteLoader {
 
             sprite.width = SpriteLoader.width;
             sprite.height = SpriteLoader.height;
-            sprite.xOffset = SpriteLoader.xOffsets[0];
-            sprite.yOffset = SpriteLoader.yOffsets[0];
-            sprite.subWidth = SpriteLoader.widths[0];
-            sprite.subHeight = SpriteLoader.heights[0];
+            sprite.xOffset = SpriteLoader.xOffsets[frame];
+            sprite.yOffset = SpriteLoader.yOffsets[frame];
+            sprite.subWidth = SpriteLoader.widths[frame];
+            sprite.subHeight = SpriteLoader.heights[frame];
             sprite.palette = SpriteLoader.palette;
-            sprite.pixels = SpriteLoader.pixels[0];
-            sprite.alphas = SpriteLoader.alphas?.[0];
+            sprite.pixels = SpriteLoader.pixels[frame];
+            sprite.alphas = SpriteLoader.alphas?.[frame];
 
             SpriteLoader.reset();
 
             return sprite;
         }
+        SpriteLoader.reset();
         return undefined;
     }
 

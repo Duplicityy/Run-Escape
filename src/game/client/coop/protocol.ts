@@ -24,11 +24,15 @@ export type MemberView = {
     unlocks?: Unlocks;
     // The build their game is (__BUILD_ID__): a room only takes the host's
     build?: string;
+    // Where they're playing from, for their flag: ISO 3166's two letters
+    // ("FI"). Only a relay that knows it (Cloudflare's, or one behind it)
+    // sends it, and not for a player who's hidden it.
+    country?: string;
 };
 
-// What a player says about themselves: everything but their id and name,
-// which the relay gives
-export type Member = Omit<MemberView, "id" | "name">;
+// What a player says about themselves: everything but their id, name and
+// country, which the relay gives. hideCountry: keep their flag to themselves.
+export type Member = Omit<MemberView, "id" | "name" | "country"> & { hideCountry?: boolean };
 
 // What a player's missing to play on a room's map: the map (its endless or
 // hard mode too, for a room that's on them), and who, when it's someone else
@@ -54,6 +58,8 @@ export type RoomListing = {
     code: string;
     name: string;
     host: string;
+    // The host's, for their flag (see MemberView)
+    country?: string;
     players: number;
     max: number;
     mapId: string;
@@ -150,8 +156,9 @@ export type ClientMessage =
 
 export type ServerMessage =
     // name: the one the relay's given this player. anyMap: rooms take players
-    // whatever maps they have.
-    | { t: "welcome"; id: string; name: string; anyMap?: boolean }
+    // whatever maps they have. country: theirs, as others see it on their
+    // flag, if the relay knows it.
+    | { t: "welcome"; id: string; name: string; anyMap?: boolean; country?: string }
     // This player's new name, after asking for one
     | { t: "named"; name: string }
     | { t: "pong" }
