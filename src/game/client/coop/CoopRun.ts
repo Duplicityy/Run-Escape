@@ -36,6 +36,10 @@ const RESEND_FRAMES = 1000;
 // A guest asks for missing frames this often at most, and the host resends
 // this often at most whoever asks: one resend covers every guest behind
 const RESEND_ASK_MS = 1000;
+// A resend goes out in messages of about this many events at most: 20
+// seconds of three guests sending all they're let through would otherwise
+// come near the relays' biggest message (MAX_MESSAGE_BYTES in shared.mjs)
+const RESEND_EVENTS = 1000;
 // Someone the run's waited on this long (a hidden tab, gone to make tea) has
 // it decided for them: the first reward, taking the casket, or walking away
 export const DECIDE_AFTER_MS = 20_000;
@@ -95,6 +99,12 @@ export class CoopRun {
     private moveSeqSent = 0;
     // The decision the local player last answered, and when
     private sentDecision?: { on: object; itemId?: string; at: number };
+    // A guest's other actions (using an item) are numbered, and kept until
+    // the host's frames show them, to send again after a dropped connection.
+    // The host's: each hero's latest number, so one sent twice goes in once.
+    private actionSeqSent = 0;
+    private unconfirmed: { actionSeq: number; action: CoopAction }[] = [];
+    private readonly actionSeqs = new Map<number, number>();
     // The host's: since when the run's been waiting on each hero
     private readonly waitingSince = new Map<number, number>();
     // The copies have gone apart (it's said once)
@@ -200,8 +210,15 @@ export class CoopRun {
         }
         if (this.isHost) {
             this.queue({ frame: 0, hero: this.sim.focus, action });
-        } else {
+        } else if (DECISIONS.has(action.kind)) {
             this.link.sendUp({ action });
+        } else {
+            const actionSeq = ++this.actionSeqSent;
+            this.unconfirmed.push({ actionSeq, action });
+            if (this.unconfirmed.length > MAX_QUEUED_ACTIONS) {
+                this.unconfirmed.shift();
+            }
+            this.link.sendUp({ action, actionSeq });
         }
         return true;
     }
@@ -250,7 +267,15 @@ export class CoopRun {
             const moveSeq = "moveSeq" in message ? cleanMoveSeq(message.moveSeq) : undefined;
             this.queue({ frame: 0, hero, move, ...(moveSeq !== undefined && { moveSeq }) });
         } else if (action) {
-            this.queue({ frame: 0, hero, action });
+            const actionSeq = "actionSeq" in message ? cleanMoveSeq(message.actionSeq) : undefined;
+            if (actionSeq !== undefined) {
+                if (actionSeq <= (this.actionSeqs.get(hero) ?? 0)) {
+                    // Sent again after a dropped connection, and it came the first time
+                    return;
+                }
+                this.actionSeqs.set(hero, actionSeq);
+            }
+            this.queue({ frame: 0, hero, action, ...(actionSeq !== undefined && { actionSeq }) });
         }
     }
 
@@ -320,6 +345,10 @@ export class CoopRun {
             // one's frames: those it has already (and may have applied)
             if (event && event.frame > this.upTo) {
                 this.incoming.push(event);
+                if (event.hero === this.sim.focus && event.actionSeq !== undefined) {
+                    const confirmed = event.actionSeq;
+                    this.unconfirmed = this.unconfirmed.filter((a) => a.actionSeq > confirmed);
+                }
             }
         }
         const hash: unknown = message.hash;
@@ -422,8 +451,9 @@ export class CoopRun {
         this.resend(after);
     }
 
-    // The host's: everything sent after a frame, again, as one message. Every
-    // guest gets it; those that had some of it already take only the rest.
+    // The host's: everything sent after a frame, again, in as few messages as
+    // RESEND_EVENTS allows. Every guest gets them; those that had some
+    // already take only the rest.
     private resend(after: number): void {
         // An honest ask is where a message starts. One that isn't still gets the
         // next one on, so that it can't swallow the honest asks made with it.
@@ -431,20 +461,37 @@ export class CoopRun {
         if (start < 0) {
             return;
         }
-        const missed = this.sent.slice(start);
-        const hash = missed.findLast((m) => m.hash)?.hash;
-        this.link.sendDown({
-            from: missed[0].from,
-            upTo: missed[missed.length - 1].upTo,
-            events: missed.flatMap((m) => m.events),
-            ...(hash && { hash }),
-        });
+        let chunk: DownMessage[] = [];
+        let events = 0;
+        const send = () => {
+            const hash = chunk.findLast((m) => m.hash)?.hash;
+            this.link.sendDown({
+                from: chunk[0].from,
+                upTo: chunk[chunk.length - 1].upTo,
+                events: chunk.flatMap((m) => m.events),
+                ...(hash && { hash }),
+            });
+            chunk = [];
+            events = 0;
+        };
+        for (const message of this.sent.slice(start)) {
+            if (chunk.length > 0 && events + message.events.length > RESEND_EVENTS) {
+                send();
+            }
+            chunk.push(message);
+            events += message.events.length;
+        }
+        send();
     }
 
     // After the connection's come back: the next move goes out whatever it
-    // is, in case the last one didn't make it
+    // is, in case the last one didn't make it, and so do actions the host's
+    // frames haven't shown yet (it takes each only once)
     resumed(): void {
         this.lastMove = [NaN, NaN];
         this.moveSentAt = -Infinity;
+        for (const { actionSeq, action } of this.unconfirmed) {
+            this.link.sendUp({ action, actionSeq });
+        }
     }
 }
