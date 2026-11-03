@@ -61,7 +61,13 @@ import { CameraRig } from "../render/CameraRig";
 import { GameFrameHandler, GameWebGLRenderer } from "../render/GameWebGLRenderer";
 import { installRecipe } from "../scaperune/squares";
 import { DamageMeter } from "./DamageMeter";
-import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
+import {
+    DisplaySettings,
+    FrameRate,
+    frameCap,
+    loadDisplaySettings,
+    saveDisplaySettings,
+} from "./DisplaySettings";
 import {
     GameAssets,
     HITSPLAT_SPRITES,
@@ -113,12 +119,6 @@ const CATCH_UP_BUDGET_MS = 8;
 // than a slow load brings in
 const MAX_COOP_INBOX = 50_000;
 const HUD_INTERVAL_MS = 100;
-// Frames a second at most. A phone's screen can refresh at 90 or 120 Hz, which is
-// twice the drawing for a run that ticks 50 times a second, and heat. Behind a
-// solo run's menus (and on the title screen) all that moves is the scenery.
-// 0 is every frame the browser offers.
-const PLAY_FPS = isCoarsePointer ? 60 : 0;
-const MENU_FPS = 30;
 // The damage meter's number holds this long, so it can be read
 const DPS_HOLD_TICKS = TICKS_PER_SECOND / 2;
 
@@ -797,6 +797,11 @@ export class GameClient implements GameFrameHandler {
     toggleMovePrediction(): void {
         this.setDisplay({ movePrediction: !this.display.movePrediction });
         this.coopRun?.setPrediction(this.display.movePrediction);
+    }
+
+    // Takes hold from the next frame (update)
+    setFrameRate(frameRate: FrameRate): void {
+        this.setDisplay({ frameRate });
     }
 
     private setDisplay(changes: Partial<DisplaySettings>): void {
@@ -1591,7 +1596,11 @@ export class GameClient implements GameFrameHandler {
     // ---- Frame ----
 
     update(deltaTimeMs: number, camera: Camera): void {
-        this.renderer.fpsLimit = this.isStoppedBehindMenu() ? MENU_FPS : PLAY_FPS;
+        this.renderer.fpsLimit = frameCap(
+            this.display.frameRate,
+            isCoarsePointer,
+            this.isStoppedBehindMenu(),
+        );
         this.fps = this.fps * 0.95 + (deltaTimeMs > 0 ? 1000 / deltaTimeMs : 0) * 0.05;
         const wheel = this.input.takeWheel();
         if (wheel !== 0 && this.sim) {

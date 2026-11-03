@@ -501,12 +501,15 @@ A sound's samples are let go once it's first played and its `AudioBuffer` holds 
 
 ### Keeping it light on a phone
 
-- **Frame cap**: `GameClient.update` sets `Renderer.fpsLimit` every frame: 60 on a touch screen
-  (90 and 120 Hz phones would draw twice as often for a sim that ticks 50 times a second), no cap
-  on a desktop, and 30 on the title screen and behind a solo run's menus (level up, casket, random
-  event, pause, results), where only the scenery moves. Co-op isn't capped behind its menus, as
-  its run goes on. The limiter keeps to a schedule rather than a gap since the last frame, so a
-  90 Hz screen capped at 60 draws two frames in three (`Renderer.test.ts`).
+- **Frame cap**: `GameClient.update` sets `Renderer.fpsLimit` every frame from the Frame rate
+  setting (`DisplaySettings.frameRate`, in Settings and the pause menu), through `frameCap`. Auto,
+  the default and what older saved settings get, is 60 on a touch screen (90 and 120 Hz phones
+  would draw twice as often for a sim that ticks 50 times a second) and no cap on a desktop; 30,
+  60 and Unlimited are what they say. On the title screen and behind a solo run's menus (level up,
+  casket, random event, pause, results), where only the scenery moves, it's 30 at most whatever
+  the setting. Co-op isn't capped behind its menus, as its run goes on. The limiter keeps to a
+  schedule rather than a gap since the last frame, so a 90 Hz screen capped at 60 draws two frames
+  in three (`Renderer.test.ts`).
 - **Lost graphics**: a phone can take the WebGL context away (short of memory, or the game in the
   background). `GameApp` calls `preventDefault`, pauses a solo run (`GameClient.onGraphicsLost`),
   stops drawing (`GameWebGLRenderer.contextLost`; a co-op run still steps for the others) and
@@ -758,7 +761,8 @@ Everything touch only hangs off `pointer: coarse`, so a mouse and keyboard never
   UI's zoom never goes below 1, as the pixel fonts don't survive it, so a new screen needs rules
   there too. Check it at 844x390 and 667x375. It's imported last, so it wins over the other CSS.
 - A touch screen also gets a pixel ratio capped at 1.5, 2 workers instead of 4, 60 frames a second
-  at most (see Keeping it light on a phone), and a closer camera on a phone.
+  at most unless the Frame rate setting says otherwise (see Keeping it light on a phone), and a
+  closer camera on a phone.
 - `public/manifest.webmanifest` lets a browser install the game to the home screen (HTTPS only,
   apart from localhost), opening full screen and sideways. `enterFullscreen` leaves an installed
   game alone. iOS ignores `orientation`, so an iPhone still gets the rotate notice, and it can give

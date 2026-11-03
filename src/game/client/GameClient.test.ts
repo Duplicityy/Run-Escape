@@ -5,7 +5,13 @@ import { hasBadNumber } from "../core/lockstep";
 import { LoadedSave, SaveData, SaveStore, createSave } from "../core/save";
 import { makeGrid } from "../core/world/testGrid";
 import { DamageMeter } from "./DamageMeter";
-import { DisplaySettings, loadDisplaySettings, saveDisplaySettings } from "./DisplaySettings";
+import {
+    DisplaySettings,
+    FrameRate,
+    frameCap,
+    loadDisplaySettings,
+    saveDisplaySettings,
+} from "./DisplaySettings";
 import { GameClient, loadoutStats } from "./GameClient";
 import { GameStore } from "./GameStore";
 
@@ -135,6 +141,64 @@ describe("the HUD", () => {
         updateHud(client);
         expect(ui).not.toHaveBeenCalled();
         expect(numbers).not.toHaveBeenCalled();
+        vi.unstubAllGlobals();
+    });
+});
+
+describe("the frame rate setting", () => {
+    test("comes to a cap: auto is 60 on a touch screen and none on a desktop", () => {
+        expect(frameCap("auto", true, false)).toBe(60);
+        expect(frameCap("auto", false, false)).toBe(0);
+        expect(frameCap("30", false, false)).toBe(30);
+        expect(frameCap("60", false, false)).toBe(60);
+        expect(frameCap("60", true, false)).toBe(60);
+        expect(frameCap("unlimited", true, false)).toBe(0);
+        expect(frameCap("unlimited", false, false)).toBe(0);
+    });
+
+    test("behind a solo run's menus it's 30 at most", () => {
+        expect(frameCap("auto", true, true)).toBe(30);
+        expect(frameCap("auto", false, true)).toBe(30);
+        expect(frameCap("unlimited", false, true)).toBe(30);
+        expect(frameCap("60", false, true)).toBe(30);
+        expect(frameCap("30", false, true)).toBe(30);
+    });
+
+    test("is auto for settings saved before it, or with one that isn't a choice", () => {
+        const stored = new Map<string, string>();
+        vi.stubGlobal("window", {
+            matchMedia: () => ({ matches: false }),
+            localStorage: {
+                getItem: (key: string) => stored.get(key) ?? null,
+                setItem: (key: string, value: string) => stored.set(key, value),
+            },
+        });
+        expect(loadDisplaySettings().frameRate).toBe("auto");
+        stored.set("rune-survivors-display", JSON.stringify({ menuSpin: false, autoAlch: true }));
+        expect(loadDisplaySettings()).toMatchObject({ frameRate: "auto", autoAlch: true });
+        stored.set("rune-survivors-display", JSON.stringify({ frameRate: 45 }));
+        expect(loadDisplaySettings().frameRate).toBe("auto");
+        saveDisplaySettings({ ...loadDisplaySettings(), frameRate: "30" });
+        expect(loadDisplaySettings().frameRate).toBe("30");
+        vi.unstubAllGlobals();
+    });
+
+    test("changed, takes hold from the next frame", () => {
+        vi.stubGlobal("window", { localStorage: { setItem() {} } });
+        const sim = createSim();
+        const { client, store } = createClient(sim, false);
+        const renderer = { fpsLimit: 999 };
+        Object.assign(client, { renderer });
+        // A solo run that's being played. The cap's set first thing in a frame, and
+        // nothing past it matters here (the client has no input or camera).
+        const capFor = (rate: FrameRate) => {
+            client.setFrameRate(rate);
+            expect(() => client.update(16, {} as never)).toThrow();
+            return renderer.fpsLimit;
+        };
+        expect(capFor("60")).toBe(60);
+        expect(store.getSnapshot().display.frameRate).toBe("60");
+        expect(capFor("30")).toBe(30);
         vi.unstubAllGlobals();
     });
 });

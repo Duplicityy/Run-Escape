@@ -411,6 +411,17 @@
     color: var(--ui-green);
 }
 
+/* The frame rate's choices: the one picked lit up */
+.ui-setting-control .ui-frame-rate {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.ui-frame-rate-on {
+    color: var(--ui-yellow);
+    background: var(--ui-card-hover);
+}
+
 .ui-volume {
     width: 140px;
     accent-color: var(--ui-orange);

@@ -14,6 +14,7 @@ import compass from "../../components/rs/minimap/compass.png";
 import minimapFrame from "../../components/rs/minimap/minimap-frame.png";
 import { EquipSlot } from "../../rs/model/player/PlayerModelLoader";
 import { isCoarsePointer } from "../../util/DeviceUtil";
+import { FRAME_RATES, FrameRate } from "../client/DisplaySettings";
 import { GameClient } from "../client/GameClient";
 import {
     BuffView,
@@ -305,6 +306,40 @@ function MovePredictionSetting({ ui, client }: ScreenProps): JSX.Element {
     );
 }
 
+const FRAME_RATE_NAMES: Record<FrameRate, string> = {
+    auto: "Auto",
+    "30": "30",
+    "60": "60",
+    unlimited: "Unlimited",
+};
+
+function FrameRateSetting({ ui, client }: ScreenProps): JSX.Element {
+    return (
+        <Setting
+            name="Frame rate"
+            text="Frames a second at most. Auto is 60 on a phone or tablet, as many as the screen shows otherwise"
+        >
+            {FRAME_RATES.map((rate) => (
+                <button
+                    key={rate}
+                    className={
+                        "ui-button ui-button-small ui-frame-rate" +
+                        (ui.display.frameRate === rate ? " ui-frame-rate-on" : "")
+                    }
+                    aria-pressed={ui.display.frameRate === rate}
+                    onClick={(e) => {
+                        client.setFrameRate(rate);
+                        // Give Enter and Space back to the screen
+                        e.currentTarget.blur();
+                    }}
+                >
+                    {FRAME_RATE_NAMES[rate]}
+                </button>
+            ))}
+        </Setting>
+    );
+}
+
 // The community server's invite
 const DISCORD_INVITE = "https://discord.gg/82gBtKz2Xx";
 const GITHUB_REPOSITORY = "https://github.com/Dynrothe/Run-Escape";
@@ -487,6 +522,7 @@ function SettingsPanel({
                     <AutoPauseSetting ui={ui} client={client} />
                     <AutoAlchSetting ui={ui} client={client} />
                     <MovePredictionSetting ui={ui} client={client} />
+                    <FrameRateSetting ui={ui} client={client} />
                 </section>
                 <section className="ui-settings-section">
                     <h3>Save</h3>
@@ -1957,6 +1993,7 @@ function PauseModal({
                         <AutoPauseSetting ui={ui} client={client} />
                         <AutoAlchSetting ui={ui} client={client} />
                         <MovePredictionSetting ui={ui} client={client} />
+                        <FrameRateSetting ui={ui} client={client} />
                     </div>
                 </div>
                 <div className="ui-row">
