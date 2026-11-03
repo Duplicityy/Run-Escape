@@ -7,9 +7,9 @@ the version in the corner).
 
 ### Changed
 
-- Endless runs: after the first round, levels come about a dozen a round, not thirty, so a weapon
-  you pour everything into keeps up with the rounds rather than outgrowing them, and a long run
-  gets harder instead of its numbers running away.
+- Endless runs: from about round 4, levels come about a dozen a round rather than thirty, so a
+  weapon you pour everything into keeps up with the rounds rather than outgrowing them, and a long
+  run gets harder instead of its numbers running away. The first rounds level as before.
 
 ### Fixed
 
