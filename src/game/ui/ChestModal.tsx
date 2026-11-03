@@ -45,6 +45,53 @@ const SPARKS = scatter(30, 7, (random, i) => ({
     "--delay": `${Math.round(random() * 90)}ms`,
 }));
 
+// The rays behind the opened casket, as wedges from the centre of a 640 box.
+// Their fade outwards is in their fill (RaySet), not a mask: a mask over
+// turning layers is drawn again offscreen every frame, a big surface on a
+// phone.
+const RAY_BOX = 640;
+
+// One path of wedges `width` degrees wide, every `step` from `from`, clockwise
+// from the top
+function rayPath(width: number, step: number, from: number): string {
+    const c = RAY_BOX / 2;
+    const point = (deg: number) => {
+        const rad = (deg * Math.PI) / 180;
+        return `${(c + c * Math.sin(rad)).toFixed(1)} ${(c - c * Math.cos(rad)).toFixed(1)}`;
+    };
+    let d = "";
+    for (let a = from; a < from + 360; a += step) {
+        d += `M${c} ${c}L${point(a)}A${c} ${c} 0 0 1 ${point(a + width)}Z`;
+    }
+    return d;
+}
+
+const RAYS = rayPath(6, 22.5, 0);
+// Rarer items get a second, finer set turning the other way
+const FINE_RAYS = rayPath(2, 30, 11);
+
+function RaySet({ id, path, className }: { id: string; path: string; className: string }) {
+    const c = RAY_BOX / 2;
+    return (
+        <svg className={className} viewBox={`0 0 ${RAY_BOX} ${RAY_BOX}`} aria-hidden>
+            <defs>
+                {/* Solid to 12% of the way to the box's corner, gone by 68% */}
+                <radialGradient
+                    id={id}
+                    gradientUnits="userSpaceOnUse"
+                    cx={c}
+                    cy={c}
+                    r={c * Math.SQRT2}
+                >
+                    <stop offset="0.12" />
+                    <stop offset="0.68" stopOpacity="0" />
+                </radialGradient>
+            </defs>
+            <path d={path} fill={`url(#${id})`} />
+        </svg>
+    );
+}
+
 const COIN_ARCS = scatter(10, 3, (random, i) => {
     const side = i % 2 === 0 ? 1 : -1;
     return {
@@ -192,7 +239,14 @@ export function ChestModal({ chest, rerolls, client }: Props): JSX.Element {
         >
             <div className="ui-chest-flash" />
             <div className="ui-chest-scene">
-                <div className="ui-chest-rays" />
+                <div className="ui-chest-rays">
+                    <RaySet id="ui-chest-rays-fade" path={RAYS} className="ui-chest-rays-main" />
+                    <RaySet
+                        id="ui-chest-rays-fine-fade"
+                        path={FINE_RAYS}
+                        className="ui-chest-rays-fine"
+                    />
+                </div>
                 <div className="ui-chest-halo" />
                 <div className="ui-chest-shockwave" />
                 <div className="ui-chest-casket">
