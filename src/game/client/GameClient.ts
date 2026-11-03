@@ -67,6 +67,7 @@ import {
     HITSPLAT_SPRITES,
     getCharacterAppearance,
     getRunAppearance,
+    getRunAttackSeqs,
 } from "./GameAssets";
 import { GameAudio } from "./GameAudio";
 import { GameInput } from "./GameInput";
@@ -1604,7 +1605,11 @@ export class GameClient implements GameFrameHandler {
         for (const hero of sim.heroes) {
             if (hero.appearanceVersion !== this.appearanceVersions[hero.index]) {
                 this.appearanceVersions[hero.index] = hero.appearanceVersion;
-                this.assets.setPlayerAppearance(getRunAppearance(sim, hero.index), hero.index);
+                this.assets.setPlayerAppearance(
+                    getRunAppearance(sim, hero.index),
+                    hero.index,
+                    getRunAttackSeqs(sim, hero.index),
+                );
             }
         }
 

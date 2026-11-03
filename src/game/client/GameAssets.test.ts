@@ -2,16 +2,23 @@ import { describe, expect, test } from "vitest";
 
 import { BakeRequest } from "../../mapviewer/webgl/actor/ActorBakeTypes";
 import { EquipSlot, createAppearance } from "../../rs/model/player/PlayerModelLoader";
+import { CHARACTERS } from "../content/characters";
+import { REVIVE_SEQ } from "../content/coop";
 import { ENEMIES, getEnemy } from "../content/enemies";
 import { getMapEnemies } from "../content/mapEnemies";
 import { ALL_MAPS, getMap } from "../content/maps";
 import { POWER_UPS, getPowerUp } from "../content/powerups";
 import { RANDOM_EVENTS, VISITOR_SPOTANIM } from "../content/randomEvents";
-import { getWeapon } from "../content/weapons";
+import { emptyStats } from "../content/types";
+import { WEAPONS, getWeapon } from "../content/weapons";
+import { Sim } from "../core/Sim";
+import { makeGrid } from "../core/world/testGrid";
 import {
     GameAssets,
     getEnemyModelKey,
+    getPlayerAttackSeqs,
     getPowerUpLookRequests,
+    getRunAttackSeqs,
     getShieldedModelKey,
 } from "./GameAssets";
 import { getGameSoundIds } from "./GameSounds";
@@ -136,6 +143,57 @@ describe("bake tasks", () => {
                 expect(task).toHaveLength(1);
             }
         }
+    });
+});
+
+describe("player bakes", () => {
+    function createRun(party: number): Sim {
+        const hero = CHARACTERS[0].id;
+        return new Sim({
+            grid: makeGrid(["....", "....", "....", "...."], 1000, 1000),
+            characterId: hero,
+            metaStats: emptyStats(),
+            seed: 1,
+            spawnX: 1001.5,
+            spawnY: 1001.5,
+            party: Array.from({ length: party }, (_, i) => ({
+                name: "p" + i,
+                characterId: hero,
+                metaStats: emptyStats(),
+            })),
+        });
+    }
+
+    test("have the swings of the weapons the hero holds", () => {
+        const sim = createRun(1);
+        const start = getWeapon(CHARACTERS[0].startingWeapon);
+        expect(getRunAttackSeqs(sim)).toEqual([start.playerSeq]);
+        const special = WEAPONS.find(
+            (w) =>
+                w.special?.playerSeq !== undefined &&
+                w.special.playerSeq !== w.playerSeq &&
+                w.playerSeq !== start.playerSeq,
+        )!;
+        sim.addWeapon(special.id);
+        expect(getRunAttackSeqs(sim)).toEqual([
+            start.playerSeq,
+            special.playerSeq,
+            special.special!.playerSeq,
+        ]);
+        expect(getRunAttackSeqs(sim)).not.toContain(REVIVE_SEQ);
+    });
+
+    test("in co-op have the reviver's emote", () => {
+        expect(getRunAttackSeqs(createRun(2), 1)).toContain(REVIVE_SEQ);
+    });
+
+    test("are all in what the slim cache keeps", () => {
+        const all = getPlayerAttackSeqs();
+        for (const character of CHARACTERS) {
+            const weapon = getWeapon(character.startingWeapon);
+            expect(all).toContain(weapon.playerSeq);
+        }
+        expect(all).toContain(REVIVE_SEQ);
     });
 });
 

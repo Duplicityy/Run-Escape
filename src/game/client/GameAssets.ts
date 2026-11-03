@@ -25,7 +25,7 @@ import { getPassive } from "../content/passives";
 import { POWER_UPS, THRALLS, getPowerUp } from "../content/powerups";
 import { RANDOM_EVENTS, VISITOR_SPOTANIM } from "../content/randomEvents";
 import { PlayerStance, getPlayerStance } from "../content/stances";
-import { EnemyDef, EnemyOutfit, GearSlot } from "../content/types";
+import { EnemyDef, EnemyOutfit, GearSlot, WeaponDef } from "../content/types";
 import { WEAPONS } from "../content/weapons";
 import { BLOOD_FURY_SPOTANIM, FREEZE_SPOTANIM, NUKE_SPOTANIM, Sim } from "../core/Sim";
 import { Pickup } from "../core/entities";
@@ -181,11 +181,24 @@ function getThrownObjIds(): number[] {
     return [...ids];
 }
 
+// The animations the player does with these weapons
+function getWeaponSeqs(weapons: WeaponDef[]): number[] {
+    const seqs = weapons.flatMap((w) => [w.playerSeq, w.special?.playerSeq ?? -1]);
+    return [...new Set(seqs.filter((id) => id !== -1))];
+}
+
 // Every animation the player does with a weapon, and the emote a co-op
 // reviver performs
 export function getPlayerAttackSeqs(): number[] {
-    const seqs = WEAPONS.flatMap((w) => [w.playerSeq, w.special?.playerSeq ?? -1]);
-    return [...new Set([...seqs.filter((id) => id !== -1), REVIVE_SEQ])];
+    return [...new Set([...getWeaponSeqs(WEAPONS), REVIVE_SEQ])];
+}
+
+// The attack animations a hero's bake needs: their weapons', and in co-op the
+// reviver's emote. A new weapon changes the hero's appearanceVersion, which
+// re-bakes them with its swing.
+export function getRunAttackSeqs(sim: Sim, hero = sim.focus): number[] {
+    const seqs = getWeaponSeqs(sim.as(hero, () => sim.weapons.map((weapon) => weapon.def)));
+    return sim.heroes.length > 1 ? [...seqs, REVIVE_SEQ] : seqs;
 }
 
 // The player's look in a run: the character's outfit, the held weapon tier,
@@ -703,10 +716,15 @@ export class GameAssets {
     }
 
     // Bakes a player model for this look unless it's already the current one.
-    // The old model keeps drawing until the new one is ready.
-    async setPlayerAppearance(appearance: PlayerAppearance, slot = 0): Promise<void> {
+    // The old model keeps drawing until the new one is ready. attackSeqs: the
+    // swings it needs (getRunAttackSeqs), none on the title screen.
+    async setPlayerAppearance(
+        appearance: PlayerAppearance,
+        slot = 0,
+        attackSeqs: number[] = [],
+    ): Promise<void> {
         const player = this.getPlayerBake(slot);
-        const key = getAppearanceKey(appearance);
+        const key = getAppearanceKey(appearance) + "|" + attackSeqs.join(",");
         if (key === player.key || key === player.pendingKey) {
             return;
         }
@@ -714,7 +732,7 @@ export class GameAssets {
         const same = this.players.find((other) => other?.key === key && other.model);
         const look = same
             ? { models: same.looks, stance: same.stance }
-            : await this.bakeLook(key, appearance);
+            : await this.bakeLook(key, appearance, attackSeqs);
         if (player.pendingKey !== key || this.players[slot] !== player) {
             // A newer look was asked for while this one baked, or the player's
             // gone (and it's no use unless another player's waiting on it)
@@ -736,6 +754,7 @@ export class GameAssets {
     private bakeLook(
         key: string,
         appearance: PlayerAppearance,
+        attackSeqs: number[],
     ): Promise<{ models: Map<string, ActorModel>; stance: PlayerStance }> {
         let baking = this.bakingLooks.get(key);
         if (!baking) {
@@ -750,8 +769,8 @@ export class GameAssets {
                     stance.idle,
                     stance.run,
                     PLAYER_SEQS.death,
-                    ...getPlayerAttackSeqs(),
-                ];
+                    ...attackSeqs,
+                ].filter((id, i, all) => all.indexOf(id) === i);
                 const bake = await this.bake([
                     { kind: "player", key: "player", appearance, seqIds },
                     ...getPowerUpLookRequests(appearance),
