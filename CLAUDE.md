@@ -21,7 +21,7 @@ go stale. Add anything that cost you time to work out.
 | ------------------------------------------------------ | ---------------------------------------------------------------------- |
 | How the code is laid out, scripts, URL flags, hosting  | `docs/DEVELOPMENT.md`                                                  |
 | The Windows app, its game updates, releases            | `docs/DEVELOPMENT.md`, Desktop                                         |
-| The Android app, its bundled game and release signing  | `android/`, `scripts/android/`, `docs/DEVELOPMENT.md`, Android         |
+| The Android app, game updates and release signing      | `android/`, `scripts/android/`, `docs/DEVELOPMENT.md`, Android         |
 | The app's main process and update code                 | `desktop/`                                                             |
 | The release workflow                                   | `.github/workflows/release.yml`                                        |
 | The checks on a pull request                           | `.github/workflows/check.yml`                                          |
@@ -167,11 +167,18 @@ build (`VITE_COOP_URL`) and Android (`-PcoopUrl`). Keep the Android application 
 origin and save keys stable. The in-game Settings screen owns save import/export and its
 read-only protections; the wrapper supplies Android's document picker without bypassing them.
 
+Android's `GameUpdater.java` follows published desktop game releases from `Dynrothe/Run-Escape`,
+not this fork. It verifies and stages the game ZIP in private storage before activation, with
+the previous and bundled game kept for fallback. `MainActivity` serves the selected game at the
+existing local HTTPS address: do not change the origin or application ID to serve downloads.
+The active game version can be newer than the APK's version. Native Android changes still need
+an APK signed with the existing key. See Android, Game updates in `docs/DEVELOPMENT.md`.
+
 `.github/workflows/android.yml` compiles and tests the wrapper on pull requests without the game
 cache. Its manual playable build bundles the cache and uploads an installable debug APK. Official
 Android release signing is opt-in; see Android in `docs/DEVELOPMENT.md`. A wrapper-only change
-does not need a gameplay simulation, but test the relay policy, offline asset staging and Android
-build. An Android device with current WebView is needed for final touch, online and airplane-mode
+does not need a gameplay simulation, but test the updater, relay policy, offline asset staging
+and Android build. An Android device with current WebView is needed for final touch, online and airplane-mode
 checks; a passing shell compilation is not a device test.
 
 `.github/workflows/check.yml` runs the type check and `npm test` on every pull request, without

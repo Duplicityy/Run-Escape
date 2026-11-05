@@ -296,12 +296,46 @@ assets, cache files and build outputs out of Git.
 and SHA-256, then extracts `game-<version>.zip`. The release workflow uses this form to package
 the exact desktop web build. Both forms require a slim cache with its data and index files.
 
+### Game updates
+
+The Android app follows the original developer's published desktop releases at
+`Dynrothe/Run-Escape`. It checks for updates before opening the game and downloads the release's
+`game-<version>.zip`, using `game-manifest.json` to check its version and SHA-256. No release in
+this fork is needed. Draft releases are not installed. **Play now** skips the startup update.
+The Android Back menu also offers **Check for updates**; it asks before restarting the game, so
+a check does not interrupt a run without the player's agreement.
+
+Downloads are staged in the app's private storage and activated only after verification and
+extraction finish. The previous game stays available if an update is interrupted, skipped or
+fails. The app also retains the bundled game for offline play, including the first launch. An
+installed update is served at the same local HTTPS address as the bundled files, so updating
+does not change where saves are stored.
+
+`GameUpdater.java` owns the release check, downloads and installed game folders. `MainActivity`
+selects the game before starting WebView's compatibility check and falls back if that check
+fails for an update. An update is confirmed only after its game UI has started, rather than when
+its HTML loads. The native menu remains available during startup and offers **Use previous game**
+if a new release cannot start. A manual update check retries previously rejected updates. The
+app shows the active game version separately from the APK version.
+
+The Android wrapper currently supports desktop game manifests with `minLauncher` up to
+`1.0.0`; a release requiring a newer launcher is skipped until the Android wrapper is updated
+and tested with it. This is a compatibility limit, not a request to install the Windows app.
+The checksum detects a corrupt download; the release and manifest are both trusted to the
+original developer's GitHub repository.
+
+Install an APK containing this updater once. Later game releases are downloaded by the app;
+native Android changes still require installing a new APK with the same application ID and
+signing key. Keep that key for every APK update.
+
 ### Online and offline play
 
 Set the `COOP_URL` repository variable to the same `wss://.../coop` relay used by desktop releases.
 The web build gets it as `VITE_COOP_URL`; the wrapper gets it as `-PcoopUrl`. Both must match.
 An empty value means solo only, as it does on desktop. Desktop, web and Android share rooms only
-on the same game build, so build and deploy them from the same commit.
+on the same game build. Downloading the published desktop game ZIP preserves that build ID;
+locally built bundles must come from the same commit as the desktop build. If the original
+developer changes the relay, the Android wrapper's configured relay must be updated too.
 
 The game runs at `https://appassets.androidplatform.net/assets/game/index.html`, intercepted
 inside the app. Keep that origin and the application ID `io.jere.runescapearchive` unchanged:
@@ -351,7 +385,8 @@ the checkout. A new key cannot update an installed app signed by the previous on
 
 Version names come from `package.json`. Version codes encode its numeric components and an
 optional `-PandroidRevision=0` through `9` for rebuilding one game version; never decrease a
-published version code. Android does not currently update game files separately from the APK.
+published version code. These identify the APK and its bundled game; an automatically downloaded
+game can have a newer version without changing the APK version.
 
 ## Desktop
 

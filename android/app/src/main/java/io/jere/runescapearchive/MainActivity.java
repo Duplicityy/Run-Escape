@@ -11,6 +11,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
@@ -24,6 +25,7 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -37,14 +39,17 @@ import org.json.JSONTokener;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-/** Runs the bundled game on a private, intercepted HTTPS origin. */
+/** Runs the bundled or updated game on the same private HTTPS origin, keeping saves in place. */
 public final class MainActivity extends Activity {
     private static final String ORIGIN = "https://appassets.androidplatform.net";
     private static final String GAME_ROOT = "/assets/game/";
@@ -57,16 +62,25 @@ public final class MainActivity extends Activity {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final RelayPolicy relayPolicy = new RelayPolicy(BuildConfig.COOP_URL);
+    private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
     private WebView webView;
     private FrameLayout root;
+    private LinearLayout loadingPanel;
     private TextView loading;
+    private ProgressBar updateProgress;
+    private Button playNow;
     private Button menuButton;
     private ValueCallback<Uri[]> webFileCallback;
     private String pendingExport;
     private String downloadToken;
     private boolean gameReady;
-    private boolean destroyed;
+    private volatile boolean destroyed;
+    private volatile GameUpdater updater;
+    private volatile GameUpdater.Game currentGame;
+    private boolean updating;
+    private int updateGeneration;
     private int diagnosticGeneration;
+    private int gameBootGeneration;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -99,6 +113,8 @@ public final class MainActivity extends Activity {
             settings.setDisplayZoomControls(false);
             settings.setUseWideViewPort(true);
             settings.setLoadWithOverviewMode(true);
+            // The URL stays the same across game versions because saves belong to its origin.
+            settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
             webView.setBackgroundColor(Color.BLACK);
             webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
             root.addView(webView, new FrameLayout.LayoutParams(
@@ -112,13 +128,32 @@ public final class MainActivity extends Activity {
             webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, length) ->
                     downloadSave(url));
 
+            loadingPanel = new LinearLayout(this);
+            loadingPanel.setOrientation(LinearLayout.VERTICAL);
+            loadingPanel.setGravity(Gravity.CENTER);
+            loadingPanel.setBackgroundColor(Color.BLACK);
+            loadingPanel.setPadding(dp(24), dp(16), dp(24), dp(16));
             loading = new TextView(this);
             loading.setText("Preparing your game…");
             loading.setTextColor(Color.WHITE);
             loading.setBackgroundColor(Color.BLACK);
             loading.setTextSize(18);
             loading.setGravity(Gravity.CENTER);
-            root.addView(loading, new FrameLayout.LayoutParams(
+            loadingPanel.addView(loading);
+            updateProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+            updateProgress.setVisibility(View.GONE);
+            loadingPanel.addView(updateProgress, new LinearLayout.LayoutParams(dp(260), dp(16)));
+            playNow = new Button(this);
+            playNow.setText("Play now");
+            playNow.setVisibility(View.GONE);
+            playNow.setOnClickListener(v -> {
+                playNow.setEnabled(false);
+                loading.setText("Starting your game…");
+                GameUpdater active = updater;
+                if (active != null) active.cancel();
+            });
+            loadingPanel.addView(playNow);
+            root.addView(loadingPanel, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
             menuButton = new Button(this);
@@ -155,7 +190,7 @@ public final class MainActivity extends Activity {
                 showMissingGameScreen();
                 return;
             }
-            startDiagnostic();
+            checkForGameUpdates(false);
         } catch (RuntimeException exception) {
             showCompatibilityScreen(false);
         }
@@ -166,11 +201,97 @@ public final class MainActivity extends Activity {
         loading.setPadding(dp(24), dp(16), dp(24), dp(16));
     }
 
+    private void checkForGameUpdates(boolean retryRejected) {
+        if (destroyed || updating || webView == null) return;
+        updating = true;
+        gameReady = false;
+        gameBootGeneration++;
+        diagnosticGeneration++;
+        int generation = ++updateGeneration;
+        webView.stopLoading();
+        webView.loadUrl("about:blank");
+        menuButton.setVisibility(View.GONE);
+        loadingPanel.setVisibility(View.VISIBLE);
+        loading.setText("Checking for game updates…");
+        updateProgress.setVisibility(View.VISIBLE);
+        updateProgress.setIndeterminate(true);
+        playNow.setEnabled(true);
+        playNow.setVisibility(View.VISIBLE);
+        GameUpdater active = new GameUpdater(new File(getFilesDir(), "game-updates"), BuildConfig.VERSION_NAME);
+        updater = active;
+        updateExecutor.execute(() -> {
+            GameUpdater.Game selected = new GameUpdater.Game(BuildConfig.VERSION_NAME, null);
+            String notice = null;
+            try {
+                if (retryRejected) active.retryRejectedUpdates();
+                selected = active.selectCurrent();
+                selected = active.update(selected, (message, percent) -> handler.post(() -> {
+                    if (destroyed || generation != updateGeneration || !playNow.isEnabled()) return;
+                    loading.setText(message);
+                    updateProgress.setIndeterminate(percent < 0);
+                    if (percent >= 0) updateProgress.setProgress(percent);
+                }));
+            } catch (GameUpdater.UnsupportedGameException exception) {
+                notice = "A newer game needs an updated Android app. Playing your current version.";
+                Log.i("RunEscape", "Game update needs a newer Android wrapper", exception);
+            } catch (Exception exception) {
+                // Offline, cancelled or failed downloads must never stop solo play.
+                Log.i("RunEscape", "Game update skipped; keeping the installed game", exception);
+            }
+            GameUpdater.Game game = selected;
+            String message = notice;
+            handler.post(() -> {
+                if (destroyed || generation != updateGeneration) return;
+                updating = false;
+                currentGame = game;
+                if (message != null) toast(message);
+                startDiagnostic();
+            });
+        });
+    }
+
+    private void diagnosticFailed() {
+        GameUpdater.Game failed = currentGame;
+        if (failed == null || failed.directory == null) {
+            showCompatibilityScreen(true);
+            return;
+        }
+        diagnosticGeneration++;
+        gameBootGeneration++;
+        gameReady = false;
+        menuButton.setVisibility(View.GONE);
+        loadingPanel.setVisibility(View.VISIBLE);
+        loading.setText("This game update couldn't start. Restoring your previous version…");
+        webView.stopLoading();
+        webView.loadUrl("about:blank");
+        GameUpdater active = updater;
+        updateExecutor.execute(() -> {
+            GameUpdater.Game fallback = new GameUpdater.Game(BuildConfig.VERSION_NAME, null);
+            try {
+                active.reject(failed);
+                fallback = active.selectCurrent();
+            } catch (Exception exception) {
+                Log.w("RunEscape", "Could not restore an installed game; using the bundled game", exception);
+            }
+            GameUpdater.Game game = fallback;
+            handler.post(() -> {
+                if (destroyed) return;
+                currentGame = game;
+                toast("Using your previous game version.");
+                startDiagnostic();
+            });
+        });
+    }
+
     private void startDiagnostic() {
         if (destroyed || webView == null) return;
         gameReady = false;
+        gameBootGeneration++;
         diagnosticGeneration++;
-        if (loading != null) loading.setVisibility(View.VISIBLE);
+        loadingPanel.setVisibility(View.VISIBLE);
+        loading.setText("Preparing your game…");
+        updateProgress.setVisibility(View.GONE);
+        playNow.setVisibility(View.GONE);
         if (menuButton != null) menuButton.setVisibility(View.GONE);
         webView.loadUrl(CHECK_URL);
     }
@@ -185,21 +306,67 @@ public final class MainActivity extends Activity {
                 String state = result.optString("state");
                 if ("passed".equals(state)) {
                     diagnosticGeneration++;
+                    int bootGeneration = ++gameBootGeneration;
+                    // Keep native recovery reachable even when a new game's scripts cannot boot.
+                    gameReady = true;
+                    loadingPanel.setVisibility(View.GONE);
+                    menuButton.setVisibility(View.VISIBLE);
                     webView.loadUrl(GAME_URL);
+                    handler.postDelayed(() -> pollGameReady(bootGeneration, 0), 1000);
                     return;
                 }
                 if ("failed".equals(state) || attempts >= 100) {
-                    showCompatibilityScreen(true);
+                    diagnosticFailed();
                     return;
                 }
             } catch (Exception ignored) {
                 if (attempts >= 100) {
-                    showCompatibilityScreen(true);
+                    diagnosticFailed();
                     return;
                 }
             }
             handler.postDelayed(() -> pollDiagnostic(generation, attempts + 1), 100);
         });
+    }
+
+    private void pollGameReady(int generation, int attempts) {
+        if (destroyed || generation != gameBootGeneration || webView == null) return;
+        // Observe the unmodified desktop game's title UI; loading an HTML document is not a boot.
+        webView.evaluateJavascript("document.querySelector('.game-root .ui-contents')?'ready':"
+                + "document.querySelector('.game-status:not(.game-status-lost)')?'failed':'pending'", value -> {
+            if (destroyed || generation != gameBootGeneration) return;
+            if ("\"ready\"".equals(value)) {
+                GameUpdater.Game game = currentGame;
+                GameUpdater active = updater;
+                updateExecutor.execute(() -> {
+                    try {
+                        active.confirm(game);
+                    } catch (Exception exception) {
+                        Log.i("RunEscape", "Could not clean up old game files", exception);
+                    }
+                });
+                handler.postDelayed(() -> {
+                    if (!destroyed && generation == gameBootGeneration) menuButton.setVisibility(View.GONE);
+                }, 6000);
+                return;
+            }
+            if ("\"failed\"".equals(value)) {
+                if (currentGame != null && currentGame.directory != null) diagnosticFailed();
+                return;
+            }
+            if (attempts >= 120) {
+                if (currentGame != null && currentGame.directory != null) showRestorePrompt();
+                return;
+            }
+            handler.postDelayed(() -> pollGameReady(generation, attempts + 1), 1000);
+        });
+    }
+
+    private void showRestorePrompt() {
+        new AlertDialog.Builder(this).setTitle("Use the previous game version?")
+                .setMessage("This restarts the game and skips this update. Finish your current run first.")
+                .setPositiveButton("Use previous game", (dialog, which) -> diagnosticFailed())
+                .setNegativeButton("Keep this version", null).show();
     }
 
     private void showCompatibilityScreen(boolean retryAvailable) {
@@ -266,7 +433,10 @@ public final class MainActivity extends Activity {
 
     private void showGameMenu() {
         if (!gameReady || destroyed) return;
-        String[] options = {"Close menu", "Save help", "Restart game", "About", "Exit"};
+        boolean canRestore = currentGame != null && currentGame.directory != null;
+        String[] options = canRestore
+                ? new String[]{"Close menu", "Save help", "Restart game", "Check for updates", "About", "Use previous game", "Exit"}
+                : new String[]{"Close menu", "Save help", "Restart game", "Check for updates", "About", "Exit"};
         new AlertDialog.Builder(this).setTitle("Run Escape")
                 .setItems(options, (dialog, which) -> {
                     switch (which) {
@@ -278,11 +448,22 @@ public final class MainActivity extends Activity {
                                             + "uninstalling or clearing the app's data.")
                                     .setPositiveButton("Close", null).show();
                             break;
-                        case 2: webView.reload(); break;
+                        case 2:
+                            startDiagnostic();
+                            break;
                         case 3:
-                            new AlertDialog.Builder(this).setTitle("Run Escape " + BuildConfig.VERSION_NAME)
+                            new AlertDialog.Builder(this).setTitle("Check for game updates")
+                                    .setMessage("This restarts the game. Finish your current run before checking.")
+                                    .setPositiveButton("Check and restart", (prompt, action) -> checkForGameUpdates(true))
+                                    .setNegativeButton("Cancel", null).show();
+                            break;
+                        case 4:
+                            String version = currentGame == null ? BuildConfig.VERSION_NAME : currentGame.version;
+                            new AlertDialog.Builder(this).setTitle("Run Escape " + version)
                                     .setMessage("Solo play works offline, including in airplane mode. "
-                                            + "Co-op needs an internet connection and an available server.\n\nGame by Dynrothe.\n"
+                                            + "Co-op needs an internet connection and an available server.\n\n"
+                                            + "Game version: " + version + "\nAndroid app: " + BuildConfig.VERSION_NAME
+                                            + "\nGame updates are checked when the app opens.\n\nGame by Dynrothe.\n"
                                             + "Source: github.com/Dynrothe/Run-Escape\n\n"
                                             + "A fan project, not affiliated with Jagex. "
                                             + "Old School RuneScape assets belong to Jagex.\n\n"
@@ -290,7 +471,10 @@ public final class MainActivity extends Activity {
                                     .setNeutralButton("Licenses", (about, action) -> showLicenses())
                                     .setPositiveButton("Close", null).show();
                             break;
-                        case 4: finish(); break;
+                        case 5:
+                            if (canRestore) showRestorePrompt(); else finish();
+                            break;
+                        case 6: finish(); break;
                         default: break;
                     }
                     hideSystemBars();
@@ -441,7 +625,24 @@ public final class MainActivity extends Activity {
                         + "const v=new Int32Array(e.data);v[0]+=1;self.postMessage(v[0]);"
                         + "}catch(e){self.postMessage(-1)}};", 200);
             }
-            WebResourceResponse response = loader.shouldInterceptRequest(uri);
+            WebResourceResponse response;
+            GameUpdater.Game game = currentGame;
+            if (game != null && game.directory != null) {
+                try {
+                    String range = null;
+                    for (Map.Entry<String, String> header : request.getRequestHeaders().entrySet()) {
+                        if ("Range".equalsIgnoreCase(header.getKey())) range = header.getValue();
+                    }
+                    GameAssetFiles.Response file = GameAssetFiles.open(game.directory,
+                            uri.getPath().substring(GAME_ROOT.length()), range);
+                    response = new WebResourceResponse(file.mime, null, file.status,
+                            file.reason, file.headers, file.body);
+                } catch (Exception exception) {
+                    return textResponse("text/plain", "Not found", 404);
+                }
+            } else {
+                response = loader.shouldInterceptRequest(uri);
+            }
             if (response == null) return textResponse("text/plain", "Not found", 404);
             String path = uri.getPath();
             if (path != null) {
@@ -452,6 +653,7 @@ public final class MainActivity extends Activity {
             Map<String, String> headers = new HashMap<>();
             if (response.getResponseHeaders() != null) headers.putAll(response.getResponseHeaders());
             headers.putAll(isolationHeaders());
+            headers.put("Cache-Control", "no-store");
             response.setResponseHeaders(headers);
             return response;
         }
@@ -478,12 +680,6 @@ public final class MainActivity extends Activity {
             if (CHECK_URL.equals(url)) {
                 pollDiagnostic(diagnosticGeneration, 0);
             } else if (GAME_URL.equals(url)) {
-                gameReady = true;
-                loading.setVisibility(View.GONE);
-                menuButton.setVisibility(View.VISIBLE);
-                handler.postDelayed(() -> {
-                    if (!destroyed && menuButton != null) menuButton.setVisibility(View.GONE);
-                }, 6000);
                 if (!getPreferences(MODE_PRIVATE).getBoolean("save-menu-hint", false)) {
                     toast("Use Back to open the game menu.");
                     getPreferences(MODE_PRIVATE).edit().putBoolean("save-menu-hint", true).apply();
@@ -495,6 +691,7 @@ public final class MainActivity extends Activity {
         public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
             if (!destroyed) {
                 gameReady = false;
+                gameBootGeneration++;
                 diagnosticGeneration++;
                 root.removeView(view);
                 view.destroy();
@@ -580,7 +777,12 @@ public final class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         destroyed = true;
+        updateGeneration++;
+        gameBootGeneration++;
         diagnosticGeneration++;
+        GameUpdater active = updater;
+        if (active != null) active.cancel();
+        updateExecutor.shutdownNow();
         handler.removeCallbacksAndMessages(null);
         if (webFileCallback != null) {
             webFileCallback.onReceiveValue(null);

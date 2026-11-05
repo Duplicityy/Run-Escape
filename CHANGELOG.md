@@ -8,6 +8,7 @@ the version in the corner).
 ### Added
 
 - An Android app with online co-op and bundled game files for solo play in airplane mode.
+- The Android app downloads game updates from the developer's desktop releases automatically.
 
 ## 0.24.1 - 2026-11-04
 

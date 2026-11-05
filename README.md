@@ -137,9 +137,15 @@ and Export and Import in Settings carry one across.
 ## Android
 
 The Android APK bundles the game and its slim cache, so solo play works in airplane mode,
-including the first launch. Online co-op uses the same relay and game build as the desktop app.
-It needs a current Android System WebView; the app checks support when opened and offers an
-update link if needed. Import and export in Settings carry saves between the app and a browser.
+including the first launch. When opened online, it checks the original developer's
+[desktop releases](https://github.com/Dynrothe/Run-Escape/releases) and downloads newer game
+files automatically. Saves stay on the device, and an unavailable or failed update leaves the
+installed game playable. Game updates do not require another APK installation; changes to the
+Android wrapper still do.
+
+Online co-op uses the same relay and game build as the desktop app. It needs a current Android
+System WebView; the app checks support when opened and offers an update link if needed. Import
+and export in Settings carry saves between the app and a browser.
 
 Android builds can be enabled alongside the Windows ZIP in the same release. See
 [Android](docs/DEVELOPMENT.md#android) for building an APK, configuring co-op and signing releases.
