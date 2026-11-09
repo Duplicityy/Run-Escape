@@ -811,6 +811,7 @@ export function createRelay(limits = {}) {
             mapId: room.mapId,
             endless: room.endless,
             hard: room.hard,
+            pauseMode: room.pauseMode,
             started: room.started,
             members: room.members.map((client) => ({
                 id: client.id,
@@ -1123,6 +1124,13 @@ export function createRelay(limits = {}) {
                 return;
             }
             case "create": {
+                if (
+                    message.pauseMode !== undefined &&
+                    !["host", "vote"].includes(message.pauseMode)
+                ) {
+                    error("Choose Host controlled or Majority vote for pauses.");
+                    return;
+                }
                 if (rooms.size >= maxRooms) {
                     error(FULL_TEXT);
                     return;
@@ -1157,6 +1165,7 @@ export function createRelay(limits = {}) {
                     mapId: cleanId(message.mapId) || "lumbridge",
                     endless: message.endless === true,
                     hard: message.hard === true,
+                    pauseMode: message.pauseMode ?? "host",
                     started: false,
                     members: [client],
                     order: nextRoomOrder++,
@@ -1263,6 +1272,13 @@ export function createRelay(limits = {}) {
                 return;
             case "settings":
                 if (isHost && !room.started) {
+                    if (
+                        message.pauseMode !== undefined &&
+                        !["host", "vote"].includes(message.pauseMode)
+                    ) {
+                        error("Choose Host controlled or Majority vote for pauses.");
+                        return;
+                    }
                     if (message.open !== undefined) {
                         room.open = message.open === true;
                     }
@@ -1273,6 +1289,7 @@ export function createRelay(limits = {}) {
                     const endless =
                         message.endless !== undefined ? message.endless === true : room.endless;
                     const hard = message.hard !== undefined ? message.hard === true : room.hard;
+                    const pauseMode = message.pauseMode ?? room.pauseMode;
                     // Only a map everyone in the room has
                     const missing = missingMap(
                         room.members.map((member) => ({ client: member })),
@@ -1287,6 +1304,12 @@ export function createRelay(limits = {}) {
                         room.mapId = mapId;
                         room.endless = endless;
                         room.hard = hard;
+                        if (pauseMode !== room.pauseMode) {
+                            room.pauseMode = pauseMode;
+                            for (const member of room.members) {
+                                member.ready = false;
+                            }
+                        }
                     }
                     roomChanged(room);
                 }
@@ -1332,7 +1355,13 @@ export function createRelay(limits = {}) {
                     room.started = true;
                     const start = encodeFrame(
                         0x1,
-                        Buffer.from(JSON.stringify({ t: "start", game: message.game }), "utf8"),
+                        Buffer.from(
+                            JSON.stringify({
+                                t: "start",
+                                game: { ...message.game, pauseMode: room.pauseMode },
+                            }),
+                            "utf8",
+                        ),
                     );
                     counters.runsStarted++;
                     for (const member of room.members) {

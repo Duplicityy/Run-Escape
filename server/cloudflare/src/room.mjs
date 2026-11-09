@@ -202,7 +202,11 @@ export class Room extends DurableObject {
         this.code = saved.code;
         this.kicked = new Set(saved.kicked);
         const { members, kicked, ...fields } = saved;
-        const room = { ...fields, members: [] };
+        const room = {
+            ...fields,
+            pauseMode: fields.pauseMode === "vote" ? "vote" : "host",
+            members: [],
+        };
         this.room = room;
         for (const memberFields of members) {
             const member = this.newMember(memberFields);
@@ -363,6 +367,7 @@ export class Room extends DurableObject {
             mapId: room.mapId,
             endless: room.endless,
             hard: room.hard === true,
+            pauseMode: room.pauseMode,
             started: room.started,
             members: room.members.map((client) => ({
                 id: client.id,
@@ -557,6 +562,13 @@ export class Room extends DurableObject {
                 return;
             case "settings":
                 if (isHost && !room.started) {
+                    if (
+                        message.pauseMode !== undefined &&
+                        !["host", "vote"].includes(message.pauseMode)
+                    ) {
+                        error("Choose Host controlled or Majority vote for pauses.");
+                        return;
+                    }
                     const open = message.open !== undefined ? message.open === true : room.open;
                     const mapId =
                         message.mapId !== undefined
@@ -566,6 +578,7 @@ export class Room extends DurableObject {
                         message.endless !== undefined ? message.endless === true : room.endless;
                     const hard =
                         message.hard !== undefined ? message.hard === true : room.hard === true;
+                    const pauseMode = message.pauseMode ?? room.pauseMode;
                     const missing = missingMap(
                         this.anyMap,
                         room.members.map((member) => ({ client: member })),
@@ -582,12 +595,19 @@ export class Room extends DurableObject {
                         (!missing &&
                             (mapId !== room.mapId ||
                                 endless !== room.endless ||
-                                hard !== (room.hard === true)));
+                                hard !== (room.hard === true) ||
+                                pauseMode !== room.pauseMode));
                     room.open = open;
                     if (!missing) {
                         room.mapId = mapId;
                         room.endless = endless;
                         room.hard = hard;
+                        if (pauseMode !== room.pauseMode) {
+                            room.pauseMode = pauseMode;
+                            for (const member of room.members) {
+                                member.ready = false;
+                            }
+                        }
                     }
                     // Nothing to save or send for a setting as it was, and
                     // as "me", only the latest of a burst every
@@ -643,7 +663,10 @@ export class Room extends DurableObject {
                     }
                     this.persist(true);
                     for (const member of room.members) {
-                        this.send(member, { t: "start", game: message.game });
+                        this.send(member, {
+                            t: "start",
+                            game: { ...message.game, pauseMode: room.pauseMode },
+                        });
                     }
                     this.broadcastRoom();
                 }
@@ -687,6 +710,13 @@ export class Room extends DurableObject {
             this.closeSocket(client);
             return;
         }
+        if (message.pauseMode !== undefined && !["host", "vote"].includes(message.pauseMode)) {
+            this.send(client, {
+                t: "error",
+                message: "Choose Host controlled or Majority vote for pauses.",
+            });
+            return;
+        }
         this.setMember(client, message.me ?? {});
         client.ready = false;
         client.token = randomToken();
@@ -699,6 +729,7 @@ export class Room extends DurableObject {
             mapId: cleanId(message.mapId) || "lumbridge",
             endless: message.endless === true,
             hard: message.hard === true,
+            pauseMode: message.pauseMode ?? "host",
             started: false,
             members: [client],
             order: now,

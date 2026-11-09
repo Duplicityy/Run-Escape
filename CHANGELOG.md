@@ -3,6 +3,12 @@
 What's changed in Run Escape, newest first. The game shows this on its title screen too (click
 the version in the corner).
 
+## Unreleased
+
+### Added
+
+- Co-op pauses: choose host control or a majority vote in the lobby, then resume together with a three-second countdown.
+
 ## 0.24.1 - 2026-11-04
 
 ### Changed
@@ -22,16 +28,16 @@ the version in the corner).
 - Raids, by Okaeri: the Theatre of Blood, a new section on the map screen. Six rooms one after
   another, each with its own waves and then its boss in its real room from OSRS, fought as a
   bullet hell. It's a melee raid: its bosses take far less from missiles and magic.
-  - Raid points for each room, more for a fast, clean kill: they pay coins, buy food and potions from
-    a supply chest between rooms, and better your chance of a purple from the chest at the end.
-  - The Theatre's uniques for the Collection log, Lil' Zik, and two weapons: the Ghrazi rapier for
-    beating it, and the Holy Scythe of Vitur for beating it on hard.
-  - The raid runs through Morytania: each room fights its waves in a real place, from the woods
-    outside Canifis to Vampyrium. Bones and coins left on a hall floor go with you to its boss.
-  - Teleporters: once you've killed a room's boss, its hall has a portal straight to it (three a raid),
-    to get back to the boss you're learning quicker.
-  - Beat the raid on hard for expert mode, with more of the real raid's mechanics, twice the coins
-    and Lil' Zik's looks.
+    - Raid points for each room, more for a fast, clean kill: they pay coins, buy food and potions from
+      a supply chest between rooms, and better your chance of a purple from the chest at the end.
+    - The Theatre's uniques for the Collection log, Lil' Zik, and two weapons: the Ghrazi rapier for
+      beating it, and the Holy Scythe of Vitur for beating it on hard.
+    - The raid runs through Morytania: each room fights its waves in a real place, from the woods
+      outside Canifis to Vampyrium. Bones and coins left on a hall floor go with you to its boss.
+    - Teleporters: once you've killed a room's boss, its hall has a portal straight to it (three a raid),
+      to get back to the boss you're learning quicker.
+    - Beat the raid on hard for expert mode, with more of the real raid's mechanics, twice the coins
+      and Lil' Zik's looks.
 - Phosani's Nightmare: a boss fight on its own, open once Hallowed Night's beaten. One fight in
   the Sisterhood Sanctuary under Slepe, with no waves, picks or items: everything The Nightmare
   has, quicker, plus bullet hell patterns, eggs that hatch parasites and husks that hold you where

@@ -4,7 +4,7 @@ Everything in the game, map by map and system by system. The [README](../README.
 version and how to run it.
 
 - **WASD** or the arrow keys to move. Weapons fire on their own. **1-4** use your utility items.
-  **Esc** pauses. **Q** shows or hides the quest tracker. **Tab**, or clicking the DPS under the
+  **Esc** pauses a solo run, or opens your own menu in co-op. **Q** shows or hides the quest tracker. **Tab**, or clicking the DPS under the
   minimap, shows each weapon's damage a second and its total for the run. The mouse wheel zooms.
 - On a touch screen, drag anywhere to move: the stick appears under your thumb. Tap the buttons on
   screen to pause and use items, with the thumb still on the stick if you like. Tap the DPS for each
@@ -595,7 +595,17 @@ version and how to run it.
       be hurt, and enemies leave them alone for a teammate instead (unless nobody else is
       up); food, coins and caskets are theirs to pick up all the while. Level ups the party had while they were down are theirs to choose once they're
       back.
-    - The pause menu doesn't stop a co-op run. Leaving it takes you out of the party; the host
+    - **Pausing**: before starting, the host picks **Host controlled** (the default) or
+      **Majority vote**. **Esc** opens your own menu while the run continues. In Host controlled,
+      the host can **Pause run**, and everyone else can **Request pause**. In Majority vote,
+      anyone can **Vote to pause**: their vote counts as yes, and the party has 10 seconds to
+      approve. It takes 3 of 4 players, 2 of 3, both of 2, or the lone player's own vote. Downed
+      players count too. If the vote fails, wait 15 seconds before another; if someone leaves,
+      the vote is cancelled and the remaining party can start a fresh one.
+    - During a shared pause, movement, attacks, cooldowns, revives and the run's clock stop;
+      the 20-second limit for choosing a reward stops too. Everyone can mark **Ready to resume**.
+      Everyone ready, or the host's **Resume everyone**, starts a three-second countdown. Closing
+      your own menu doesn't resume the run. Leaving the run takes you out of the party; the host
       leaving ends it for everyone.
     - Teammates show with their names in green, an arrow at the edge of the screen when they're out
       of view, green dots on the minimap and their hitpoints down the left of the screen.

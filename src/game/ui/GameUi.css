@@ -1724,6 +1724,101 @@
     background: rgba(0, 0, 0, 0.45);
 }
 
+.ui-coop-paused {
+    z-index: 5;
+}
+
+.ui-coop-paused-panel {
+    width: min(440px, calc(94vw / var(--ui-scale)));
+    max-height: calc(90vh / var(--ui-scale));
+    overflow-y: auto;
+    box-sizing: border-box;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+}
+
+.ui-coop-pause-banner {
+    position: absolute;
+    z-index: 6;
+    top: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(94vw / var(--ui-scale));
+    box-sizing: border-box;
+    padding: 8px 12px;
+    pointer-events: auto;
+}
+
+.ui-coop-pause-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ui-coop-pause-controls .ui-subtle {
+    margin: 0;
+}
+
+.ui-coop-pause-title {
+    margin: 0;
+    text-align: center;
+    color: var(--ui-yellow);
+}
+
+.ui-coop-pause-players {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.ui-coop-pause-players li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--ui-divider);
+}
+
+.ui-coop-pause-players li span:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.ui-coop-pause-players li span:last-child {
+    flex-shrink: 0;
+}
+
+.ui-coop-pause-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.ui-coop-paused-panel > .ui-coop-pause-actions {
+    margin-top: 14px;
+}
+
+.ui-coop-pause-menu {
+    flex-shrink: 0;
+    margin-bottom: 10px;
+    padding: 8px;
+    border: 1px solid var(--ui-divider);
+}
+
+@media (pointer: coarse) {
+    .ui-coop-paused-panel {
+        animation: ui-touch-guard 0.3s step-end both;
+    }
+
+    .ui-coop-paused-panel .ui-button,
+    .ui-coop-pause-banner .ui-button {
+        min-height: 44px;
+    }
+}
+
 .ui-levelup {
     width: min(560px, calc(94vw / var(--ui-scale)));
 }

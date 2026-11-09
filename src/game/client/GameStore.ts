@@ -7,6 +7,7 @@ import { NewerSave, SaveData, UnreadableSave } from "../core/save";
 import { DisplaySettings } from "./DisplaySettings";
 import { AudioSettings } from "./GameAudio";
 import { CoopView, OFFLINE } from "./coop/CoopLobby";
+import { CoopPauseView } from "./coop/protocol";
 
 export type Screen =
     | "loading"
@@ -368,6 +369,8 @@ export type UiSnapshot = {
     // Co-op: the room and its menus, everyone else in the run, and who the
     // run's waiting on to choose (when it isn't you)
     coop: CoopView;
+    // Shared pause controls are separate from this player's open menu.
+    coopPause?: CoopPauseView;
     party: TeammateView[];
     waitingOn: string[];
     // Co-op: a revive you're part of, as the one down or the one reviving
