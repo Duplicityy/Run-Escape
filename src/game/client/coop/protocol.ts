@@ -2,6 +2,36 @@
 // as JSON over a WebSocket
 import { CoopAction, FrameEvent } from "../../core/lockstep";
 
+export type PauseMode = "host" | "vote";
+
+export type CoopPauseView = {
+    mode: PauseMode;
+    phase: "running" | "paused" | "resuming";
+    atFrame: number;
+    requestedBy?: string;
+    requests: string[];
+    eligible: string[];
+    ready: string[];
+    vote?: {
+        requestedBy: string;
+        yes: string[];
+        no: string[];
+        required: number;
+        remainingMs: number;
+    };
+    resumeRemainingMs?: number;
+    cooldownRemainingMs: number;
+};
+
+// Controls keep travelling while no simulation frames are being produced.
+export type CoopPauseSnapshot = CoopPauseView & { revision: number; inputEpoch: number };
+export type PauseControl =
+    | { kind: "pause"; epoch: number }
+    | { kind: "vote"; yes: boolean; revision: number }
+    | { kind: "ready"; ready: boolean; revision: number }
+    | { kind: "resume"; revision: number }
+    | { kind: "sync"; after: number };
+
 // What a player brings to a run from their save, for everyone's copy of it
 export type Loadout = {
     metaStats: Record<string, number>;
@@ -48,6 +78,7 @@ export type RoomView = {
     mapId: string;
     endless: boolean;
     hard: boolean;
+    pauseMode?: PauseMode;
     // A run is under way
     started: boolean;
     members: MemberView[];
@@ -74,6 +105,7 @@ export type GameStart = {
     mapId: string;
     endless: boolean;
     hard: boolean;
+    pauseMode?: PauseMode;
     heroes: { id: string; name: string; characterId: string; loadout: Loadout }[];
 };
 
@@ -88,6 +120,7 @@ export function isGameStart(value: unknown, maxParty: number): value is GameStar
         typeof game.mapId === "string" &&
         typeof game.endless === "boolean" &&
         typeof game.hard === "boolean" &&
+        (game.pauseMode === undefined || game.pauseMode === "host" || game.pauseMode === "vote") &&
         Array.isArray(game.heroes) &&
         game.heroes.length > 0 &&
         game.heroes.length <= maxParty &&
@@ -111,9 +144,10 @@ export type GoneReason = "left" | "kicked" | "disbanded" | "hostLeft" | "idle";
 // A guest to the host: a move, something they did, or that their copy of the
 // run is ready to go (the map's loaded)
 export type UpMessage =
-    | { move: [number, number]; moveSeq?: number }
-    | { action: CoopAction; actionSeq?: number }
+    | { move: [number, number]; moveSeq?: number; epoch?: number }
+    | { action: CoopAction; actionSeq?: number; epoch?: number }
     | { loaded: true }
+    | { control: PauseControl }
     // The frames after this one again: some of the host's went missing (a
     // dropped connection)
     | { resend: number };
@@ -127,6 +161,9 @@ export type DownMessage = {
     upTo: number;
     events: FrameEvent[];
     hash?: [number, number];
+    pause?: CoopPauseSnapshot;
+    // This carries state, not a claim that any missing frames were received.
+    controlOnly?: true;
 };
 
 export type ClientMessage =
@@ -139,6 +176,7 @@ export type ClientMessage =
           mapId: string;
           endless: boolean;
           hard: boolean;
+          pauseMode?: PauseMode;
           me: Partial<Member>;
       }
     | { t: "join"; code: string; me: Partial<Member> }
@@ -146,7 +184,14 @@ export type ClientMessage =
     | ({ t: "me" } & Partial<Member>)
     // A new name, from the relay (not during a run)
     | { t: "rename" }
-    | { t: "settings"; open?: boolean; mapId?: string; endless?: boolean; hard?: boolean }
+    | {
+          t: "settings";
+          open?: boolean;
+          mapId?: string;
+          endless?: boolean;
+          hard?: boolean;
+          pauseMode?: PauseMode;
+      }
     | { t: "kick"; id: string }
     | { t: "disband" }
     | { t: "start"; game: GameStart }

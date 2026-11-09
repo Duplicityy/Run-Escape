@@ -118,6 +118,28 @@
     gap: 4px;
 }
 
+.ui-coop-pause-setting {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    margin: 8px 0;
+}
+
+.ui-coop-pause-setting .ui-coop-choice {
+    flex-wrap: wrap;
+}
+
+.ui-coop-pause-setting .ui-button {
+    flex: 1 1 auto;
+}
+
+.ui-coop-pause-hint {
+    flex-basis: 100%;
+    color: #b8aa8a;
+    font-size: 14px;
+}
+
 .ui-coop-choice .ui-button {
     flex: 1;
 }

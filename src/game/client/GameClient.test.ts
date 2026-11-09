@@ -20,8 +20,9 @@ import {
     loadDisplaySettings,
     saveDisplaySettings,
 } from "./DisplaySettings";
-import { GameClient, loadoutStats } from "./GameClient";
+import { GameClient, TICK_MS, loadoutStats } from "./GameClient";
 import { GameStore } from "./GameStore";
+import { CoopRun } from "./coop/CoopRun";
 
 function createSim(): Sim {
     const row = ".".repeat(72);
@@ -269,6 +270,123 @@ describe("the frame cap", () => {
         // The title screen
         Object.assign(client, { sim: undefined, coopRun: undefined });
         expect(stopped(client)).toBe(true);
+    });
+});
+
+describe("shared co-op pause", () => {
+    function setup(autoAlch = false) {
+        const sim = createSim();
+        const { client, store, sync } = createClient(sim, autoAlch);
+        let now = 0;
+        const getMoveVector = vi.fn(() => ({ x: 0, y: 0 }));
+        const sendDown = vi.fn();
+        const run = new CoopRun(
+            sim,
+            true,
+            { sendUp() {}, sendDown },
+            new Map([["host", 0]]),
+            "host",
+            () => now,
+        );
+        Object.assign(client, {
+            coopRun: run,
+            coop: { setReady: vi.fn() },
+            accumulator: 0,
+            coopStopped: false,
+            decisionKey: "",
+            input: { getMoveVector },
+            move: { x: 0, y: 0 },
+            autoAlchedUid: -1,
+        });
+        const internal = client as unknown as {
+            updateCoop(delta: number, sim: Sim, run: CoopRun): void;
+            isPlaying(): boolean;
+            isStoppedBehindMenu(): boolean;
+            getAlpha(): number;
+            act(action: { kind: "item"; index: number }): boolean;
+        };
+        return {
+            sim,
+            client,
+            store,
+            sync,
+            run,
+            getMoveVector,
+            internal,
+            advance(ms: number) {
+                now += ms;
+                internal.updateCoop(ms, sim, run);
+            },
+        };
+    }
+
+    test("the personal menu leaves co-op running and never resumes a shared pause", () => {
+        const { client, run, store, internal, advance } = setup();
+        client.pause();
+        expect(store.getSnapshot().overlay).toBe("paused");
+        expect(run.matchPaused).toBe(false);
+        advance(TICK_MS);
+        expect(run.frame).toBe(1);
+        client.requestCoopPause();
+        client.resume();
+        expect(store.getSnapshot().overlay).toBe("none");
+        expect(store.getSnapshot().coopPause?.phase).toBe("paused");
+        expect(run.frozen).toBe(true);
+        expect(internal.isPlaying()).toBe(false);
+        expect(internal.isStoppedBehindMenu()).toBe(true);
+        expect(internal.getAlpha()).toBe(1);
+    });
+
+    test("a long pause keeps controls alive and doesn't accumulate catch-up time", () => {
+        const { client, run, store, getMoveVector, advance } = setup();
+        client.requestCoopPause();
+        advance(60_000);
+        expect(run.frame).toBe(0);
+        expect(getMoveVector).not.toHaveBeenCalled();
+        client.setCoopReady(true);
+        expect(store.getSnapshot().coopPause?.phase).toBe("resuming");
+        advance(2000);
+        expect(store.getSnapshot().coopPause?.resumeRemainingMs).toBe(1000);
+        expect(run.frame).toBe(0);
+        advance(60_000);
+        expect(store.getSnapshot().coopPause?.phase).toBe("running");
+        expect(run.frame).toBe(0);
+        advance(TICK_MS);
+        expect(run.frame).toBe(1);
+    });
+
+    test("pausing a casket prevents auto-alch and restores it after resume", () => {
+        const { client, sim, store, run, sync, advance } = setup(true);
+        sim.openCasket("easy");
+        const act = vi.spyOn(run, "act");
+        sync();
+        expect(act).toHaveBeenCalledOnce();
+        client.requestCoopPause();
+        act.mockClear();
+        client.pause();
+        client.resume();
+        advance(30_000);
+        expect(act).not.toHaveBeenCalled();
+        expect(sim.chests).toHaveLength(1);
+        expect(store.getSnapshot().overlay).toBe("none");
+        client.resumeCoopEveryone();
+        advance(3000);
+        expect(act).toHaveBeenCalledExactlyOnceWith({ kind: "chest", action: "alch" });
+        advance(TICK_MS);
+        expect(sim.chests).toHaveLength(0);
+    });
+
+    test("shared pause blocks gameplay actions while the menu opens and closes", () => {
+        const { client, run, internal } = setup();
+        const act = vi.spyOn(run, "act");
+        client.requestCoopPause();
+        expect(internal.act({ kind: "item", index: 0 })).toBe(false);
+        client.pause();
+        expect(internal.act({ kind: "item", index: 0 })).toBe(false);
+        expect(client.paused).toBe(true);
+        client.resume();
+        expect(client.paused).toBe(false);
+        expect(act).not.toHaveBeenCalled();
     });
 });
 

@@ -83,6 +83,16 @@ export class MovementPrediction {
         return this.sequence;
     }
 
+    // A shared pause discards the old timeline without reusing sequence numbers.
+    resetForPause(): void {
+        const time = this.now();
+        this.inputs = [{ seq: this.sequence, at: time, move: [0, 0] }];
+        this.acknowledged = this.sequence;
+        this.applied = [0, 0];
+        this.confirmed = false;
+        this.reset(time);
+    }
+
     // Called AFTER applying a confirmed frame, not just receiving its packet.
     confirm(events: readonly FrameEvent[]): void {
         const time = this.now();

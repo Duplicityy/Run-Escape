@@ -68,6 +68,12 @@ go stale. Add anything that cost you time to work out.
 `src/game/core/` has no DOM or rendering. The UI reads from `GameClient` and `GameStore`, and never
 changes the sim directly.
 
+Co-op's personal menu is separate from shared pause state (`CoopRun`, `protocol.ts`). Only the
+host issues shared pause/resume controls, even in vote mode. Controls have their own revisions:
+they must still arrive while the simulation frame is stopped. Guests drain through the host's
+pause frame before freezing. Keep reconnect state sync, decision timeout suspension and queued
+leave events working during pauses; `docs/DEVELOPMENT.md` (Co-op) describes the rules.
+
 Co-op guests can predict movement, only for display (`client/coop/MovementPrediction.ts` and
 `PlayerPose.ts`). It's on by default, but a player can turn `movePrediction` off in
 `DisplaySettings`, so a guest's `CoopRun.prediction` can be undefined. Keep predicted positions

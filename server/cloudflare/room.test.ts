@@ -105,6 +105,64 @@ describe("Cloudflare co-op room", () => {
         expect((await loadRoom()).room.started).toBe(true);
     });
 
+    it("defaults pauses to host control and validates the mode on creation", async () => {
+        const room = await loadRoom();
+        room.code = "ABCDEFGH";
+        const host = enter(room, "host", "create");
+        say(room, host, { t: "create", pauseMode: "everyone", me });
+        expect(room.room).toBeUndefined();
+        expect(host.socket.sent.at(-1)).toMatchObject({
+            t: "error",
+            message: expect.stringMatching(/pauses/),
+        });
+        say(room, host, { t: "create", me });
+        expect(room.roomView().pauseMode).toBe("host");
+        expect(saved.pauseMode).toBe("host");
+    });
+
+    it("allows only the host to change pause mode before a run, resetting readiness", async () => {
+        const { room, host, guest } = await party();
+        say(room, host, { t: "me", ready: true });
+        say(room, guest, { t: "me", ready: true });
+        say(room, guest, { t: "settings", pauseMode: "vote" });
+        expect(room.room.pauseMode).toBe("host");
+        expect(room.room.members.every((member: any) => member.ready)).toBe(true);
+
+        say(room, host, { t: "settings", pauseMode: "vote" });
+        expect(room.roomView().pauseMode).toBe("vote");
+        expect(room.room.members.every((member: any) => !member.ready)).toBe(true);
+        say(room, host, { t: "me", ready: true });
+        say(room, host, { t: "settings", pauseMode: "vote" });
+        expect(host.ready).toBe(true);
+        say(room, host, { t: "settings", pauseMode: null });
+        expect(room.room.pauseMode).toBe("vote");
+        expect(host.socket.sent.at(-1)).toMatchObject({
+            t: "error",
+            message: expect.stringMatching(/pauses/),
+        });
+
+        vi.advanceTimersByTime(2000);
+        expect(saved.pauseMode).toBe("vote");
+        expect((await loadRoom()).roomView().pauseMode).toBe("vote");
+        say(room, host, { t: "start", game: { seed: 5, pauseMode: "host" } });
+        expect(host.socket.sent.findLast((message: any) => message.t === "start").game).toEqual({
+            seed: 5,
+            pauseMode: "vote",
+        });
+        expect(guest.socket.sent.findLast((message: any) => message.t === "start").game).toEqual({
+            seed: 5,
+            pauseMode: "vote",
+        });
+        say(room, host, { t: "settings", pauseMode: "host" });
+        expect(room.room.pauseMode).toBe("vote");
+    });
+
+    it("restores older rooms with host-controlled pauses", async () => {
+        await party();
+        delete saved.pauseMode;
+        expect((await loadRoom()).roomView().pauseMode).toBe("host");
+    });
+
     it("doesn't bring back someone who left just before a restart", async () => {
         const { room, host, guest } = await party();
         say(room, host, { t: "start", game: {} });
