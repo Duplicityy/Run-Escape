@@ -292,6 +292,13 @@ The APK is in `android/app/build/outputs/apk/debug/`. Without the asset staging 
 can still compile for CI, but it shows a missing-game message instead of playing. Keep generated
 assets, cache files and build outputs out of Git.
 
+For a pause-feature test APK, add `-PpauseTest=true` to `assembleDebug`. It installs as
+**Run Escape Pause Test** (`io.jere.runescapearchive.pausetest`), alongside the regular app with
+its own saves. This debug build keeps the bundled game and disables upstream game updates, so
+an official release cannot replace the feature under test. Release builds keep their usual
+application ID and update behavior. The Android workflow has a matching `pause_test` input;
+pushes to `test/android-coop-pause` build this variant automatically.
+
 `prepare-game.mjs <release directory>` instead reads `game-manifest.json`, checks its version
 and SHA-256, then extracts `game-<version>.zip`. The release workflow uses this form to package
 the exact desktop web build. Both forms require a slim cache with its data and index files.

@@ -180,6 +180,10 @@ existing local HTTPS address: do not change the origin or application ID to serv
 The active game version can be newer than the APK's version. Native Android changes still need
 an APK signed with the existing key. See Android, Game updates in `docs/DEVELOPMENT.md`.
 
+`-PpauseTest=true` is debug-only: it uses `.pausetest` as an application ID suffix and disables
+game updates so the bundled feature survives startup. Keep the regular and release app IDs
+unchanged. The Android workflow enables this variant on `test/android-coop-pause` branches.
+
 `.github/workflows/android.yml` compiles and tests the wrapper on pull requests without the game
 cache. Its manual playable build bundles the cache and uploads an installable debug APK. Official
 Android release signing is opt-in; see Android in `docs/DEVELOPMENT.md`. A wrapper-only change

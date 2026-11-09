@@ -23,6 +23,10 @@ if (gameVersionCode < 1 || gameVersionCode > 2100000000L) {
     throw new GradleException('The game version exceeds the Android versionCode range.')
 }
 def coopUrl = providers.gradleProperty('coopUrl').getOrElse('').trim()
+def pauseTest = providers.gradleProperty('pauseTest').getOrElse('false')
+if (!(pauseTest in ['true', 'false'])) {
+    throw new GradleException('pauseTest must be true or false.')
+}
 if (!coopUrl.isEmpty()) {
     URI relay
     try {
@@ -57,6 +61,8 @@ android {
         versionCode gameVersionCode.toInteger()
         versionName gamePackage.version
         buildConfigField 'String', 'COOP_URL', groovy.json.JsonOutput.toJson(coopUrl)
+        buildConfigField 'boolean', 'GAME_UPDATES_ENABLED', 'true'
+        manifestPlaceholders = [appLabel: 'Run Escape']
     }
 
     buildFeatures {
@@ -75,6 +81,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (pauseTest == 'true') {
+                applicationIdSuffix '.pausetest'
+                manifestPlaceholders = [appLabel: 'Run Escape Pause Test']
+                buildConfigField 'boolean', 'GAME_UPDATES_ENABLED', 'false'
+            }
+        }
         release {
             minifyEnabled false
             if (hasSigning) signingConfig signingConfigs.release

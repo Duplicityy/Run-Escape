@@ -31,6 +31,11 @@ on:
                 description: Relay URL (blank uses COOP_URL or the public game relay)
                 required: false
                 type: string
+            pause_test:
+                description: Install beside the regular app and keep the bundled pause build
+                required: true
+                default: false
+                type: boolean
 
 permissions: {}
 
@@ -45,7 +50,8 @@ jobs:
         permissions:
             contents: read
         env:
-            COOP_URL: ${{ inputs.coop_url || vars.COOP_URL || 'wss://jere.io/coop' }}
+            COOP_URL: ${{ inputs.coop_url || (startsWith(github.ref, 'refs/heads/test/android-coop-pause') && 'wss://jere.io/coop') || vars.COOP_URL || 'wss://jere.io/coop' }}
+            PAUSE_TEST: ${{ inputs.pause_test || startsWith(github.ref, 'refs/heads/test/android-coop-pause') }}
         steps:
             - name: Choose whether to bundle the game
               id: mode
@@ -122,20 +128,47 @@ jobs:
 
             - name: Test and build Android
               working-directory: android
-              run: gradle --no-daemon test :app:assembleDebug -PcoopUrl="$COOP_URL"
+              run: gradle --no-daemon test :app:assembleDebug -PcoopUrl="$COOP_URL" -PpauseTest="$PAUSE_TEST"
+
+            - name: Verify the signed pause test APK
+              if: steps.mode.outputs.playable == 'true' && env.PAUSE_TEST == 'true'
+              run: |
+                  apk=android/app/build/outputs/apk/debug/app-debug.apk
+                  tools="$ANDROID_HOME/build-tools/36.0.0"
+                  "$tools/apksigner" verify --verbose "$apk"
+                  "$tools/aapt" dump badging "$apk" > /tmp/pause-apk-info.txt
+                  grep -F "package: name='io.jere.runescapearchive.pausetest'" /tmp/pause-apk-info.txt
+                  grep -F "application-label:'Run Escape Pause Test'" /tmp/pause-apk-info.txt
+                  grep -R -F 'GAME_UPDATES_ENABLED = false' android/app/build/generated/source/buildConfig/debug
+                  python3 - "$apk" <<'PY'
+                  import json, sys, zipfile
+                  with zipfile.ZipFile(sys.argv[1]) as apk:
+                      assert apk.getinfo('assets/game/index.html').file_size > 0
+                      caches = json.loads(apk.read('assets/game/caches/caches.json'))
+                      assert caches and all(cache.get('slimOf') for cache in caches)
+                      scripts = b'\n'.join(apk.read(name) for name in apk.namelist()
+                                           if name.startswith('assets/game/assets/') and name.endswith('.js'))
+                      for text in [b'Vote to pause', b'Resume everyone', b'Ready to resume']:
+                          assert text in scripts, f'Missing pause UI: {text}'
+                  PY
 
             - name: Name the playable APK
               if: steps.mode.outputs.playable == 'true'
               run: |
                   version=$(node -p "require('./package.json').version")
                   mkdir -p release
-                  cp android/app/build/outputs/apk/debug/app-debug.apk "release/Run-Escape-$version-android-debug.apk"
+                  if [ "$PAUSE_TEST" = true ]; then
+                      name="Run-Escape-$version-pause-test-android.apk"
+                  else
+                      name="Run-Escape-$version-android-debug.apk"
+                  fi
+                  cp android/app/build/outputs/apk/debug/app-debug.apk "release/$name"
 
             - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               if: steps.mode.outputs.playable == 'true'
               with:
-                  name: Run-Escape-Android-debug
-                  path: release/Run-Escape-*-android-debug.apk
+                  name: ${{ env.PAUSE_TEST == 'true' && 'Run-Escape-Android-pause-test' || 'Run-Escape-Android-debug' }}
+                  path: release/Run-Escape-*.apk
                   if-no-files-found: error
                   retention-days: 7
                   compression-level: 0

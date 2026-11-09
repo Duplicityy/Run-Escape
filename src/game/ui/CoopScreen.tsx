@@ -344,16 +344,23 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
                                 (room.pauseMode === "vote" ? " ui-toggle-on" : "")
                             }
                             aria-pressed={room.pauseMode === "vote"}
-                            disabled={!isHost || room.started}
+                            disabled={!isHost || room.started || room.pauseMode === undefined}
+                            title={
+                                room.pauseMode === undefined
+                                    ? "Voting needs an updated multiplayer server."
+                                    : undefined
+                            }
                             onClick={() => client.setCoopPauseMode("vote")}
                         >
                             Majority vote
                         </button>
                     </div>
                     <span className="ui-coop-pause-hint">
-                        {room.pauseMode === "vote"
-                            ? "A majority of the party must agree to pause."
-                            : "The host pauses the run; everyone can request a break."}
+                        {room.pauseMode === undefined
+                            ? "Host-controlled pause is available. Voting needs an updated multiplayer server."
+                            : room.pauseMode === "vote"
+                              ? "A majority of the party must agree to pause."
+                              : "The host pauses the run; everyone can request a break."}
                     </span>
                 </div>
                 <div className="ui-coop-members">

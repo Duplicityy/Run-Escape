@@ -237,6 +237,24 @@ test("the lobby lets only its host change the pause policy before a run", () => 
     expect(actions.setCoopPauseMode).not.toHaveBeenCalled();
 });
 
+test("an older relay keeps host pause available and explains why voting is unavailable", () => {
+    const { store, client, actions } = setup("alice");
+    const coop = store.getSnapshot().coop;
+    store.set({
+        screen: "coop",
+        coop: { ...coop, room: { ...coop.room!, started: false, pauseMode: undefined } },
+    });
+    render(<GameUi store={store} client={client} />);
+    expect(screen.getByRole("button", { name: "Host controlled" })).toBeEnabled();
+    const vote = screen.getByRole("button", { name: "Majority vote" });
+    expect(vote).toBeDisabled();
+    expect(screen.getByText(/Host-controlled pause is available/)).toHaveTextContent(
+        "Voting needs an updated multiplayer server.",
+    );
+    fireEvent.click(vote);
+    expect(actions.setCoopPauseMode).not.toHaveBeenCalled();
+});
+
 test("shared pause settings stay available without returning to gameplay", () => {
     const hud: HudView = {
         mapId: "lumbridge",

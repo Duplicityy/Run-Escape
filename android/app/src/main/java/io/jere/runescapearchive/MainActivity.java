@@ -203,6 +203,12 @@ public final class MainActivity extends Activity {
 
     private void checkForGameUpdates(boolean retryRejected) {
         if (destroyed || updating || webView == null) return;
+        if (!BuildConfig.GAME_UPDATES_ENABLED) {
+            // A feature-test APK must keep its bundled game, including online.
+            currentGame = new GameUpdater.Game(BuildConfig.VERSION_NAME, null);
+            startDiagnostic();
+            return;
+        }
         updating = true;
         gameReady = false;
         gameBootGeneration++;
@@ -338,13 +344,15 @@ public final class MainActivity extends Activity {
             if ("\"ready\"".equals(value)) {
                 GameUpdater.Game game = currentGame;
                 GameUpdater active = updater;
-                updateExecutor.execute(() -> {
-                    try {
-                        active.confirm(game);
-                    } catch (Exception exception) {
-                        Log.i("RunEscape", "Could not clean up old game files", exception);
-                    }
-                });
+                if (active != null) {
+                    updateExecutor.execute(() -> {
+                        try {
+                            active.confirm(game);
+                        } catch (Exception exception) {
+                            Log.i("RunEscape", "Could not clean up old game files", exception);
+                        }
+                    });
+                }
                 handler.postDelayed(() -> {
                     if (!destroyed && generation == gameBootGeneration) menuButton.setVisibility(View.GONE);
                 }, 6000);
@@ -434,9 +442,10 @@ public final class MainActivity extends Activity {
     private void showGameMenu() {
         if (!gameReady || destroyed) return;
         boolean canRestore = currentGame != null && currentGame.directory != null;
+        String updatesOption = BuildConfig.GAME_UPDATES_ENABLED ? "Check for updates" : "About this test build";
         String[] options = canRestore
-                ? new String[]{"Close menu", "Save help", "Restart game", "Check for updates", "About", "Use previous game", "Exit"}
-                : new String[]{"Close menu", "Save help", "Restart game", "Check for updates", "About", "Exit"};
+                ? new String[]{"Close menu", "Save help", "Restart game", updatesOption, "About", "Use previous game", "Exit"}
+                : new String[]{"Close menu", "Save help", "Restart game", updatesOption, "About", "Exit"};
         new AlertDialog.Builder(this).setTitle("Run Escape")
                 .setItems(options, (dialog, which) -> {
                     switch (which) {
@@ -452,6 +461,14 @@ public final class MainActivity extends Activity {
                             startDiagnostic();
                             break;
                         case 3:
+                            if (!BuildConfig.GAME_UPDATES_ENABLED) {
+                                new AlertDialog.Builder(this).setTitle("Run Escape Pause Test")
+                                        .setMessage("This test app keeps its bundled pause build. "
+                                                + "Install a newer test APK to update it. Your regular "
+                                                + "Run Escape app and its progress stay separate.")
+                                        .setPositiveButton("Close", null).show();
+                                break;
+                            }
                             new AlertDialog.Builder(this).setTitle("Check for game updates")
                                     .setMessage("This restarts the game. Finish your current run before checking.")
                                     .setPositiveButton("Check and restart", (prompt, action) -> checkForGameUpdates(true))
@@ -463,7 +480,10 @@ public final class MainActivity extends Activity {
                                     .setMessage("Solo play works offline, including in airplane mode. "
                                             + "Co-op needs an internet connection and an available server.\n\n"
                                             + "Game version: " + version + "\nAndroid app: " + BuildConfig.VERSION_NAME
-                                            + "\nGame updates are checked when the app opens.\n\nGame by Dynrothe.\n"
+                                            + (BuildConfig.GAME_UPDATES_ENABLED
+                                                ? "\nGame updates are checked when the app opens."
+                                                : "\nPause test build: bundled game updates are disabled.")
+                                            + "\n\nGame by Dynrothe.\n"
                                             + "Source: github.com/Dynrothe/Run-Escape\n\n"
                                             + "A fan project, not affiliated with Jagex. "
                                             + "Old School RuneScape assets belong to Jagex.\n\n"
