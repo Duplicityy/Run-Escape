@@ -5,7 +5,7 @@ import { fm, usePortableMath } from "../../core/fmath";
 import { cleanFrameEvent, cleanMove, hasBadNumber, syncHash } from "../../core/lockstep";
 import { makeGrid } from "../../core/world/testGrid";
 import { CoopLink, CoopRun, DECIDE_AFTER_MS } from "./CoopRun";
-import { DownMessage, UpMessage, isGameStart } from "./protocol";
+import { DownMessage, PauseMode, UpMessage, isGameStart } from "./protocol";
 
 function openField(): string[] {
     const rows: string[] = [];
@@ -131,6 +131,363 @@ function expectInStep(runs: CoopRun[]): void {
         expect(syncHash(guest.sim)).toBe(syncHash(host.sim));
     }
 }
+
+function pauseParty(mode: PauseMode = "host", count = 4) {
+    const ids = ["host", "guest1", "guest2", "guest3"].slice(0, count);
+    const clock = { now: 0 };
+    const runs: CoopRun[] = [];
+    const downs: DownMessage[] = [];
+    const ups: UpMessage[][] = ids.map(() => []);
+    const disconnected = new Set<number>();
+    const dropControls = new Set<number>();
+    const heroes = new Map(ids.map((id, index) => [id, index]));
+    ids.forEach((id, focus) => {
+        const sim = new Sim({
+            grid: makeGrid(openField(), 1000, 1000),
+            characterId: "",
+            metaStats: emptyStats(),
+            seed: 3,
+            spawnX: 1036.5,
+            spawnY: 1036.5,
+            party: ids.map((name, index) => ({
+                name,
+                characterId: ["warrior", "wizard", "ranger", "warrior"][index],
+                metaStats: emptyStats(),
+            })),
+            focus,
+        });
+        runs.push(
+            new CoopRun(
+                sim,
+                focus === 0,
+                {
+                    sendUp: (message) => {
+                        ups[focus].push(message);
+                        runs[0].receiveUp(id, message);
+                    },
+                    sendDown: (message) => {
+                        downs.push(message);
+                        runs.slice(1).forEach((guest, index) => {
+                            if (
+                                !disconnected.has(index + 1) &&
+                                !(message.controlOnly && dropControls.has(index + 1))
+                            ) {
+                                guest.receiveDown(message);
+                            }
+                        });
+                    },
+                },
+                heroes,
+                "host",
+                () => clock.now,
+                mode,
+            ),
+        );
+    });
+    ids.slice(1).forEach((id) => runs[0].receiveUp(id, { loaded: true }));
+    const drain = () => {
+        for (const guest of runs.slice(1)) {
+            while (guest.canStep()) guest.stepFrame();
+        }
+    };
+    const advance = (milliseconds: number) => {
+        clock.now += milliseconds;
+        runs.forEach((run) => run.updateControl());
+    };
+    return { host: runs[0], runs, clock, downs, ups, disconnected, dropControls, drain, advance };
+}
+
+describe("shared co-op pause", () => {
+    afterEach(() => usePortableMath(false));
+
+    it("flushes the last quiet frame and lets every guest drain to the same pause boundary", () => {
+        const { host, runs, downs, drain } = pauseParty();
+        host.stepFrame();
+        host.flush();
+        expect(downs).toEqual([]);
+
+        host.requestPause();
+        expect(host.matchPaused).toBe(true);
+        expect(host.frozen).toBe(true);
+        expect(host.canStep()).toBe(false);
+        expect(host.pause.atFrame).toBe(1);
+        expect(downs.some((message) => message.upTo === 1 && !message.controlOnly)).toBe(true);
+        for (const guest of runs.slice(1)) {
+            expect(guest.matchPaused).toBe(true);
+            expect(guest.frozen).toBe(false);
+            expect(guest.canStep()).toBe(true);
+        }
+
+        drain();
+        for (const guest of runs.slice(1)) {
+            expect(guest.frame).toBe(1);
+            expect(guest.frozen).toBe(true);
+            expect(guest.canStep()).toBe(false);
+            expect(syncHash(guest.sim)).toBe(syncHash(host.sim));
+        }
+    });
+
+    it("notifies the host of guest requests without pausing a host-controlled match", () => {
+        const { host, runs } = pauseParty();
+        runs[1].requestPause();
+        expect(host.pause.requests).toEqual(["guest1"]);
+        expect(host.matchPaused).toBe(false);
+        expect(host.pause.vote).toBeUndefined();
+        host.requestPause();
+        expect(runs.every((run) => run.matchPaused)).toBe(true);
+    });
+
+    it("doesn't repeat an old pause request after an intervening pause and resume", () => {
+        const { host, runs, ups, advance } = pauseParty();
+        runs[1].requestPause();
+        const oldRequest = ups[1].find((message) => "control" in message)!;
+        host.requestPause();
+        host.resumeEveryone();
+        advance(3000);
+        host.receiveUp("guest1", oldRequest);
+        expect(host.pause.requests).toEqual([]);
+        runs[1].requestPause();
+        expect(host.pause.requests).toEqual(["guest1"]);
+    });
+
+    it("requires three of four votes, including a downed player's vote", () => {
+        const { host, runs } = pauseParty("vote");
+        host.sim.heroes[3].player.hp = 0;
+        runs[1].requestPause();
+        expect(host.pause.vote).toMatchObject({
+            requestedBy: "guest1",
+            yes: ["guest1"],
+            required: 3,
+            remainingMs: 10_000,
+        });
+        expect(host.pause.eligible).toContain("guest3");
+        runs[2].votePause(true);
+        expect(host.matchPaused).toBe(false);
+        runs[3].votePause(true);
+        expect(host.matchPaused).toBe(true);
+        expect(host.pause.vote).toBeUndefined();
+    });
+
+    it("requires both votes in a two-player match", () => {
+        const { host, runs } = pauseParty("vote", 2);
+        runs[1].requestPause();
+        expect(host.pause.vote?.required).toBe(2);
+        expect(host.matchPaused).toBe(false);
+        host.votePause(true);
+        expect(host.matchPaused).toBe(true);
+    });
+
+    it("expires a ballot and prevents another request during the failed-vote cooldown", () => {
+        const { host, runs, advance } = pauseParty("vote");
+        runs[1].requestPause();
+        advance(10_000);
+        expect(host.pause.vote).toBeUndefined();
+        expect(host.matchPaused).toBe(false);
+        expect(host.pause.cooldownRemainingMs).toBe(15_000);
+        runs[2].requestPause();
+        expect(host.pause.vote).toBeUndefined();
+        advance(14_999);
+        expect(host.pause.cooldownRemainingMs).toBe(1);
+        advance(1);
+        runs[2].requestPause();
+        expect(host.pause.vote?.requestedBy).toBe("guest2");
+    });
+
+    it("cancels an open ballot when a participant permanently leaves", () => {
+        const { host, runs } = pauseParty("vote");
+        runs[1].requestPause();
+        runs[2].votePause(true);
+        host.playerLeft("guest3");
+        expect(host.pause.vote).toBeUndefined();
+        expect(host.matchPaused).toBe(false);
+        expect(host.pause.eligible).toEqual(["host", "guest1", "guest2"]);
+        expect(host.pause.cooldownRemainingMs).toBe(0);
+        runs[1].requestPause();
+        expect(host.pause.vote).toMatchObject({ requestedBy: "guest1", required: 2 });
+    });
+
+    it("keeps simulation frozen through the all-ready countdown", () => {
+        const { host, runs, drain, advance } = pauseParty();
+        host.stepFrame();
+        host.requestPause();
+        drain();
+        for (const run of runs) run.setReadyToResume(true);
+        expect(host.pause.phase).toBe("resuming");
+        expect(host.pause.resumeRemainingMs).toBe(3000);
+        advance(2999);
+        expect(host.canStep()).toBe(false);
+        expect(host.frame).toBe(1);
+        expect(host.pause.resumeRemainingMs).toBe(1);
+        advance(1);
+        expect(runs.every((run) => !run.matchPaused)).toBe(true);
+        expect(host.canStep()).toBe(true);
+    });
+
+    it("lets the host resume without an absent player's ready vote", () => {
+        const { host, runs, advance } = pauseParty();
+        host.requestPause();
+        runs[1].resumeEveryone();
+        expect(host.pause.phase).toBe("paused");
+        host.resumeEveryone();
+        expect(host.pause.phase).toBe("resuming");
+        advance(3000);
+        expect(host.pause.phase).toBe("running");
+    });
+
+    it("cancels an all-ready countdown when someone withdraws readiness", () => {
+        const { host, runs, advance } = pauseParty();
+        host.requestPause();
+        for (const run of runs) run.setReadyToResume(true);
+        advance(1000);
+        runs[1].setReadyToResume(false);
+        expect(host.pause.phase).toBe("paused");
+        advance(3000);
+        expect(host.matchPaused).toBe(true);
+        host.resumeEveryone();
+        runs[1].setReadyToResume(false);
+        expect(host.pause.phase).toBe("resuming");
+        advance(3000);
+        expect(host.matchPaused).toBe(false);
+    });
+
+    it("restores frozen state and missing final frames after reconnect with no newer frames", () => {
+        const { host, runs, disconnected, ups, drain } = pauseParty();
+        disconnected.add(1);
+        host.stepFrame();
+        host.requestPause();
+        const guest = runs[1];
+        expect(guest.frame).toBe(0);
+        expect(guest.matchPaused).toBe(false);
+        disconnected.delete(1);
+        guest.resumed();
+        expect(ups[1]).toContainEqual({ control: { kind: "sync", after: 0 } });
+        expect(guest.matchPaused).toBe(true);
+        drain();
+        expect(guest.frozen).toBe(true);
+        expect(guest.frame).toBe(host.frame);
+        expect(syncHash(guest.sim)).toBe(syncHash(host.sim));
+    });
+
+    it("processes readiness and resume controls even when the frame watermark is unchanged", () => {
+        const { host, runs, advance } = pauseParty();
+        host.requestPause();
+        runs[1].setReadyToResume(true);
+        expect(runs[2].pause.ready).toContain("guest1");
+        host.resumeEveryone();
+        expect(runs[2].pause.phase).toBe("resuming");
+        advance(3000);
+        expect(runs[2].pause.phase).toBe("running");
+        expect(runs[2].frame).toBe(0);
+    });
+
+    it("recovers from lost resume controls when the host sends the next real frame", () => {
+        const { host, runs, dropControls, drain, advance } = pauseParty();
+        host.requestPause();
+        dropControls.add(1);
+        host.resumeEveryone();
+        advance(3000);
+        expect(host.matchPaused).toBe(false);
+        expect(runs[1].matchPaused).toBe(true);
+        host.stepFrame();
+        host.flush(true);
+        expect(runs[1].matchPaused).toBe(false);
+        expect(runs[1].canStep()).toBe(true);
+        drain();
+        expect(runs[1].frame).toBe(host.frame);
+        expect(syncHash(runs[1].sim)).toBe(syncHash(host.sim));
+    });
+
+    it("clears queued game actions while preserving deterministic departures", () => {
+        const { host, runs, advance } = pauseParty();
+        host.act({ kind: "item", index: 0 });
+        host.receiveUp("guest1", { move: [127, 0] });
+        host.playerLeft("guest3");
+        host.requestPause();
+        expect(host.act({ kind: "item", index: 1 })).toBe(false);
+        expect(runs[1].act({ kind: "item", index: 1 })).toBe(false);
+        host.resumeEveryone();
+        advance(3000);
+        const events = host.stepFrame();
+        expect(events.some((event) => event.leave && event.hero === 3)).toBe(true);
+        expect(events.some((event) => event.action)).toBe(false);
+        expect(events.some((event) => event.move?.[0] === 127)).toBe(false);
+        expect(host.sim.heroes[3].left).toBe(true);
+    });
+
+    it("rejects old gameplay input replayed after pause has ended", () => {
+        const { host, runs, advance } = pauseParty();
+        host.requestPause();
+        host.resumeEveryone();
+        advance(3000);
+        host.receiveUp("guest1", { move: [127, 0], epoch: 0 });
+        host.receiveUp("guest1", { action: { kind: "item", index: 0 }, actionSeq: 1, epoch: 0 });
+        const events = host.stepFrame();
+        expect(events.some((event) => event.action)).toBe(false);
+        expect(events.some((event) => event.move?.[0] === 127)).toBe(false);
+        runs[1].setMove(1, 0);
+        expect(host.stepFrame()).toContainEqual(
+            expect.objectContaining({ hero: 1, move: [127, 0] }),
+        );
+    });
+
+    it("does not replay cancelled unconfirmed actions after reconnecting", () => {
+        const { host, runs, ups, advance } = pauseParty();
+        runs[1].act({ kind: "item", index: 0 });
+        host.requestPause();
+        host.resumeEveryone();
+        advance(3000);
+        ups[1].length = 0;
+        runs[1].resumed();
+        expect(ups[1].some((message) => "action" in message)).toBe(false);
+        expect(host.stepFrame().some((event) => event.action)).toBe(false);
+    });
+
+    it("keeps guest movement sequence numbers increasing when prediction restarts after pause", () => {
+        const { host, runs, ups, drain, advance } = pauseParty();
+        const guest = runs[1];
+        guest.setMove(1, 0);
+        const first = ups[1].find((message) => "move" in message);
+        expect(first && "moveSeq" in first && first.moveSeq).toBeGreaterThan(0);
+        host.stepFrame();
+        host.flush(true);
+        drain();
+        host.requestPause();
+        host.resumeEveryone();
+        advance(3000);
+        guest.setMove(0, -1);
+        const last = ups[1].at(-1);
+        expect(last && "moveSeq" in last && last.moveSeq).toBeGreaterThan(
+            first && "moveSeq" in first ? first.moveSeq! : 0,
+        );
+    });
+
+    it("does not count a long shared pause toward an unanswered decision timeout", () => {
+        const { host, runs, clock, drain, advance } = pauseParty();
+        for (const run of runs) run.sim.xp = 100;
+        host.stepFrame();
+        host.flush(true);
+        drain();
+        for (const run of runs.slice(0, 3)) run.act({ kind: "choose", index: 0 });
+        host.stepFrame();
+        host.flush(true);
+        drain();
+        expect(host.sim.waitingOn.map((hero) => hero.index)).toEqual([3]);
+        clock.now = 5000;
+        host.requestPause();
+        advance(60_000);
+        host.resumeEveryone();
+        advance(3000);
+        const pending = host.sim.heroes[3].pendingLevelUps;
+        expect(host.stepFrame().some((event) => event.auto)).toBe(false);
+        expect(host.sim.heroes[3].pendingLevelUps).toBe(pending);
+        advance(14_999);
+        expect(host.stepFrame().some((event) => event.auto)).toBe(false);
+        advance(2);
+        expect(host.stepFrame()).toContainEqual(
+            expect.objectContaining({ hero: 3, auto: true, action: { kind: "choose", index: 0 } }),
+        );
+    });
+});
 
 describe("co-op lockstep", () => {
     afterEach(() => usePortableMath(false));
@@ -456,7 +813,10 @@ describe("co-op lockstep", () => {
         });
         ups.length = 0;
         guest.resumed();
-        expect(ups).toEqual([{ action: { kind: "item", index: 1 }, actionSeq: 2 }]);
+        expect(ups).toEqual([
+            { control: { kind: "sync", after: 1 } },
+            { action: { kind: "item", index: 1 }, actionSeq: 2 },
+        ]);
 
         // It had reached the host the first time: the second is the same one
         const { run: host } = hostRun({ now: 0 });
@@ -643,6 +1003,9 @@ describe("co-op lockstep", () => {
         expect(isGameStart(good, 4)).toBe(true);
         expect(isGameStart(undefined, 4)).toBe(false);
         expect(isGameStart({ ...good, hard: "yes" }, 4)).toBe(false);
+        expect(isGameStart({ ...good, pauseMode: "vote" }, 4)).toBe(true);
+        expect(isGameStart({ ...good, pauseMode: "host" }, 4)).toBe(true);
+        expect(isGameStart({ ...good, pauseMode: "anyone" }, 4)).toBe(false);
         expect(isGameStart({ ...good, heroes: Array(5).fill(good.heroes[0]) }, 4)).toBe(false);
         expect(isGameStart({ ...good, heroes: [{ ...good.heroes[0], name: 5 }] }, 4)).toBe(false);
         // Two heroes with one id would be one player twice over

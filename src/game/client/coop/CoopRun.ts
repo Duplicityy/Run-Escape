@@ -11,7 +11,14 @@ import {
     syncHash,
 } from "../../core/lockstep";
 import { MovementPrediction } from "./MovementPrediction";
-import { DownMessage, UpMessage } from "./protocol";
+import {
+    CoopPauseSnapshot,
+    CoopPauseView,
+    DownMessage,
+    PauseControl,
+    PauseMode,
+    UpMessage,
+} from "./protocol";
 
 // How often the host sends a check of its run, in frames
 const HASH_FRAMES = 50;
@@ -65,6 +72,9 @@ const DECISIONS: ReadonlySet<CoopAction["kind"]> = new Set([
 // (a tab in the background catching up), so a second answer in the wait
 // can't land on the next decision, and well short of DECIDE_AFTER_MS
 const DECISION_RESEND_MS = 10_000;
+const VOTE_MS = 10_000;
+const FAILED_VOTE_COOLDOWN_MS = 15_000;
+const RESUME_MS = 3000;
 
 export type CoopLink = {
     sendUp(message: UpMessage): void;
@@ -116,6 +126,32 @@ export class CoopRun {
     // The host's: the guests whose map is still loading, and since when
     private readonly loading: Set<string>;
     private readonly loadStart: number;
+    onPauseChange?: () => void;
+    private readonly localId: string;
+    private readonly eligible: Set<string>;
+    private readonly requests = new Set<string>();
+    private readonly ready = new Set<string>();
+    private phase: CoopPauseView["phase"] = "running";
+    private atFrame = 0;
+    private requestedBy?: string;
+    private revision = 0;
+    private frameRevision = 0;
+    private inputEpoch = 0;
+    private pauseRevision = 0;
+    private vote?: {
+        requestedBy: string;
+        yes: Set<string>;
+        no: Set<string>;
+        until: number;
+        revision: number;
+    };
+    private cooldownUntil = 0;
+    private resumeAt?: number;
+    private forceResume = false;
+    private pausedAt?: number;
+    private remotePause?: CoopPauseSnapshot;
+    private remoteAt = 0;
+    private predictionFrozen = false;
 
     constructor(
         readonly sim: Sim,
@@ -126,11 +162,322 @@ export class CoopRun {
         // The host's own id
         hostId: string,
         private readonly now: () => number = Date.now,
+        private readonly pauseMode: PauseMode = "host",
     ) {
         this.loading = new Set(isHost ? [...heroes.keys()].filter((id) => id !== hostId) : []);
         this.loadStart = now();
+        this.eligible = new Set(heroes.keys());
+        this.localId = [...heroes].find(([, hero]) => hero === sim.focus)?.[0] ?? hostId;
         if (!isHost) {
             this.prediction = new MovementPrediction(sim, now);
+        }
+    }
+
+    get pause(): CoopPauseView {
+        const elapsed = this.now() - this.remoteAt;
+        if (!this.isHost && this.remotePause) {
+            const state = this.remotePause;
+            return {
+                ...state,
+                requests: [...state.requests],
+                eligible: [...state.eligible],
+                ready: [...state.ready],
+                vote: state.vote && {
+                    ...state.vote,
+                    yes: [...state.vote.yes],
+                    no: [...state.vote.no],
+                    remainingMs: Math.max(0, state.vote.remainingMs - elapsed),
+                },
+                resumeRemainingMs:
+                    state.resumeRemainingMs === undefined
+                        ? undefined
+                        : Math.max(0, state.resumeRemainingMs - elapsed),
+                cooldownRemainingMs: Math.max(0, state.cooldownRemainingMs - elapsed),
+            };
+        }
+        return {
+            mode: this.pauseMode,
+            phase: this.phase,
+            atFrame: this.atFrame,
+            requestedBy: this.requestedBy,
+            requests: [...this.requests],
+            eligible: [...this.eligible],
+            ready: [...this.ready],
+            vote: this.vote && {
+                requestedBy: this.vote.requestedBy,
+                yes: [...this.vote.yes],
+                no: [...this.vote.no],
+                required: Math.floor(this.eligible.size / 2) + 1,
+                remainingMs: Math.max(0, this.vote.until - this.now()),
+            },
+            resumeRemainingMs:
+                this.resumeAt === undefined ? undefined : Math.max(0, this.resumeAt - this.now()),
+            cooldownRemainingMs: Math.max(0, this.cooldownUntil - this.now()),
+        };
+    }
+
+    get matchPaused(): boolean {
+        return (this.isHost ? this.phase : (this.remotePause?.phase ?? "running")) !== "running";
+    }
+
+    get frozen(): boolean {
+        return (
+            this.matchPaused &&
+            this.frame >= (this.isHost ? this.atFrame : (this.remotePause?.atFrame ?? 0))
+        );
+    }
+
+    requestPause(): void {
+        if (this.isHost) {
+            this.requestPauseFrom(this.localId);
+        } else if (!this.matchPaused) {
+            this.link.sendUp({ control: { kind: "pause", epoch: this.inputEpoch } });
+        }
+    }
+
+    votePause(yes: boolean): void {
+        if (this.isHost) {
+            this.recordVote(this.localId, yes);
+        } else if (this.pause.vote) {
+            this.link.sendUp({ control: { kind: "vote", yes, revision: this.revision } });
+        }
+    }
+
+    setReadyToResume(ready: boolean): void {
+        if (this.isHost) {
+            this.recordReady(this.localId, ready);
+        } else if (this.matchPaused) {
+            this.link.sendUp({ control: { kind: "ready", ready, revision: this.revision } });
+        }
+    }
+
+    resumeEveryone(): void {
+        if (this.isHost && this.phase === "paused") {
+            this.beginResume(true);
+        }
+    }
+
+    // Called even when the simulation is frozen: these are real-time controls.
+    updateControl(): void {
+        if (this.isHost) {
+            if (this.vote && this.now() >= this.vote.until) {
+                this.failVote();
+            }
+            if (this.resumeAt !== undefined && this.now() >= this.resumeAt) {
+                const duration = this.now() - (this.pausedAt ?? this.now());
+                for (const [hero, since] of this.waitingSince) {
+                    this.waitingSince.set(hero, since + duration);
+                }
+                this.phase = "running";
+                this.resumeAt = undefined;
+                this.pausedAt = undefined;
+                this.requestedBy = undefined;
+                this.ready.clear();
+                // Inputs stay neutral until a fresh sample arrives after resume.
+                for (const id of this.eligible) {
+                    this.queue({ frame: 0, hero: this.heroes.get(id)!, move: [0, 0] });
+                }
+                this.resetLocalInputs();
+                this.prediction?.resetForPause();
+                this.changed();
+            }
+        }
+        this.updatePredictionBoundary();
+    }
+
+    private requestPauseFrom(id: string): void {
+        this.updateControl();
+        if (this.phase !== "running" || !this.eligible.has(id)) return;
+        if (this.pauseMode === "host") {
+            if (id === this.localId && this.isHost) {
+                this.beginPause(id);
+            } else if (!this.requests.has(id)) {
+                this.requests.add(id);
+                this.changed();
+            }
+        } else if (!this.vote && this.now() >= this.cooldownUntil) {
+            this.vote = {
+                requestedBy: id,
+                yes: new Set([id]),
+                no: new Set(),
+                until: this.now() + VOTE_MS,
+                revision: this.revision + 1,
+            };
+            if (this.vote.yes.size > this.eligible.size / 2) {
+                this.beginPause(id);
+            } else {
+                this.changed();
+            }
+        }
+    }
+
+    private recordVote(id: string, yes: boolean): void {
+        this.updateControl();
+        if (!this.vote || !this.eligible.has(id)) return;
+        this.vote.yes.delete(id);
+        this.vote.no.delete(id);
+        (yes ? this.vote.yes : this.vote.no).add(id);
+        if (this.vote.yes.size > this.eligible.size / 2) {
+            this.beginPause(this.vote.requestedBy);
+        } else {
+            this.changed();
+        }
+    }
+
+    private failVote(): void {
+        this.vote = undefined;
+        this.cooldownUntil = this.now() + FAILED_VOTE_COOLDOWN_MS;
+        this.changed();
+    }
+
+    private beginPause(id: string): void {
+        this.flush(true);
+        this.phase = "paused";
+        this.atFrame = this.frame;
+        this.requestedBy = id;
+        this.pauseRevision = this.revision + 1;
+        this.pausedAt = this.now();
+        this.inputEpoch++;
+        this.next = this.next.filter((event) => event.leave);
+        this.vote = undefined;
+        this.requests.clear();
+        this.ready.clear();
+        this.resetLocalInputs();
+        this.changed();
+        this.updatePredictionBoundary();
+    }
+
+    private recordReady(id: string, ready: boolean): void {
+        if (this.phase === "running" || !this.eligible.has(id)) return;
+        if (ready) this.ready.add(id);
+        else this.ready.delete(id);
+        if (!ready && this.phase === "resuming" && !this.forceResume) {
+            this.phase = "paused";
+            this.resumeAt = undefined;
+        }
+        if (
+            this.phase === "paused" &&
+            [...this.eligible].every((member) => this.ready.has(member))
+        ) {
+            this.beginResume(false);
+        } else {
+            this.changed();
+        }
+    }
+
+    private beginResume(force: boolean): void {
+        this.forceResume = force;
+        this.phase = "resuming";
+        this.resumeAt = this.now() + RESUME_MS;
+        this.changed();
+    }
+
+    private resetLocalInputs(): void {
+        this.lastMove = [NaN, NaN];
+        this.moveSentAt = -Infinity;
+        this.unconfirmed = [];
+        this.sentDecision = undefined;
+    }
+
+    private updatePredictionBoundary(): void {
+        if (this.frozen !== this.predictionFrozen) {
+            this.prediction?.resetForPause();
+            this.predictionFrozen = this.frozen;
+            this.onPauseChange?.();
+        }
+    }
+
+    private changed(): void {
+        this.revision++;
+        this.sendPauseState();
+        this.onPauseChange?.();
+    }
+
+    private sendPauseState(): void {
+        if (this.isHost) {
+            this.link.sendDown({
+                from: this.upTo,
+                upTo: this.upTo,
+                events: [],
+                pause: { ...this.pause, revision: this.revision, inputEpoch: this.inputEpoch },
+                controlOnly: true,
+            });
+        }
+    }
+
+    private pauseSnapshot(): CoopPauseSnapshot {
+        return { ...this.pause, revision: this.revision, inputEpoch: this.inputEpoch };
+    }
+
+    private receivePauseState(value: unknown, upTo: number): void {
+        if (!value || typeof value !== "object") return;
+        const state = value as CoopPauseSnapshot;
+        const ids = (list: unknown): list is string[] =>
+            Array.isArray(list) &&
+            list.length <= this.heroes.size &&
+            list.every((id) => typeof id === "string" && this.heroes.has(id)) &&
+            new Set(list).size === list.length;
+        const remaining = (value: unknown, limit: number): value is number =>
+            typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= limit;
+        if (
+            state.mode !== this.pauseMode ||
+            !["running", "paused", "resuming"].includes(state.phase) ||
+            !Number.isSafeInteger(state.revision) ||
+            state.revision < this.revision ||
+            !Number.isSafeInteger(state.inputEpoch) ||
+            state.inputEpoch < this.inputEpoch ||
+            !Number.isSafeInteger(state.atFrame) ||
+            state.atFrame < 0 ||
+            state.atFrame > upTo ||
+            !ids(state.eligible) ||
+            !ids(state.ready) ||
+            !ids(state.requests) ||
+            state.ready.some((id) => !state.eligible.includes(id)) ||
+            state.requests.some((id) => !state.eligible.includes(id)) ||
+            (state.requestedBy !== undefined && !this.heroes.has(state.requestedBy)) ||
+            !remaining(state.cooldownRemainingMs, FAILED_VOTE_COOLDOWN_MS) ||
+            (state.phase === "resuming" && !remaining(state.resumeRemainingMs, RESUME_MS))
+        )
+            return;
+        if (
+            state.vote &&
+            (state.phase !== "running" ||
+                !state.vote ||
+                typeof state.vote !== "object" ||
+                !state.eligible.includes(state.vote.requestedBy) ||
+                !ids(state.vote.yes) ||
+                !ids(state.vote.no) ||
+                state.vote.yes.some((id) => !state.eligible.includes(id)) ||
+                state.vote.no.some(
+                    (id) => !state.eligible.includes(id) || state.vote!.yes.includes(id),
+                ) ||
+                state.vote.required !== Math.floor(state.eligible.length / 2) + 1 ||
+                !remaining(state.vote.remainingMs, VOTE_MS))
+        )
+            return;
+        const wasPaused = this.matchPaused;
+        if (state.inputEpoch !== this.inputEpoch) this.resetLocalInputs();
+        this.inputEpoch = state.inputEpoch;
+        this.revision = state.revision;
+        this.remotePause = {
+            ...state,
+            requests: [...state.requests],
+            eligible: [...state.eligible],
+            ready: [...state.ready],
+            vote: state.vote && { ...state.vote, yes: [...state.vote.yes], no: [...state.vote.no] },
+        };
+        this.remoteAt = this.now();
+        if (wasPaused && !this.matchPaused) {
+            this.resetLocalInputs();
+            this.prediction?.resetForPause();
+        }
+        this.updatePredictionBoundary();
+        this.onPauseChange?.();
+        // The last frame may have been lost just before the pause; no later
+        // frame packet will arrive to reveal the gap while everyone waits.
+        if (this.matchPaused && this.upTo < state.atFrame) {
+            this.askedAt = this.now();
+            this.link.sendUp({ resend: this.upTo });
         }
     }
 
@@ -172,6 +519,7 @@ export class CoopRun {
 
     // What the local player's pressing, sent on when it changes
     setMove(x: number, y: number): void {
+        if (this.matchPaused) return;
         const move = quantizeMove(x, y);
         const moveSeq = this.prediction?.sample(move);
         const now = this.now();
@@ -189,7 +537,11 @@ export class CoopRun {
         if (this.isHost) {
             this.queue({ frame: 0, hero: this.sim.focus, move });
         } else {
-            this.link.sendUp({ move, ...(moveSeq && { moveSeq }) });
+            this.link.sendUp({
+                move,
+                ...(moveSeq && { moveSeq }),
+                ...(this.inputEpoch && { epoch: this.inputEpoch }),
+            });
         }
     }
 
@@ -197,6 +549,7 @@ export class CoopRun {
     // False when it's a second answer to a decision already answered: the
     // first resolves it, and the second would land on the next one unseen.
     act(action: CoopAction): boolean {
+        if (this.matchPaused) return false;
         if (DECISIONS.has(action.kind)) {
             const decision = this.decision();
             const now = this.now();
@@ -215,14 +568,18 @@ export class CoopRun {
         if (this.isHost) {
             this.queue({ frame: 0, hero: this.sim.focus, action });
         } else if (DECISIONS.has(action.kind)) {
-            this.link.sendUp({ action });
+            this.link.sendUp({ action, ...(this.inputEpoch && { epoch: this.inputEpoch }) });
         } else {
             const actionSeq = ++this.actionSeqSent;
             this.unconfirmed.push({ actionSeq, action });
             if (this.unconfirmed.length > MAX_QUEUED_ACTIONS) {
                 this.unconfirmed.shift();
             }
-            this.link.sendUp({ action, actionSeq });
+            this.link.sendUp({
+                action,
+                actionSeq,
+                ...(this.inputEpoch && { epoch: this.inputEpoch }),
+            });
         }
         return true;
     }
@@ -255,7 +612,17 @@ export class CoopRun {
     // copy applies it
     receiveUp(from: string, message: UpMessage): void {
         const hero = this.heroes.get(from);
-        if (!this.isHost || hero === undefined || !message || typeof message !== "object") {
+        if (
+            !this.isHost ||
+            hero === undefined ||
+            !this.eligible.has(from) ||
+            !message ||
+            typeof message !== "object"
+        ) {
+            return;
+        }
+        if ("control" in message) {
+            this.receiveControl(from, message.control);
             return;
         }
         const move = "move" in message ? cleanMove(message.move) : undefined;
@@ -275,9 +642,13 @@ export class CoopRun {
                 this.resendIfDue();
             }
         } else if (move) {
+            if (this.matchPaused || ("epoch" in message ? message.epoch : 0) !== this.inputEpoch)
+                return;
             const moveSeq = "moveSeq" in message ? cleanMoveSeq(message.moveSeq) : undefined;
             this.queue({ frame: 0, hero, move, ...(moveSeq !== undefined && { moveSeq }) });
         } else if (action) {
+            if (this.matchPaused || ("epoch" in message ? message.epoch : 0) !== this.inputEpoch)
+                return;
             const actionSeq = "actionSeq" in message ? cleanMoveSeq(message.actionSeq) : undefined;
             if (actionSeq !== undefined) {
                 const seqs = this.actionSeqs.get(hero) ?? { top: 0, had: new Set<number>() };
@@ -295,6 +666,51 @@ export class CoopRun {
                 }
             }
             this.queue({ frame: 0, hero, action, ...(actionSeq !== undefined && { actionSeq }) });
+        }
+    }
+
+    private receiveControl(from: string, control: PauseControl): void {
+        if (!control || typeof control !== "object") return;
+        this.updateControl();
+        switch (control.kind) {
+            case "pause":
+                if (control.epoch === this.inputEpoch) this.requestPauseFrom(from);
+                break;
+            case "vote":
+                if (
+                    this.vote &&
+                    Number.isSafeInteger(control.revision) &&
+                    control.revision >= this.vote.revision &&
+                    control.revision <= this.revision &&
+                    typeof control.yes === "boolean"
+                ) {
+                    this.recordVote(from, control.yes);
+                }
+                break;
+            case "ready":
+                if (
+                    Number.isSafeInteger(control.revision) &&
+                    control.revision >= this.pauseRevision &&
+                    control.revision <= this.revision &&
+                    typeof control.ready === "boolean"
+                ) {
+                    this.recordReady(from, control.ready);
+                }
+                break;
+            case "resume":
+                // Only this browser owns the host's controls.
+                break;
+            case "sync":
+                if (
+                    Number.isSafeInteger(control.after) &&
+                    control.after >= 0 &&
+                    control.after <= this.upTo
+                ) {
+                    this.flush(true);
+                    if (control.after < this.upTo) this.resend(control.after);
+                    this.sendPauseState();
+                }
+                break;
         }
     }
 
@@ -330,9 +746,23 @@ export class CoopRun {
     // The host's: a guest left the game
     playerLeft(id: string): void {
         this.loading.delete(id);
+        if (!this.eligible.delete(id)) return;
+        this.requests.delete(id);
+        this.ready.delete(id);
         const hero = this.heroes.get(id);
         if (this.isHost && hero !== undefined) {
             this.next.push({ frame: 0, hero, leave: true });
+            if (this.vote) {
+                this.vote = undefined;
+                this.changed();
+            } else if (
+                this.phase === "paused" &&
+                [...this.eligible].every((member) => this.ready.has(member))
+            ) {
+                this.beginResume(false);
+            } else {
+                this.changed();
+            }
         }
     }
 
@@ -346,6 +776,8 @@ export class CoopRun {
         ) {
             return;
         }
+        if (message.pause) this.receivePauseState(message.pause, message.upTo);
+        if (message.controlOnly) return;
         if (message.upTo <= this.upTo) {
             // Had it already (sent again for someone else)
             return;
@@ -378,10 +810,12 @@ export class CoopRun {
         this.upTo = Math.max(this.upTo, message.upTo);
     }
 
-    // Whether the next frame can be stepped: always for the host, and for a
-    // guest once the host has sent it
+    // The host stops issuing frames while paused. Guests drain issued frames
+    // through the pause boundary before stopping too.
     canStep(): boolean {
-        return this.isHost ? !this.waitingForLoad : this.frame < this.upTo;
+        return this.isHost
+            ? !this.matchPaused && !this.waitingForLoad
+            : this.frame < this.upTo && (!this.matchPaused || this.frame < this.pause.atFrame);
     }
 
     // A guest's frames in hand
@@ -392,6 +826,7 @@ export class CoopRun {
     // Steps a frame, applying what happened at it first. Returns the events
     // applied, for the client to follow up the local player's.
     stepFrame(): FrameEvent[] {
+        if (this.frozen) return [];
         const frame = this.frame + 1;
         let events: FrameEvent[];
         if (this.isHost) {
@@ -412,6 +847,7 @@ export class CoopRun {
         this.sim.step();
         this.prediction?.confirm(events);
         this.frame = frame;
+        this.updatePredictionBoundary();
         if (this.isHost) {
             this.upTo = frame;
             if (frame % HASH_FRAMES === 0) {
@@ -446,6 +882,7 @@ export class CoopRun {
             upTo: this.upTo,
             events: this.outgoing,
             ...(this.outgoingHash && { hash: this.outgoingHash }),
+            ...(this.frameRevision !== this.revision && { pause: this.pauseSnapshot() }),
         };
         this.link.sendDown(message);
         this.sent.push(message);
@@ -455,6 +892,7 @@ export class CoopRun {
         this.outgoing = [];
         this.outgoingHash = undefined;
         this.sentUpTo = this.upTo;
+        this.frameRevision = this.revision;
     }
 
     // The host's: the frames asked for, once RESEND_ASK_MS has passed since
@@ -490,6 +928,7 @@ export class CoopRun {
                 upTo: chunk[chunk.length - 1].upTo,
                 events: chunk.flatMap((m) => m.events),
                 ...(hash && { hash }),
+                ...(this.revision > 0 && { pause: this.pauseSnapshot() }),
             });
             chunk = [];
             events = 0;
@@ -510,8 +949,18 @@ export class CoopRun {
     resumed(): void {
         this.lastMove = [NaN, NaN];
         this.moveSentAt = -Infinity;
+        if (this.isHost) {
+            this.flush(true);
+            this.sendPauseState();
+            return;
+        }
+        this.link.sendUp({ control: { kind: "sync", after: this.upTo } });
         for (const { actionSeq, action } of this.unconfirmed) {
-            this.link.sendUp({ action, actionSeq });
+            this.link.sendUp({
+                action,
+                actionSeq,
+                ...(this.inputEpoch && { epoch: this.inputEpoch }),
+            });
         }
     }
 }

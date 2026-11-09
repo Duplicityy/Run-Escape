@@ -8,6 +8,7 @@ import {
     Loadout,
     Member,
     MissingMap,
+    PauseMode,
     RoomListing,
     RoomView,
     ServerMessage,
@@ -678,6 +679,10 @@ export class CoopLobby {
 
     setMap(mapId: string, endless: boolean, hard: boolean): void {
         this.send({ t: "settings", mapId, endless, hard });
+    }
+
+    setPauseMode(pauseMode: PauseMode): void {
+        this.send({ t: "settings", pauseMode });
     }
 
     kick(id: string): void {

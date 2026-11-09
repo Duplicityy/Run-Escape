@@ -111,7 +111,15 @@ import { getBossKillViews, getPlayerResultViews } from "./RunStatsViews";
 import { SaveLock } from "./SaveLock";
 import { CoopLobby, makeLoadout } from "./coop/CoopLobby";
 import { CoopRun, GUEST_BUFFER_FRAMES } from "./coop/CoopRun";
-import { GameStart, GoneReason, Loadout, RoomView, Unlocks, isGameStart } from "./coop/protocol";
+import {
+    GameStart,
+    GoneReason,
+    Loadout,
+    PauseMode,
+    RoomView,
+    Unlocks,
+    isGameStart,
+} from "./coop/protocol";
 import { saveFile } from "./saveFile";
 
 // 20ms: the OSRS client tick, also the unit of animation frame lengths
@@ -698,7 +706,33 @@ export class GameClient implements GameFrameHandler {
     }
 
     setCoopReady(ready: boolean): void {
-        this.coop.setReady(ready);
+        if (this.coopRun) {
+            this.coopRun.setReadyToResume(ready);
+            this.syncCoopPause();
+        } else {
+            this.coop.setReady(ready);
+        }
+    }
+
+    setCoopPauseMode(mode: PauseMode): void {
+        if (this.coop.isHost && !this.coop.room?.started) {
+            this.coop.setPauseMode(mode);
+        }
+    }
+
+    requestCoopPause(): void {
+        this.coopRun?.requestPause();
+        this.syncCoopPause();
+    }
+
+    voteCoopPause(yes: boolean): void {
+        this.coopRun?.votePause(yes);
+        this.syncCoopPause();
+    }
+
+    resumeCoopEveryone(): void {
+        this.coopRun?.resumeEveryone();
+        this.syncCoopPause();
     }
 
     setRoomOpen(open: boolean): void {
@@ -773,6 +807,7 @@ export class GameClient implements GameFrameHandler {
                 map.fun !== undefined ||
                 (room.endless && (anyMap || isEndlessUnlocked(this.save, map.id))),
             hard: room.hard === true && (anyMap || isHardUnlocked(this.save, map.id)),
+            pauseMode: room.pauseMode ?? "host",
             heroes: room.members.map((member) => ({
                 id: member.id,
                 name: member.name,
@@ -815,6 +850,10 @@ export class GameClient implements GameFrameHandler {
                 }
             }
             this.coopRun = undefined;
+            this.paused = this.paused || run.matchPaused;
+            this.accumulator = 0;
+            this.store.set({ coopPause: undefined });
+            this.syncOverlay();
             // Solo now: a hidden tab no longer needs stepping
             this.stopBackgroundTicker();
             this.store.toast(
@@ -832,7 +871,13 @@ export class GameClient implements GameFrameHandler {
         this.coopStopped = true;
         this.stopBackgroundTicker();
         this.finishRun(why);
-        this.store.set({ overlay: "dead", choices: [], chest: undefined, waitingOn: [] });
+        this.store.set({
+            overlay: "dead",
+            choices: [],
+            chest: undefined,
+            waitingOn: [],
+            coopPause: undefined,
+        });
         this.updateHud(true);
     }
 
@@ -896,6 +941,7 @@ export class GameClient implements GameFrameHandler {
         return (
             this.sim !== undefined &&
             !this.sim.runOver &&
+            !this.coopRun?.matchPaused &&
             this.store.getSnapshot().overlay === "none"
         );
     }
@@ -1174,6 +1220,7 @@ export class GameClient implements GameFrameHandler {
     private toCoopRun(deliver: (run: CoopRun) => void): void {
         if (this.coopRun) {
             deliver(this.coopRun);
+            this.syncCoopPause();
         } else if (this.coopInbox && this.coopInbox.length < MAX_COOP_INBOX) {
             this.coopInbox.push(deliver);
         }
@@ -1245,7 +1292,15 @@ export class GameClient implements GameFrameHandler {
             focus,
         });
         const heroes = new Map(game.heroes.map((hero, i) => [hero.id, i]));
-        const run = new CoopRun(sim, this.coop.isHost, this.coop, heroes, room.hostId);
+        const run = new CoopRun(
+            sim,
+            this.coop.isHost,
+            this.coop,
+            heroes,
+            room.hostId,
+            Date.now,
+            game.pauseMode ?? "host",
+        );
         run.setPrediction(this.display.movePrediction);
         this.coopRun = run;
         this.coopPlayerIds = game.heroes.map((hero) => hero.id);
@@ -1312,6 +1367,7 @@ export class GameClient implements GameFrameHandler {
             party: [],
             waitingOn: [],
             revive: undefined,
+            coopPause: this.coopRun?.pause,
         });
         this.updateHud(true);
         // A run that begins with picks to make (a boss fight's) shows them now:
@@ -1327,7 +1383,7 @@ export class GameClient implements GameFrameHandler {
     // false when it can't be done.
     private act(action: CoopAction): boolean {
         const sim = this.sim;
-        if (!sim) {
+        if (!sim || this.coopStopped || this.coopRun?.matchPaused) {
             return false;
         }
         if (this.coopRun) {
@@ -1591,6 +1647,7 @@ export class GameClient implements GameFrameHandler {
             this.coop.end();
         }
         this.coopRun = undefined;
+        this.store.set({ coopPause: undefined });
         this.stopBackgroundTicker();
         usePortableMath(false);
         this.assets.dropPlayers(1);
@@ -1750,6 +1807,16 @@ export class GameClient implements GameFrameHandler {
             return;
         }
         const overlay = this.store.getSnapshot().overlay;
+        if (this.coopRun?.matchPaused) {
+            if (code === "Escape" || code === "KeyP") {
+                if (this.paused) {
+                    this.resume();
+                } else {
+                    this.pause();
+                }
+            }
+            return;
+        }
         if (code === "Escape" || code === "KeyP") {
             if (overlay === "paused") {
                 this.resume();
@@ -1859,9 +1926,10 @@ export class GameClient implements GameFrameHandler {
         this.viewHero = this.getViewHero(sim);
         this.view.viewHero = this.viewHero;
         const alpha = this.getAlpha();
-        this.view.localPlayerPose = this.coopStopped
-            ? undefined
-            : this.coopRun?.prediction?.render(alpha);
+        this.view.localPlayerPose =
+            this.coopStopped || this.coopRun?.frozen
+                ? undefined
+                : this.coopRun?.prediction?.render(alpha);
         const { x: px, y: py } = getPlayerPose(
             sim,
             this.viewHero,
@@ -1906,14 +1974,50 @@ export class GameClient implements GameFrameHandler {
     }
 
     // Nothing but the scenery moves: the title screen, or a solo run that's stopped
-    // for a menu (a level up, a casket, the pause menu, the results). A co-op run
-    // carries on behind its menus.
+    // for a menu, or a shared co-op pause that's reached its frame boundary.
     private isStoppedBehindMenu(): boolean {
         const sim = this.sim;
         if (!sim) {
             return true;
         }
-        return !this.coopRun && (this.paused || sim.state !== "playing");
+        return this.coopRun ? this.coopRun.frozen === true : this.paused || sim.state !== "playing";
+    }
+
+    // Pause controls keep updating while simulation frames are stopped. Round
+    // the countdown for the UI so a paused run doesn't redraw it every frame.
+    private syncCoopPause(): void {
+        const previous = this.store.getSnapshot().coopPause;
+        const run = this.coopRun;
+        if (!run || !this.sim || this.sim !== run.sim || this.sim.runOver || this.coopStopped) {
+            if (previous) {
+                this.store.set({ coopPause: undefined });
+            }
+            return;
+        }
+        const pause = run.pause;
+        const seconds = (ms: number) => Math.ceil(ms / 1000) * 1000;
+        const next = shareUnchanged(previous, {
+            ...pause,
+            cooldownRemainingMs: seconds(pause.cooldownRemainingMs),
+            ...(pause.vote && {
+                vote: { ...pause.vote, remainingMs: seconds(pause.vote.remainingMs) },
+            }),
+            ...(pause.resumeRemainingMs !== undefined && {
+                resumeRemainingMs: seconds(pause.resumeRemainingMs),
+            }),
+        });
+        if (next !== previous) {
+            this.store.set({ coopPause: next });
+        }
+        if (previous?.phase !== next.phase) {
+            this.accumulator = 0;
+            if (next.phase === "paused") {
+                // A pending auto-alch may have been discarded at the pause
+                // boundary. Try it again once frames can carry actions.
+                this.autoAlchedUid = -1;
+            }
+            this.syncOverlay();
+        }
     }
 
     // A co-op run: frames step at the run's pace, the host's whenever it
@@ -1924,12 +2028,20 @@ export class GameClient implements GameFrameHandler {
         if (this.coopStopped) {
             return;
         }
-        const move = this.input.getMoveVector(this.move);
-        // Standing still while choosing (the menu doesn't stop the run, so
-        // moving goes on behind it)
-        const deciding = this.store.getSnapshot().overlay !== "none" && !this.paused;
-        run.setMove(deciding ? 0 : move.x, deciding ? 0 : move.y);
-        this.accumulator += Math.min(deltaTimeMs, TICK_MS * MAX_TICKS_PER_FRAME);
+        const wasFrozen = run.frozen;
+        run.updateControl();
+        this.syncCoopPause();
+        if (!run.matchPaused) {
+            const move = this.input.getMoveVector(this.move);
+            // Standing still while choosing; the personal menu lets movement continue.
+            const deciding = this.store.getSnapshot().overlay !== "none" && !this.paused;
+            run.setMove(deciding ? 0 : move.x, deciding ? 0 : move.y);
+        }
+        if (run.frozen || wasFrozen) {
+            this.accumulator = 0;
+        } else {
+            this.accumulator += Math.min(deltaTimeMs, TICK_MS * MAX_TICKS_PER_FRAME);
+        }
         const catchUp = run.isHost ? 0 : Math.max(0, run.behind - GUEST_BUFFER_FRAMES);
         const started = performance.now();
         let steps = 0;
@@ -1956,7 +2068,7 @@ export class GameClient implements GameFrameHandler {
         }
         if (!run.canStep()) {
             // Waiting on the host: no time to make up once it's back
-            this.accumulator = Math.min(this.accumulator, TICK_MS);
+            this.accumulator = run.frozen ? 0 : Math.min(this.accumulator, TICK_MS);
         }
         run.flush();
         if (run.desynced && !this.runRecorded) {
@@ -2059,7 +2171,12 @@ export class GameClient implements GameFrameHandler {
 
     private getAlpha(): number {
         const sim = this.sim;
-        if (!sim || (this.paused && !this.coopRun) || sim.state !== "playing") {
+        if (
+            !sim ||
+            this.coopRun?.frozen ||
+            (this.paused && !this.coopRun) ||
+            sim.state !== "playing"
+        ) {
             return 1;
         }
         return Math.min(1, this.accumulator / TICK_MS);
@@ -2200,6 +2317,12 @@ export class GameClient implements GameFrameHandler {
     private syncOverlay(): void {
         const sim = this.sim;
         if (!sim) {
+            return;
+        }
+        if (this.coopRun?.matchPaused && !sim.runOver) {
+            // The shared pause sits above any decision; don't auto-alch or
+            // replace its choices while the player opens or closes their menu.
+            this.store.set({ overlay: this.paused ? "paused" : "none" });
             return;
         }
         // Co-op: who else the run's waiting on

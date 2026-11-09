@@ -324,6 +324,38 @@ function CoopLobby({ ui, client, room }: Props & { room: RoomView }): JSX.Elemen
                         <span className="ui-coop-open">{room.open ? "Open" : "Invite only"}</span>
                     )}
                 </div>
+                <div className="ui-coop-pause-setting">
+                    <span className="ui-coop-label">Pause control</span>
+                    <div className="ui-coop-choice" role="group" aria-label="Pause control">
+                        <button
+                            className={
+                                "ui-button ui-button-small" +
+                                (room.pauseMode !== "vote" ? " ui-toggle-on" : "")
+                            }
+                            aria-pressed={room.pauseMode !== "vote"}
+                            disabled={!isHost || room.started}
+                            onClick={() => client.setCoopPauseMode("host")}
+                        >
+                            Host controlled
+                        </button>
+                        <button
+                            className={
+                                "ui-button ui-button-small" +
+                                (room.pauseMode === "vote" ? " ui-toggle-on" : "")
+                            }
+                            aria-pressed={room.pauseMode === "vote"}
+                            disabled={!isHost || room.started}
+                            onClick={() => client.setCoopPauseMode("vote")}
+                        >
+                            Majority vote
+                        </button>
+                    </div>
+                    <span className="ui-coop-pause-hint">
+                        {room.pauseMode === "vote"
+                            ? "A majority of the party must agree to pause."
+                            : "The host pauses the run; everyone can request a break."}
+                    </span>
+                </div>
                 <div className="ui-coop-members">
                     {room.members.map((member) => {
                         const character = getCharacter(

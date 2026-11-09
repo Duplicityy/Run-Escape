@@ -410,6 +410,51 @@ describe("co-op relay", () => {
         expect(room.members).toHaveLength(2);
     });
 
+    it("defaults pauses to host control and accepts only supported modes on creation", async () => {
+        const host = await connect();
+        for (const pauseMode of ["all", null, true, {}]) {
+            host.send({ t: "create", pauseMode });
+            expect((await host.next("error")).message).toMatch(/pauses/);
+            expect(relay.roomCount).toBe(0);
+        }
+        host.send({ t: "create", pauseMode: "vote" });
+        expect((await host.room()).room.pauseMode).toBe("vote");
+        const defaultHost = await connect();
+        defaultHost.send({ t: "create" });
+        expect((await defaultHost.room()).room.pauseMode).toBe("host");
+    });
+
+    it("lets only the host change pause mode before a run and resets readiness", async () => {
+        const {
+            host,
+            guests: [guest],
+        } = await party(1);
+        guest.send({ t: "settings", pauseMode: "vote" });
+        guest.send({ t: "me", ready: true });
+        host.send({ t: "me", ready: true });
+        const before = (await host.roomWhere((room) => room.members.every((m: any) => m.ready)))
+            .room;
+        expect(before.pauseMode).toBe("host");
+
+        host.send({ t: "settings", pauseMode: "vote" });
+        const changed = (await host.roomWhere((room) => room.pauseMode === "vote")).room;
+        expect(changed.members.every((m: any) => !m.ready)).toBe(true);
+
+        host.send({ t: "me", ready: true });
+        host.send({ t: "settings", pauseMode: "vote" });
+        expect((await host.roomWhere((room) => room.members[0].ready)).room.pauseMode).toBe("vote");
+        host.send({ t: "settings", pauseMode: "everyone" });
+        expect((await host.next("error")).message).toMatch(/pauses/);
+
+        host.send({ t: "start", game: { seed: 5, pauseMode: "host" } });
+        expect((await guest.next("start")).game).toEqual({ seed: 5, pauseMode: "vote" });
+        expect((await host.next("start")).game.pauseMode).toBe("vote");
+        await host.roomWhere((room) => room.started);
+        host.send({ t: "settings", pauseMode: "host" });
+        host.send({ t: "end" });
+        expect((await host.roomWhere((room) => !room.started)).room.pauseMode).toBe("vote");
+    });
+
     it("hands the room on when the host leaves the lobby", async () => {
         const { host, guests } = await party(2);
         host.send({ t: "leave" });
@@ -424,7 +469,7 @@ describe("co-op relay", () => {
         const { room } = await host.roomWhere((r) => r.members[1].ready);
         expect(room.members[1]).toMatchObject({ ready: true, characterId: "wizard" });
         host.send({ t: "start", game: { seed: 5 } });
-        expect((await guests[0].next("start")).game).toEqual({ seed: 5 });
+        expect((await guests[0].next("start")).game).toEqual({ seed: 5, pauseMode: "host" });
         guests[0].send({ t: "up", d: { m: [1, 0] } });
         const up = await host.next("up");
         expect(up.d).toEqual({ m: [1, 0] });

@@ -34,7 +34,8 @@ built on [rs-map-viewer](https://github.com/dennisdev/rs-map-viewer), the code b
 - **Gear from reward caskets**, worn on your character, with **set bonuses** (Void, Torva, Virtus,
   Inquisitor's, Crystal) and an **Armoury** to upgrade it for good between runs.
 - **Co-op** for up to four players: rooms by invite code or open to all, everyone with their own
-  adventurer, shared levels, and the run going on while anyone's standing.
+  adventurer, shared levels, host-controlled or majority-vote pauses, and the run going on while
+  anyone's standing.
 - **Phosani's Nightmare**, a boss fight on its own once Hallowed Night's beaten: no waves, no
   picks and no items, only the Inquisitor's crossbow and her, quicker and with more at once.
 - **Endless mode** and **hard mode** for every map you've beaten, **skills** to train with the coins
@@ -82,6 +83,10 @@ loads are quick.
 pick on a level up, where **R** rerolls and **X** skips for coins), **Esc** pauses, **Q** shows or
 hides the quest tracker, **Tab** (or clicking the DPS) shows each weapon's damage, **M** mutes and
 the mouse wheel zooms.
+
+In co-op, **Esc** opens your own menu while the run continues. Use **Pause run**, **Request pause**
+or **Vote to pause** there, depending on the room's pause setting. Once paused, everyone can mark
+themselves ready; all players ready, or the host's **Resume everyone**, starts a three-second countdown.
 
 On a phone or tablet, hold it sideways and drag anywhere to move. The buttons on screen pause and
 use your items, and everything else is a tap. To open it full screen from its own icon, pick Add to

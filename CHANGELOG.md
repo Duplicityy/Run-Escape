@@ -9,6 +9,7 @@ the version in the corner).
 
 - An Android app with online co-op and bundled game files for solo play in airplane mode.
 - The Android app downloads game updates from the developer's desktop releases automatically.
+- Co-op pauses: choose host control or a majority vote in the lobby, then resume together with a three-second countdown.
 
 ## 0.24.1 - 2026-11-04
 

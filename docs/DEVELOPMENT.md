@@ -830,7 +830,8 @@ A sound's samples are let go once it's first played and its `AudioBuffer` holds 
   would draw twice as often for a sim that ticks 50 times a second) and no cap on a desktop; 30,
   60 and Unlimited are what they say. On the title screen and behind a solo run's menus (level up,
   casket, random event, pause, results), where only the scenery moves, it's 30 at most whatever
-  the setting. Co-op isn't capped behind its menus, as its run goes on. The limiter keeps to a
+  the setting. Co-op keeps its normal cap behind personal menus and while draining frames, then
+  drops to at most 30 once a shared pause reaches its frame boundary. The limiter keeps to a
   schedule rather than a gap since the last frame, so a 90 Hz screen capped at 60 draws two frames
   in three (`Renderer.test.ts`).
 - **Lost graphics**: a phone can take the WebGL context away (short of memory, or the game in the
@@ -991,9 +992,28 @@ and a hit can still arrive after the local picture appears to have moved clear.
   run, rather than everyone waiting on a copy that can't recover.
 - **Waiting**: anyone the run waits on for 20 seconds (`DECIDE_AFTER_MS` in `CoopRun.ts`) has
   it decided for them by the host: the first reward, taking the casket, or walking away from the
-  offer. The host can kick a player from the menu mid-run.
+  offer. Shared pauses suspend that timer. The host can kick a player from the menu mid-run.
+- **Pausing**: `pauseMode` is a room setting, `host` by default or `vote`, editable by the host
+  before a run. Changing it clears readiness, and the relay puts the room's policy on `GameStart`.
+  The personal menu stays separate from shared pause state: opening or closing it never pauses
+  or resumes the party. Host mode lets guests request a pause; vote mode gives everyone,
+  including downed players, one vote, with the requester voting yes. Strict majority means
+  3/4, 2/3, 2/2 or 1/1. A ballot lasts 10 seconds, a failed ballot has a 15-second cooldown,
+  and a permanent departure cancels a live ballot. Everyone ready or the host's resume control
+  starts a three-second countdown.
+- **Pause frames**: `CoopRun` owns pause control independently of `Sim.state` and frame actions.
+  The host stops after completed frame `F`, calls `flush(true)` to release any quiet frame,
+  and broadcasts a revisioned control snapshot. Guests drain already-issued frames through `F`
+  before stopping. Control updates must be handled even when `upTo` hasn't advanced: readiness,
+  countdowns and resume cannot depend on another simulation frame. Networking, UI, resends and
+  disconnect handling keep running. Decision timeout clocks exclude the paused interval, and
+  movement prediction and pending gameplay input are reset at the pause boundary.
+- **Paused reconnects**: a reconnect explicitly asks for missing frames and current control state,
+  even if no frame has advanced since the disconnect. Departures leave voting and readiness
+  immediately, while their deterministic `leave` event waits for the next frame. Never call
+  `Sim.leave` locally during a pause. The host leaving permanently still ends the run.
 - **Hidden tabs**: a co-op player whose tab is hidden keeps stepping off a worker's timer, so the
-  host keeps the run going and a guest keeps up.
+  host keeps the run going and a guest keeps up, while respecting shared pauses.
 
 For that every copy has to agree to the bit. The sim only uses its seeded `Rng`, and its
 trigonometry goes through `fm` in `core/fmath.ts`: the browser's own `Math` on your own (so solo

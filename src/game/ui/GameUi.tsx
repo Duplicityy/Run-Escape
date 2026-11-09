@@ -1544,6 +1544,11 @@ function ShopScreen({ ui, client }: ScreenProps): JSX.Element {
 
 function RunScreen({ ui, client }: ScreenProps): JSX.Element {
     const hud = ui.hud;
+    const sharedPause =
+        ui.coopPause?.phase !== undefined &&
+        ui.coopPause.phase !== "running" &&
+        ui.overlay !== "dead" &&
+        ui.overlay !== "victory";
     return (
         <div className="ui-fill ui-run">
             {hud && (
@@ -1555,13 +1560,15 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
                 />
             )}
             {ui.party.length > 0 && <PartyFrames party={ui.party} />}
-            {ui.waitingOn.length > 0 && (ui.overlay === "none" || ui.overlay === "paused") && (
-                <WaitingNote names={ui.waitingOn} />
-            )}
-            {ui.revive && (ui.overlay === "none" || ui.overlay === "paused") && (
+            {!sharedPause &&
+                ui.waitingOn.length > 0 &&
+                (ui.overlay === "none" || ui.overlay === "paused") && (
+                    <WaitingNote names={ui.waitingOn} />
+                )}
+            {!sharedPause && ui.revive && (ui.overlay === "none" || ui.overlay === "paused") && (
                 <ReviveNote revive={ui.revive} />
             )}
-            {isCoarsePointer && hud && (
+            {isCoarsePointer && hud && !sharedPause && (
                 <TouchControls inventory={hud.inventory} overlay={ui.overlay} client={client} />
             )}
             <div className="ui-toasts">
@@ -1571,8 +1578,8 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
                     </div>
                 ))}
             </div>
-            {ui.overlay === "levelUp" && <LevelUpModal ui={ui} client={client} />}
-            {ui.overlay === "chest" && ui.chest && (
+            {!sharedPause && ui.overlay === "levelUp" && <LevelUpModal ui={ui} client={client} />}
+            {!sharedPause && ui.overlay === "chest" && ui.chest && (
                 <ChestModal
                     key={ui.chest.uid}
                     chest={ui.chest}
@@ -1581,13 +1588,213 @@ function RunScreen({ ui, client }: ScreenProps): JSX.Element {
                     client={client}
                 />
             )}
-            {ui.overlay === "event" && ui.event && (
+            {!sharedPause && ui.overlay === "event" && ui.event && (
                 <RunEventModal key={ui.event.uid} event={ui.event} client={client} />
             )}
             {ui.overlay === "paused" && hud && <PauseModal ui={ui} hud={hud} client={client} />}
+            {sharedPause && (ui.overlay !== "paused" || !hud) && (
+                <CoopPauseOverlay ui={ui} client={client} />
+            )}
+            {!sharedPause &&
+                ui.coopPause?.phase === "running" &&
+                (ui.coopPause.vote || ui.coopPause.requests.length > 0) &&
+                ui.overlay !== "paused" &&
+                ui.overlay !== "dead" &&
+                ui.overlay !== "victory" && (
+                    <div className="ui-coop-pause-banner ui-panel rs-border rs-background">
+                        <CoopPauseControls ui={ui} client={client} />
+                    </div>
+                )}
             {(ui.overlay === "dead" || ui.overlay === "victory") && (
                 <ResultModal ui={ui} client={client} />
             )}
+        </div>
+    );
+}
+
+function coopPlayerName(ui: UiSnapshot, id: string): string {
+    return (
+        ui.coop.room?.members.find((member) => member.id === id)?.name ??
+        (id === ui.coop.you ? ui.coop.name : undefined) ??
+        ui.party.find((member) => member.id === id)?.name ??
+        "A teammate"
+    );
+}
+
+// The menu can stay open during a shared pause, with these controls above its settings.
+export function CoopPauseControls({
+    ui,
+    client,
+    compact = false,
+}: ScreenProps & { compact?: boolean }): JSX.Element | null {
+    const pause = ui.coopPause;
+    if (!pause) {
+        return null;
+    }
+    const you = ui.coop.you ?? "";
+    const isHost = ui.coop.room?.hostId === you;
+    const eligible = pause.eligible.includes(you);
+    if (pause.phase !== "running") {
+        const ready = pause.ready.includes(you);
+        return (
+            <div className="ui-coop-pause-controls">
+                {pause.phase === "resuming" ? (
+                    <p className="ui-coop-pause-title" role="status">
+                        Resuming in {Math.max(1, Math.ceil((pause.resumeRemainingMs ?? 0) / 1000))}
+                        ...
+                    </p>
+                ) : (
+                    <p className="ui-subtle">
+                        {pause.requestedBy
+                            ? `Paused by ${coopPlayerName(ui, pause.requestedBy)}.`
+                            : "The run is paused for everyone."}
+                    </p>
+                )}
+                {compact ? (
+                    <p className="ui-subtle">
+                        {pause.ready.length}/{pause.eligible.length} ready to resume
+                    </p>
+                ) : (
+                    <>
+                        <ul className="ui-coop-pause-players" aria-label="Ready to resume status">
+                            {pause.eligible.map((id) => (
+                                <li key={id}>
+                                    <span>
+                                        {coopPlayerName(ui, id)}
+                                        {id === you && " (you)"}
+                                    </span>
+                                    <span
+                                        className={
+                                            pause.ready.includes(id) ? "ui-coop-status-ready" : ""
+                                        }
+                                    >
+                                        {pause.ready.includes(id) ? "Ready" : "Not ready"}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                        <p className="ui-subtle">
+                            {pause.phase === "resuming"
+                                ? "Get ready. The run resumes for everyone."
+                                : "Ready up to continue together, or the host can resume everyone."}
+                        </p>
+                    </>
+                )}
+                <div className="ui-coop-pause-actions">
+                    <button
+                        className={"ui-button" + (ready ? "" : " ui-button-go")}
+                        disabled={!eligible || (pause.phase === "resuming" && !ready)}
+                        aria-pressed={ready}
+                        onClick={() => client.setCoopReady(!ready)}
+                    >
+                        {ready ? "Not ready" : "Ready to resume"}
+                    </button>
+                    {isHost && (
+                        <button
+                            className="ui-button"
+                            disabled={pause.phase !== "paused"}
+                            onClick={() => client.resumeCoopEveryone()}
+                        >
+                            Resume everyone
+                        </button>
+                    )}
+                </div>
+            </div>
+        );
+    }
+    const vote = pause.vote;
+    const votedYes = vote?.yes.includes(you) ?? false;
+    const votedNo = vote?.no.includes(you) ?? false;
+    const requested = pause.requests.includes(you);
+    return (
+        <div className="ui-coop-pause-controls">
+            {vote ? (
+                <>
+                    <p className="ui-coop-pause-title" role="status">
+                        {coopPlayerName(ui, vote.requestedBy)} requested a pause · {vote.yes.length}
+                        /{vote.required} approvals ·{" "}
+                        {Math.max(0, Math.ceil(vote.remainingMs / 1000))}s
+                    </p>
+                    <p className="ui-subtle">The run continues until the vote passes.</p>
+                    <div className="ui-coop-pause-actions">
+                        <button
+                            className="ui-button ui-button-small"
+                            aria-label="Vote yes"
+                            aria-pressed={votedYes}
+                            disabled={!eligible || votedYes || votedNo}
+                            onClick={() => client.voteCoopPause(true)}
+                        >
+                            Yes
+                        </button>
+                        <button
+                            className="ui-button ui-button-small"
+                            aria-label="Vote no"
+                            aria-pressed={votedNo}
+                            disabled={!eligible || votedYes || votedNo}
+                            onClick={() => client.voteCoopPause(false)}
+                        >
+                            No
+                        </button>
+                        {(votedYes || votedNo) && (
+                            <span className="ui-subtle">You voted {votedYes ? "yes" : "no"}.</span>
+                        )}
+                    </div>
+                </>
+            ) : (
+                <>
+                    {pause.requests.length > 0 && (
+                        <p className="ui-coop-pause-title" role="status">
+                            {pause.requests.map((id) => coopPlayerName(ui, id)).join(", ")}{" "}
+                            requested a pause.
+                        </p>
+                    )}
+                    <div className="ui-coop-pause-actions">
+                        <button
+                            className="ui-button ui-button-small"
+                            disabled={
+                                !eligible ||
+                                requested ||
+                                (pause.mode === "vote" && pause.cooldownRemainingMs > 0)
+                            }
+                            onClick={() => client.requestCoopPause()}
+                        >
+                            {pause.mode === "vote"
+                                ? "Vote to pause"
+                                : isHost
+                                  ? "Pause run"
+                                  : requested
+                                    ? "Pause requested"
+                                    : "Request pause"}
+                        </button>
+                        {pause.mode === "vote" && pause.cooldownRemainingMs > 0 && (
+                            <span className="ui-subtle">
+                                Vote available in {Math.ceil(pause.cooldownRemainingMs / 1000)}s
+                            </span>
+                        )}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+export function CoopPauseOverlay({ ui, client }: ScreenProps): JSX.Element {
+    return (
+        <div
+            className="ui-modal ui-coop-paused"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="coop-pause-heading"
+        >
+            <div className="ui-panel rs-border rs-background ui-coop-paused-panel">
+                <h2 id="coop-pause-heading">Run paused</h2>
+                <CoopPauseControls ui={ui} client={client} />
+                <div className="ui-coop-pause-actions">
+                    <button className="ui-button ui-button-small" onClick={() => client.pause()}>
+                        Menu &amp; settings
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
@@ -2289,8 +2496,8 @@ function PauseModal({
     hud: HudView;
     client: GameClient;
 }): JSX.Element {
-    // Co-op's menu doesn't stop the run
-    const coop = ui.party.length > 0;
+    const coop = ui.coopPause !== undefined || ui.party.length > 0;
+    const sharedPause = ui.coopPause !== undefined && ui.coopPause.phase !== "running";
     const quests = useHudNumber(client, (n) => n.quests) ?? [];
     const padKind = usePadKind();
     // The host can remove anyone still in the run (one who's stopped playing)
@@ -2299,10 +2506,29 @@ function PauseModal({
             ? ui.party.filter((member) => member.id && !member.left)
             : [];
     return (
-        <div className={coop ? "ui-modal ui-modal-clear" : "ui-modal"}>
+        <div
+            className={
+                sharedPause
+                    ? "ui-modal ui-coop-paused"
+                    : coop
+                      ? "ui-modal ui-modal-clear"
+                      : "ui-modal"
+            }
+        >
             <div className="ui-panel rs-border rs-background ui-pause">
                 <h2>{coop ? "Menu" : "Paused"}</h2>
-                {coop && <p className="ui-subtle">The run carries on while you're in here.</p>}
+                {coop && (
+                    <p className="ui-subtle">
+                        {sharedPause
+                            ? "The run is paused. Closing this menu does not resume it."
+                            : "The run carries on while you're in here."}
+                    </p>
+                )}
+                {ui.coopPause && (
+                    <div className="ui-coop-pause-menu">
+                        <CoopPauseControls ui={ui} client={client} compact />
+                    </div>
+                )}
                 {ui.saveBlock && ui.saveBlockClosed && (
                     <p className="ui-subtle">
                         <button
@@ -2456,7 +2682,7 @@ function PauseModal({
                         {coop ? "Leave the run" : "Give up"}
                     </button>
                     <button className="ui-button ui-button-go" onClick={() => client.resume()}>
-                        Resume
+                        {coop ? "Close menu" : "Resume"}
                     </button>
                 </div>
             </div>
