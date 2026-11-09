@@ -298,6 +298,10 @@ its own saves. This debug build keeps the bundled game and disables upstream gam
 an official release cannot replace the feature under test. Release builds keep their usual
 application ID and update behavior. The Android workflow has a matching `pause_test` input;
 pushes to `test/android-coop-pause` build this variant automatically.
+For a phone-friendly download of an already successful test run, dispatch the same workflow
+with `pause_test=true` and `publish_run` set to its run ID. The separate publishing job verifies
+the test package and embedded build ID, then uploads the APK as a prerelease without rebuilding
+the game or changing the main branch.
 
 `prepare-game.mjs <release directory>` instead reads `game-manifest.json`, checks its version
 and SHA-256, then extracts `game-<version>.zip`. The release workflow uses this form to package

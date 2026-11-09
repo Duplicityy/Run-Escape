@@ -36,6 +36,11 @@ on:
                 required: true
                 default: false
                 type: boolean
+            publish_run:
+                description: Publish the pause-test APK from a successful Android workflow run
+                required: false
+                default: ""
+                type: string
 
 permissions: {}
 
@@ -45,6 +50,7 @@ concurrency:
 
 jobs:
     build:
+        if: github.event_name != 'workflow_dispatch' || inputs.publish_run == ''
         runs-on: ubuntu-latest
         timeout-minutes: 45
         permissions:
@@ -172,3 +178,79 @@ jobs:
                   if-no-files-found: error
                   retention-days: 7
                   compression-level: 0
+
+    # Publishing a built test APK doesn't execute game or Gradle dependencies.
+    publish-pause-test:
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_run != '' && inputs.pause_test && startsWith(github.ref, 'refs/heads/test/android-coop-pause')
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            actions: read
+            contents: write
+        env:
+            GH_TOKEN: ${{ github.token }}
+            GH_REPO: ${{ github.repository }}
+            SOURCE_RUN: ${{ inputs.publish_run }}
+        steps:
+            - name: Check the source build
+              id: source
+              run: |
+                  [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+                  gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN" > /tmp/source-run.json
+                  python3 - <<'PY' >> "$GITHUB_OUTPUT"
+                  import json, re
+                  run = json.load(open('/tmp/source-run.json'))
+                  assert run['conclusion'] == 'success' and run['status'] == 'completed'
+                  assert run['head_branch'].startswith('test/android-coop-pause')
+                  assert run['path'] == '.github/workflows/android.yml'
+                  assert re.fullmatch(r'[0-9a-f]{40}', run['head_sha'])
+                  print('sha=' + run['head_sha'])
+                  PY
+
+            - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              with:
+                  name: Run-Escape-Android-pause-test
+                  path: release
+                  run-id: ${{ inputs.publish_run }}
+                  github-token: ${{ github.token }}
+
+            - name: Verify the test app and publish its download
+              env:
+                  SOURCE_SHA: ${{ steps.source.outputs.sha }}
+              run: |
+                  python3 - <<'PY'
+                  import hashlib, json, os, pathlib, zipfile
+                  files = list(pathlib.Path('release').glob('Run-Escape-*-pause-test-android.apk'))
+                  assert len(files) == 1
+                  file = files[0]
+                  with zipfile.ZipFile(file) as apk:
+                      assert apk.testzip() is None
+                      manifest = apk.read('AndroidManifest.xml')
+                      for text in ['io.jere.runescapearchive.pausetest', 'Run Escape Pause Test']:
+                          assert text.encode() in manifest or text.encode('utf-16le') in manifest
+                      assert apk.getinfo('assets/game/index.html').file_size > 0
+                      caches = json.loads(apk.read('assets/game/caches/caches.json'))
+                      assert caches and all(cache.get('slimOf') for cache in caches)
+                      scripts = b'\n'.join(apk.read(name) for name in apk.namelist()
+                                           if name.startswith('assets/game/assets/') and name.endswith('.js'))
+                      for text in [b'Pause run', b'Resume everyone', os.environ['SOURCE_SHA'][:8].encode()]:
+                          assert text in scripts
+                  digest = hashlib.sha256(file.read_bytes()).hexdigest()
+                  file.with_suffix('.apk.sha256').write_text(f'{digest}  {file.name}\n')
+                  print(f'Verified {file.name}: {file.stat().st_size:,} bytes, SHA256 {digest}')
+                  PY
+                  cat > /tmp/test-notes.md <<'NOTES'
+                  Install this APK directly on an Android phone to test co-op pause before merging the feature.
+
+                  It installs as **Run Escape Pause Test** beside the regular app, with separate saves. Its bundled pause build stays installed; upstream game updates are disabled for this test app.
+
+                  Create a Multiplayer room, start the run, open the game's menu and select **Pause run** as host. Guests can select **Request pause**. Everyone ready, or **Resume everyone**, starts a three-second countdown. Everyone in the test room needs this same APK.
+
+                  The public relay supports host-controlled pause. Voting needs the updated relay; the app disables that option when connected to an older server.
+
+                  Debug-signed for testing, with the game and slim cache bundled. No main-branch or PR merge is required.
+                  NOTES
+                  tag="android-pause-test-${SOURCE_SHA:0:8}"
+                  gh release create "$tag" release/*.apk release/*.sha256 \
+                    --target "$SOURCE_SHA" --title "Android co-op pause test" \
+                    --notes-file /tmp/test-notes.md --prerelease --latest=false
